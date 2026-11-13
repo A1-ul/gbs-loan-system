@@ -15,10 +15,12 @@ logs/
 *.log
 
 # Uploads & Local Snapshots
-uploads/
+uploads/*
+!uploads/.gitkeep
 backups/
 Backend/backups/baseline_pre_rebuild.*
-Backend/uploads/
+Backend/uploads/*
+!Backend/uploads/.gitkeep
 
 # System & IDE
 .DS_Store

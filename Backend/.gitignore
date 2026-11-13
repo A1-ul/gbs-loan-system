@@ -3,7 +3,8 @@ node_modules/
 .env.local
 .env.production
 logs/
-uploads/
+uploads/*
+!uploads/.gitkeep
 backups/
 coverage/
 .nyc_output/
