@@ -258,6 +258,11 @@ async function login({ email, password, totpToken, deviceFingerprint }, reqMeta 
       facialEnrolled: user.facialEnrolled,
       qualificationVerified: user.qualificationVerified,
       voiceEnrolled: Boolean(user.voiceProfile?.isEnrolled),
+      tenantCode: user.tenant?.code || null,
+      tenantName: user.tenant?.name || null,
+      tenantLogoUrl: user.tenant?.logoUrl || null,
+      isDemo: user.tenant?.code === 'DEMO-SANDBOX',
+      environmentMode: user.tenant?.code === 'DEMO-SANDBOX' ? 'DEMO_SANDBOX' : 'PRODUCTION_LIVE',
       tenant: user.tenant,
     },
   };
@@ -463,7 +468,14 @@ async function getProfile(userId) {
     },
   });
   if (!user) throw new NotFoundError('User profile');
-  return user;
+  return {
+    ...user,
+    tenantCode: user.tenant?.code || null,
+    tenantName: user.tenant?.name || null,
+    tenantLogoUrl: user.tenant?.logoUrl || null,
+    isDemo: user.tenant?.code === 'DEMO-SANDBOX',
+    environmentMode: user.tenant?.code === 'DEMO-SANDBOX' ? 'DEMO_SANDBOX' : 'PRODUCTION_LIVE',
+  };
 }
 
 async function setup2FA(userId) {

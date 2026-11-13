@@ -239,6 +239,7 @@ class TenantService {
   async getPublicActiveDirectory() {
     return prisma.tenant.findMany({
       where: {
+        code: { not: 'DEMO-SANDBOX' },
         status: { in: ['ACTIVE', 'EXPIRING_SOON'] },
         onboardingStatus: { in: ['APPROVED', 'ACTIVE_TRIAL', 'ACTIVE_PAID', 'TRIAL_EXPIRING'] },
       },

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, CartesianGrid
 } from 'recharts';
@@ -7,11 +7,11 @@ import {
   Landmark, CreditCard, Users, ShieldCheck, AlertTriangle, Download, Plus, Video,
   Navigation, Clock, CheckCircle2, Database, Briefcase, Megaphone, TrendingUp,
   Bell, ArrowUpRight, RefreshCw, Upload, Search, MapPin, Eye, EyeOff, Calculator,
-  Building2, CalendarCheck, Send, UserPlus, LogIn, LogOut
+  Building2, CalendarCheck, Send, UserPlus, LogIn, LogOut, ArrowLeft
 } from 'lucide-react';
 import api, { sessionStore } from '../services/api';
 import { ROLES_META, resolveRoleMeta, USER_COUNT_DROPDOWN_ROLES } from '../constants/rolesMeta';
-import { useNavigationState } from '../context/NavigationContext';
+import { BackButtonBar, useNavigationState } from '../context/NavigationContext';
 import LiveLocationTrackerMap from '../components/LiveLocationTrackerMap';
 import AccountingAuditPanel from '../components/AccountingAuditPanel';
 import { CctvMobilePanel } from '../components/CctvMobilePanel';
@@ -25,6 +25,8 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
   const roleKey = String(user?.role || 'MEMBER_PORTAL').toUpperCase();
   const roleMeta = resolveRoleMeta(roleKey);
   const navigate = useNavigate();
+  const { tabId: routeTabId } = useParams();
+  const [searchParams] = useSearchParams();
 
   const { savedState, saveState, restoreScroll } = useNavigationState({
     activeTab: 'OVERVIEW',
@@ -32,9 +34,19 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
     statusFilter: '',
   });
 
-  const [activeTab, setActiveTab] = useState(savedState.activeTab || 'OVERVIEW');
+  const urlTab = routeTabId ? routeTabId.toUpperCase() : searchParams.get('tab');
+  const urlLocate = searchParams.get('locate') || '';
+
+  const [activeTab, setActiveTab] = useState(urlTab || savedState.activeTab || 'OVERVIEW');
   const [search, setSearch] = useState(savedState.search || '');
   const [statusFilter, setStatusFilter] = useState(savedState.statusFilter || '');
+
+  useEffect(() => {
+    const reqTab = routeTabId ? routeTabId.toUpperCase() : (searchParams.get('tab') || 'OVERVIEW');
+    setActiveTab(reqTab);
+    const reqLocate = searchParams.get('locate');
+    if (reqLocate) setLocatePhoneTarget(reqLocate);
+  }, [routeTabId, searchParams]);
 
   const [roleMetrics, setRoleMetrics] = useState(null);
   const [overview, setOverview] = useState(null);
@@ -64,7 +76,7 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
   const [memberSearching, setMemberSearching] = useState(false);
   const [memberSearchCount, setMemberSearchCount] = useState(null);
   const [includeHiddenMembers, setIncludeHiddenMembers] = useState(false);
-  const [locatePhoneTarget, setLocatePhoneTarget] = useState('');
+  const [locatePhoneTarget, setLocatePhoneTarget] = useState(urlLocate);
 
   // Enterprise v3 States: Branding, Plans, Staff Approval & Provision, Attendance, Messaging, Alerts, Reports
   const [tenantProfile, setTenantProfile] = useState(null);
@@ -146,7 +158,7 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
       if (isMemberOnly || isGuarantorOnly) {
         requests.push(safe(api.get('/loans/my-loans')));
         if (isGuarantorOnly) {
-          requests.push(safe(api.get('/guarantors')));
+          requests.push(safe(api.get('/guarantors/my-guarantees')));
         }
       } else {
         requests.push(
@@ -177,7 +189,17 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
       setLoanProducts(res[3].data?.data || []);
 
       if (isMemberOnly || isGuarantorOnly) {
-        setLoans(res[4]?.data?.data || []);
+        const myLoansList = res[4]?.data?.data || [];
+        setLoans(myLoansList);
+        if (isMemberOnly) {
+          const derivedPayments = myLoansList
+            .flatMap((loan) => (loan.payments || []).map((p) => ({
+              ...p,
+              loan: p.loan || { id: loan.id, loanNumber: loan.loanNumber },
+            })))
+            .sort((a, b) => new Date(b.paidAt || b.createdAt || 0) - new Date(a.paidAt || a.createdAt || 0));
+          setPayments(derivedPayments);
+        }
         if (isGuarantorOnly && res[5]) setGuarantors(res[5].data?.data || []);
       } else {
         setOverview(res[4]?.data?.data || null);
@@ -723,7 +745,7 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
   if (isGuarantorOnly || !isMemberOnly) {
     tabs.push({ id: 'GUARANTORS', label: 'Guarantors' });
   }
-  if (isField || isCredit || isManagement) {
+  if (isField || isCredit || isManagement || isRiskLegal) {
     tabs.push({ id: 'FIELD_OPS', label: 'Live GPS Map & Visits' });
   }
   if (isHR || isFinance || isManagement) {
@@ -749,56 +771,88 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
     tabs.push({ id: 'MEETINGS_REPORTS', label: 'Meetings & Wrapped Reports' });
   }
 
-  return (
-    <div>
-      {/* 1. UNIQUE REAL-LIFE ROLE DASHBOARD PHOTO HERO BANNER */}
-      <div className="role-hero-banner">
-        <img src={roleMeta.dashboardImage} alt={`${roleMeta.title} Dashboard`} className="role-hero-bg" />
-        <div className="role-hero-overlay">
-          <div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-              <span className="badge badge-gold">{roleMeta.category}</span>
-              <span className="badge badge-success">{tenantProfile?.name || user?.tenantName || 'GBS Lending Institution'}</span>
-              {countdown && (
-                <span className={`badge ${countdown.isLifetime ? 'badge-gold' : countdown.daysLeft <= 10 ? 'badge-warning' : 'badge-cyan'}`}>
-                  <Clock size={12} style={{ marginRight: 4 }} />
-                  {countdown.isLifetime
-                    ? 'LIFETIME LICENSE'
-                    : `${countdown.daysLeft ?? 30} Days Remaining (${countdown.subscriptionPlan || countdown.planTier || 'TRIAL_1M'})`}
-                </span>
-              )}
-              {!isMemberOnly && !isGuarantorOnly && (
-                <span className="badge badge-cyan">
-                  <Users size={12} style={{ marginRight: 4 }} />
-                  Registered Customers: {overview?.totalMembers ?? members.length}
-                </span>
-              )}
-            </div>
-            <h1 style={{ fontSize: 'clamp(1.4rem, 2.5vw, 2rem)', fontWeight: 800, margin: 0, color: '#FFFFFF' }}>
-              {roleMeta.title} Command Dashboard
-            </h1>
-            <p style={{ margin: '4px 0 0', fontSize: '0.88rem', color: '#E2E8F0', maxWidth: 680 }}>
-              Welcome back, <strong>{user?.firstName} {user?.lastName}</strong> — {roleMeta.subtitle}
-            </p>
-          </div>
+  const isTabPage = activeTab !== 'OVERVIEW';
+  const currentTabLabel = tabs.find((t) => t.id === activeTab)?.label || activeTab;
 
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {USER_COUNT_DROPDOWN_ROLES.has(roleKey) && (
-              <button type="button" className="btn btn-secondary" onClick={() => navigate('/admin/users-crosscheck')}>
-                <ShieldCheck size={15} /> Qualification Cross-Check
+  return (
+    <div className={isTabPage ? 'tab-page-container' : ''}>
+      {isTabPage ? (
+        <BackButtonBar
+          title={currentTabLabel}
+          subtitle={`${roleMeta.title} • ${tenantProfile?.name || user?.tenantName || 'GBS Lending Institution'}`}
+          breadcrumb={['Overview Dashboard', currentTabLabel]}
+          fallbackPath="/dashboard"
+          actions={
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {USER_COUNT_DROPDOWN_ROLES.has(roleKey) && (
+                <Link to="/admin/users-crosscheck" className="btn btn-secondary" style={{ padding: '7px 12px', fontSize: '0.8rem', textDecoration: 'none' }}>
+                  <ShieldCheck size={14} /> Cross-Check
+                </Link>
+              )}
+              <button type="button" className="btn btn-primary" style={{ padding: '7px 12px', fontSize: '0.8rem' }} onClick={loadDashboardData}>
+                <RefreshCw size={14} /> Sync PostgreSQL
               </button>
-            )}
-            {(isManagement || isFinance) && (
-              <button type="button" className="btn btn-secondary" onClick={() => navigate('/migrations')}>
-                <Upload size={15} /> Data Migration
+            </div>
+          }
+        />
+      ) : (
+        /* 1. UNIQUE REAL-LIFE ROLE DASHBOARD PHOTO HERO BANNER (Shown on Overview Page) */
+        <div className="role-hero-banner">
+          <img src={roleMeta.dashboardImage} alt={`${roleMeta.title} Dashboard`} className="role-hero-bg" />
+          <div className="role-hero-overlay">
+            <div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                <span className="badge badge-gold">{roleMeta.category}</span>
+                <span className="badge badge-success">{tenantProfile?.name || user?.tenantName || 'GBS Lending Institution'}</span>
+                {countdown && (
+                  <span className={`badge ${countdown.isLifetime ? 'badge-gold' : countdown.daysLeft <= 10 ? 'badge-warning' : 'badge-cyan'}`}>
+                    <Clock size={12} style={{ marginRight: 4 }} />
+                    {countdown.isLifetime
+                      ? 'LIFETIME LICENSE'
+                      : `${countdown.daysLeft ?? 30} Days Remaining (${countdown.subscriptionPlan || countdown.planTier || 'TRIAL_1M'})`}
+                  </span>
+                )}
+                {!isMemberOnly && !isGuarantorOnly && (
+                  <span className="badge badge-cyan">
+                    <Users size={12} style={{ marginRight: 4 }} />
+                    Registered Customers: {overview?.totalMembers ?? members.length}
+                  </span>
+                )}
+              </div>
+              <h1 style={{ fontSize: 'clamp(1.4rem, 2.5vw, 2rem)', fontWeight: 800, margin: 0, color: '#FFFFFF' }}>
+                {roleMeta.title} Command Dashboard
+              </h1>
+              <p style={{ margin: '4px 0 0', fontSize: '0.88rem', color: '#E2E8F0', maxWidth: 680 }}>
+                Welcome back, <strong>{user?.firstName} {user?.lastName}</strong> — {roleMeta.subtitle}
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {USER_COUNT_DROPDOWN_ROLES.has(roleKey) && (
+                <Link
+                  to="/admin/users-crosscheck"
+                  className="btn btn-secondary"
+                  style={{ textDecoration: 'none' }}
+                >
+                  <ShieldCheck size={15} /> Qualification Cross-Check
+                </Link>
+              )}
+              {(isManagement || isFinance) && (
+                <Link
+                  to="/migrations"
+                  className="btn btn-secondary"
+                  style={{ textDecoration: 'none' }}
+                >
+                  <Upload size={15} /> Data Migration
+                </Link>
+              )}
+              <button type="button" className="btn btn-primary" onClick={loadDashboardData}>
+                <RefreshCw size={15} /> Sync PostgreSQL
               </button>
-            )}
-            <button type="button" className="btn btn-primary" onClick={loadDashboardData}>
-              <RefreshCw size={15} /> Sync PostgreSQL
-            </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* 1B. COMPANY OWNER BRANDING NOTIFICATION & STAFF CLOCK IN/OUT STRIP */}
       {isCompanyOwner && tenantProfile && !tenantProfile.companyNameUpdated && (
@@ -819,9 +873,13 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
           <div style={{ fontSize: '0.85rem', color: '#FDE68A' }}>
             <strong>Action Required for Company Owner:</strong> Update your registered institution name &amp; upload your company logo so it appears across all company dashboards (your change will never overwrite the GBS platform core name).
           </div>
-          <button type="button" className="btn btn-primary" style={{ padding: '7px 14px' }} onClick={() => setActiveTab('BRANDING_CCTV')}>
-            <Building2 size={14} /> Update Company Name &amp; Logo
-          </button>
+          <Link
+            to="/dashboard/tab/BRANDING_CCTV"
+            className="btn btn-primary"
+            style={{ padding: '7px 14px', textDecoration: 'none' }}
+          >
+            <Building2 size={14} /> Update Company Name &amp; Logo <ArrowUpRight size={13} />
+          </Link>
         </div>
       )}
 
@@ -908,19 +966,30 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
         </div>
       )}
 
-      {/* 3. WORKSPACE SUB-NAVIGATION TABS */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 22 }}>
+      {/* 3. WORKSPACE SUB-NAVIGATION TABS (Every tab opens as a dedicated scrollable page with Back button) */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
         {tabs.map((t) => (
-          <button
+          <Link
             key={t.id}
-            type="button"
-            onClick={() => setActiveTab(t.id)}
+            to={t.id === 'OVERVIEW' ? '/dashboard' : `/dashboard/tab/${encodeURIComponent(t.id)}`}
             className={activeTab === t.id ? 'btn btn-primary' : 'btn btn-secondary'}
+            style={{ textDecoration: 'none' }}
           >
-            {t.label}
-          </button>
+            {t.label} <ArrowUpRight size={13} />
+          </Link>
         ))}
       </div>
+
+      {!tabs.some((t) => t.id === activeTab) && (
+        <div className="glass-panel" style={{ padding: 22, marginBottom: 18 }}>
+          <p style={{ margin: '0 0 12px', color: '#FDE68A' }}>
+            The workspace tab <strong>{activeTab}</strong> is not available for the {roleMeta.title} portal.
+          </p>
+          <Link to="/dashboard" className="btn btn-primary" style={{ textDecoration: 'none' }}>
+            Return to Overview Dashboard
+          </Link>
+        </div>
+      )}
 
       {loading && !overview && !roleMetrics ? (
         <div className="glass-panel" style={{ padding: 40, textAlign: 'center', color: '#94A3B8' }}>
@@ -1005,13 +1074,13 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                     : 'Branch Managers & HR can create new staff with GPS Digital Address; Company Owner approves final portal access.'}
                 </div>
               </div>
-              <button
-                type="button"
+              <Link
+                to="/dashboard/tab/HR_PAYROLL"
                 className="btn btn-primary"
-                onClick={() => setActiveTab('HR_PAYROLL')}
+                style={{ textDecoration: 'none' }}
               >
-                <UserPlus size={15} /> Create New Staff Account
-              </button>
+                <UserPlus size={15} /> Create New Staff Account <ArrowUpRight size={13} />
+              </Link>
             </div>
           )}
 
@@ -1041,13 +1110,13 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                 <button type="submit" disabled={memberSearching} className="btn btn-primary" style={{ padding: '9px 16px' }}>
                   <Search size={14} /> {memberSearching ? 'Searching...' : 'Search Customers'}
                 </button>
-                <button
-                  type="button"
+                <Link
+                  to="/dashboard/tab/MEMBERS"
                   className="btn btn-secondary"
-                  onClick={() => setActiveTab('MEMBERS')}
+                  style={{ textDecoration: 'none' }}
                 >
-                  Open Directory ({members.length})
-                </button>
+                  Open Directory ({members.length}) <ArrowUpRight size={13} />
+                </Link>
               </form>
               {memberSearchCount !== null && (
                 <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -1442,18 +1511,14 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                       <td style={{ display: 'flex', gap: 6 }}>
                         <button type="button" className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.74rem' }}>Open</button>
                         {(m.user?.phone || m.gpsAddress) && (
-                          <button
-                            type="button"
+                          <Link
+                            to={`/dashboard/tab/FIELD_OPS?locate=${encodeURIComponent(m.user?.phone || m.gpsAddress || '')}`}
                             className="btn btn-primary"
-                            style={{ padding: '4px 8px', fontSize: '0.74rem' }}
-                            onClick={(ev) => {
-                              ev.stopPropagation();
-                              setLocatePhoneTarget(m.user?.phone || m.gpsAddress);
-                              setActiveTab('FIELD_OPS');
-                            }}
+                            style={{ padding: '4px 8px', fontSize: '0.74rem', textDecoration: 'none' }}
+                            onClick={(ev) => ev.stopPropagation()}
                           >
                             <MapPin size={12} /> Locate
-                          </button>
+                          </Link>
                         )}
                       </td>
                     </tr>
@@ -1544,18 +1609,14 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                       <td style={{ display: 'flex', gap: 6 }}>
                         <button type="button" className="btn btn-secondary" style={{ padding: '4px 9px', fontSize: '0.75rem' }}>Manage</button>
                         {(g.user?.phone || g.gpsAddress) && (
-                          <button
-                            type="button"
+                          <Link
+                            to={`/dashboard/tab/FIELD_OPS?locate=${encodeURIComponent(g.user?.phone || g.gpsAddress || '')}`}
                             className="btn btn-primary"
-                            style={{ padding: '4px 8px', fontSize: '0.74rem' }}
-                            onClick={(ev) => {
-                              ev.stopPropagation();
-                              setLocatePhoneTarget(g.user?.phone || g.gpsAddress);
-                              setActiveTab('FIELD_OPS');
-                            }}
+                            style={{ padding: '4px 8px', fontSize: '0.74rem', textDecoration: 'none' }}
+                            onClick={(ev) => ev.stopPropagation()}
                           >
                             <MapPin size={12} /> Locate
-                          </button>
+                          </Link>
                         )}
                       </td>
                     </tr>
@@ -1789,18 +1850,14 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                         <td>{formatGHS(s.baseSalary)}</td>
                         <td>
                           {(s.user?.phone || s.user?.gpsAddress || s.gpsAddress) ? (
-                            <button
-                              type="button"
+                            <Link
+                              to={`/dashboard/tab/FIELD_OPS?locate=${encodeURIComponent(s.user?.phone || s.user?.gpsAddress || s.gpsAddress || '')}`}
                               className="btn btn-primary"
-                              style={{ padding: '4px 8px', fontSize: '0.74rem' }}
-                              onClick={(ev) => {
-                                ev.stopPropagation();
-                                setLocatePhoneTarget(s.user?.phone || s.user?.gpsAddress || s.gpsAddress);
-                                setActiveTab('FIELD_OPS');
-                              }}
+                              style={{ padding: '4px 8px', fontSize: '0.74rem', textDecoration: 'none' }}
+                              onClick={(ev) => ev.stopPropagation()}
                             >
                               <MapPin size={12} /> Locate
-                            </button>
+                            </Link>
                           ) : (
                             <button type="button" className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.74rem' }}>Open</button>
                           )}

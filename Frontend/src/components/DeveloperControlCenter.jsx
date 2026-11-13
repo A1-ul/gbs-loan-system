@@ -1,21 +1,34 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Terminal, Cpu, Lock, Unlock, Database, RefreshCw, Activity, Building2,
-  MapPin, ShieldAlert, Send, CheckCircle2, XCircle, Clock, LogOut, Wrench, Trash2, BookOpen
+  MapPin, ShieldAlert, Send, CheckCircle2, XCircle, Clock, LogOut, Wrench, Trash2, BookOpen, ArrowUpRight, ArrowLeft
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 import api, { devApi, sessionStore, API_ORIGIN } from '../services/api';
 import { DEVELOPER_PORTAL_META } from '../constants/rolesMeta';
+import { BackButtonBar } from '../context/NavigationContext';
 import LiveLocationTrackerMap from './LiveLocationTrackerMap';
 import OperatingGuideModal from './OperatingGuideModal';
+
+const DEV_VALID_TABS = ['TENANTS', 'GIS_MAP', 'DIAGNOSTICS', 'LOCK_SUBS', 'BACKUPS', 'MESSAGES'];
 
 /**
  * Hidden Developer Control Center (Step 5 Master Blueprint + Multi-Tenant SaaS Landlord)
  * Strictly backed by isolated DeveloperUser JWT + live PostgreSQL + Redis + PgDump + Leaflet GIS.
  */
 export default function DeveloperControlCenter({ onLogout }) {
-  const [activeTab, setActiveTab] = useState('TENANTS'); // TENANTS | GIS_MAP | DIAGNOSTICS | LOCK_SUBS | BACKUPS | MESSAGES
+  const { tabId: routeTabId } = useParams();
+  const [searchParams] = useSearchParams();
+  const resolveDevTab = (sp, paramTab) => {
+    const req = String(paramTab || sp.get('tab') || '').toUpperCase();
+    return DEV_VALID_TABS.includes(req) ? req : 'TENANTS';
+  };
+  const [activeTab, setActiveTab] = useState(() => resolveDevTab(searchParams, routeTabId)); // TENANTS | GIS_MAP | DIAGNOSTICS | LOCK_SUBS | BACKUPS | MESSAGES
+
+  useEffect(() => {
+    setActiveTab(resolveDevTab(searchParams, routeTabId));
+  }, [searchParams, routeTabId]);
   const [dashboard, setDashboard] = useState(null);
   const [perf, setPerf] = useState(null);
   const [tenants, setTenants] = useState([]);
@@ -356,10 +369,10 @@ export default function DeveloperControlCenter({ onLogout }) {
   const isGlobalLocked = Boolean(dashboard?.systemLock?.isLocked);
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg-dark)' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--bg-dark)', overflowY: 'auto' }}>
       {/* Top Isolated Landlord Navigation Bar */}
       <header className="header-bar" style={{ borderColor: 'rgba(239,68,68,0.4)' }}>
-        <div className="logo-section">
+        <Link to="/dev-portal" className="logo-section" style={{ textDecoration: 'none' }}>
           <div className="logo-icon" style={{ background: 'linear-gradient(135deg, #EF4444, #991B1B)', color: '#FFF' }}>
             <Terminal size={20} />
           </div>
@@ -371,9 +384,17 @@ export default function DeveloperControlCenter({ onLogout }) {
               Landlord: {devUser?.username || devUser?.email || 'Lead Developer'} • Isolated Security Plane
             </div>
           </div>
-        </div>
+        </Link>
 
         <div className="header-actions">
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => navigate(-1)}
+            style={{ padding: '7px 12px', borderColor: 'rgba(212,175,55,0.45)', color: '#F4E07B' }}
+          >
+            <ArrowLeft size={14} /> Back
+          </button>
           <span className={`badge ${envInfo.dataMode === 'PRODUCTION_LIVE' ? 'badge-success' : 'badge-warning'}`}>
             {envInfo.dataMode === 'PRODUCTION_LIVE' ? 'PRODUCTION LIVE' : 'DEV / DEMO MODE'}
           </span>
@@ -392,7 +413,7 @@ export default function DeveloperControlCenter({ onLogout }) {
         </div>
       </header>
 
-      <main className="app-main-content">
+      <main className="app-main-content tab-page-container">
         {/* Unique Real-Life Developer Portal Photography Hero Banner */}
         <div className="role-hero-banner">
           <img src={DEVELOPER_PORTAL_META.dashboardImage} alt="Developer Control Center" className="role-hero-bg" />
@@ -478,7 +499,26 @@ export default function DeveloperControlCenter({ onLogout }) {
           </div>
         </div>
 
-        {/* Subsystem Tabs */}
+        {routeTabId && (
+          <BackButtonBar
+            title={(() => {
+              const found = [
+                { id: 'TENANTS', label: `Tenant Approvals & Subscriptions (${pendingTenants.length} Pending)` },
+                { id: 'GIS_MAP', label: 'Live Tenant & Collector GIS Map' },
+                { id: 'DIAGNOSTICS', label: 'AI Diagnostics, Crashes & Logs' },
+                { id: 'LOCK_SUBS', label: 'System Lock/Unlock & Security Alerts' },
+                { id: 'BACKUPS', label: 'PgDump Backups & Recovery' },
+                { id: 'MESSAGES', label: 'Broadcast to Tenants' },
+              ].find((x) => x.id === activeTab);
+              return found ? found.label : activeTab;
+            })()}
+            subtitle="Hidden Developer Control Center • Scrollable Tab Page"
+            breadcrumb={['Developer Home', activeTab]}
+            fallbackPath="/dev-portal"
+          />
+        )}
+
+        {/* Subsystem Tabs (Every tab opens in a dedicated new page with Back button & scroll) */}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
           {[
             { id: 'TENANTS', label: `Tenant Approvals & Subscriptions (${pendingTenants.length} Pending)`, icon: Building2 },
@@ -490,14 +530,14 @@ export default function DeveloperControlCenter({ onLogout }) {
           ].map((t) => {
             const Icon = t.icon;
             return (
-              <button
+              <Link
                 key={t.id}
-                type="button"
-                onClick={() => setActiveTab(t.id)}
+                to={`/dev-portal/tab/${encodeURIComponent(t.id)}`}
                 className={activeTab === t.id ? 'btn btn-primary' : 'btn btn-secondary'}
+                style={{ textDecoration: 'none' }}
               >
-                <Icon size={15} /> {t.label}
-              </button>
+                <Icon size={15} /> {t.label} <ArrowUpRight size={13} />
+              </Link>
             );
           })}
         </div>
@@ -622,6 +662,11 @@ export default function DeveloperControlCenter({ onLogout }) {
                         </td>
                         <td>
                           <strong>{t.name}</strong>
+                          {t.code === 'DEMO-SANDBOX' && (
+                            <span className="badge badge-warning" style={{ marginLeft: 8, fontSize: '0.62rem' }}>
+                              DEMO SANDBOX
+                            </span>
+                          )}
                           <div style={{ fontSize: '0.74rem', color: '#94A3B8' }}>{t.representativeEmail}</div>
                         </td>
                         <td>{t.code} • {t.city || 'Accra'}</td>

@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Building2, CheckCircle2, Clock, AlertTriangle, LogIn, Search,
-  MapPin, Eye, EyeOff, Crosshair, ShieldCheck
+  MapPin, Eye, EyeOff, Crosshair, ShieldCheck, PlayCircle, ArrowLeft
 } from 'lucide-react';
 import api from '../services/api';
 import { ONBOARDING_META } from '../constants/rolesMeta';
@@ -14,9 +14,15 @@ import { FaceScanner } from '../components/biometric/FaceScanner';
  * Afterward institution selects 3, 6, 9, 12 Months, or Lifetime subscription.
  */
 export default function TenantOnboarding() {
-  const [tab, setTab] = useState('apply'); // 'apply' | 'track'
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const [tab, setTab] = useState(() => (searchParams.get('tab') === 'track' ? 'track' : 'apply')); // 'apply' | 'track'
   const [showPassword, setShowPassword] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
+
+  useEffect(() => {
+    setTab(searchParams.get('tab') === 'track' ? 'track' : 'apply');
+  }, [searchParams]);
 
   const [form, setForm] = useState({
     organizationName: '',
@@ -125,9 +131,22 @@ export default function TenantOnboarding() {
             </div>
           </div>
 
-          <Link to="/login" className="btn btn-primary" style={{ padding: '8px 14px', fontSize: '0.82rem' }}>
-            <LogIn size={15} /> Existing Institution Sign In
-          </Link>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <Link
+              to="/login?env=demo&switch=1"
+              className="btn btn-secondary"
+              style={{ padding: '8px 12px', fontSize: '0.8rem', borderColor: 'rgba(245,158,11,0.55)', color: '#FDE68A', textDecoration: 'none' }}
+            >
+              <PlayCircle size={15} /> Try Interactive Demo
+            </Link>
+            <Link
+              to="/login?env=production&switch=1"
+              className="btn btn-primary"
+              style={{ padding: '8px 14px', fontSize: '0.82rem', textDecoration: 'none' }}
+            >
+              <LogIn size={15} /> Existing Institution Sign In
+            </Link>
+          </div>
         </div>
 
         <div style={{ position: 'relative', zIndex: 2, marginTop: 'auto' }}>
@@ -160,23 +179,32 @@ export default function TenantOnboarding() {
       {/* Right Onboarding Form & Status Tracker */}
       <div className="split-login-form-pane">
         <div style={{ maxWidth: 620, width: '100%', margin: '0 auto' }}>
+          {tab === 'track' && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+              <button type="button" onClick={() => navigate(-1)} className="btn btn-secondary" style={{ padding: '7px 12px', fontSize: '0.8rem', borderColor: 'rgba(212,175,55,0.45)', color: '#F4E07B' }}>
+                <ArrowLeft size={15} /> Back
+              </button>
+              <Link to="/onboard-tenant?tab=apply" className="btn btn-secondary" style={{ padding: '7px 12px', fontSize: '0.8rem', textDecoration: 'none' }}>
+                Back to Onboarding Form
+              </Link>
+            </div>
+          )}
+
           <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              onClick={() => setTab('apply')}
+            <Link
+              to="/onboard-tenant?tab=apply"
               className={tab === 'apply' ? 'btn btn-primary' : 'btn btn-secondary'}
-              style={{ flex: 1, justifyContent: 'center', minWidth: 180 }}
+              style={{ flex: 1, justifyContent: 'center', minWidth: 180, textDecoration: 'none' }}
             >
               <Building2 size={16} /> Onboard New Institution
-            </button>
-            <button
-              type="button"
-              onClick={() => setTab('track')}
+            </Link>
+            <Link
+              to="/onboard-tenant?tab=track"
               className={tab === 'track' ? 'btn btn-primary' : 'btn btn-secondary'}
-              style={{ flex: 1, justifyContent: 'center', minWidth: 180 }}
+              style={{ flex: 1, justifyContent: 'center', minWidth: 180, textDecoration: 'none' }}
             >
               <Search size={16} /> Check Approval Status
-            </button>
+            </Link>
           </div>
 
           {tab === 'apply' && (
@@ -205,10 +233,18 @@ export default function TenantOnboarding() {
                     <div><strong>Trial Period on Approval:</strong> 1 Month Free Trial (30 Days)</div>
                   </div>
                   <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                    <button type="button" className="btn btn-primary" onClick={() => setTab('track')}>
+                    <Link
+                      to="/onboard-tenant?tab=track"
+                      className="btn btn-primary"
+                      style={{ textDecoration: 'none' }}
+                    >
                       Track Live Approval Status
-                    </button>
-                    <Link to="/login" className="btn btn-secondary">
+                    </Link>
+                    <Link
+                      to="/login?env=production&switch=1"
+                      className="btn btn-secondary"
+                      style={{ textDecoration: 'none' }}
+                    >
                       Go to Sign In Page
                     </Link>
                   </div>
@@ -402,7 +438,11 @@ export default function TenantOnboarding() {
                     )}
                   </div>
                   {['APPROVED', 'ACTIVE_TRIAL', 'ACTIVE_PAID'].includes(lookupResult.onboardingStatus) && (
-                    <Link to="/login/company-owner" className="btn btn-primary" style={{ marginTop: 14 }}>
+                    <Link
+                      to="/login/company-owner?env=production&switch=1"
+                      className="btn btn-primary"
+                      style={{ marginTop: 14, textDecoration: 'none' }}
+                    >
                       <CheckCircle2 size={16} /> Proceed to Company Owner Sign In
                     </Link>
                   )}
@@ -413,15 +453,31 @@ export default function TenantOnboarding() {
 
           <div style={{ marginTop: 14, textAlign: 'center', fontSize: '0.82rem', color: '#F1F5F9', display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
             <span>
+              Want to explore first?{' '}
+              <Link
+                to="/login?env=demo&switch=1"
+                style={{ color: '#FDE68A', fontWeight: 700, textDecoration: 'underline' }}
+              >
+                Try Interactive Demo Walkthrough
+              </Link>
+            </span>
+            <span>•</span>
+            <span>
               Already registered and approved?{' '}
-              <Link to="/login" style={{ color: '#F4E07B', fontWeight: 700, textDecoration: 'underline' }}>
+              <Link
+                to="/login?env=production&switch=1"
+                style={{ color: '#F4E07B', fontWeight: 700, textDecoration: 'underline' }}
+              >
                 Sign in to any of the 30 GBS Role Portals
               </Link>
             </span>
             <span>•</span>
             <span>
               System Developer?{' '}
-              <Link to="/login?dev=1" style={{ color: '#FCA5A5', fontWeight: 700, textDecoration: 'underline' }}>
+              <Link
+                to="/login?env=production&dev=1&switch=1"
+                style={{ color: '#FCA5A5', fontWeight: 700, textDecoration: 'underline' }}
+              >
                 Developer Dashboard Sign In (Approve Institutions)
               </Link>
             </span>

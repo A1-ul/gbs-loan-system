@@ -24,6 +24,13 @@ async function getAll(req, res, next) {
   } catch (err) { next(err); }
 }
 
+async function getMyGuarantees(req, res, next) {
+  try {
+    const guarantees = await guarantorService.getMyGuarantees(req.user.id);
+    return success(res, guarantees);
+  } catch (err) { next(err); }
+}
+
 async function getById(req, res, next) {
   try {
     const guarantor = await guarantorService.getById(req.params.id);
@@ -52,4 +59,4 @@ async function togglePenaltyNotifications(req, res, next) {
   } catch (err) { next(err); }
 }
 
-module.exports = { create, getAll, getById, getLoansByGuarantor, signAgreement, togglePenaltyNotifications };
+module.exports = { create, getAll, getMyGuarantees, getById, getLoansByGuarantor, signAgreement, togglePenaltyNotifications };

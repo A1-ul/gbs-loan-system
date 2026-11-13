@@ -26,6 +26,7 @@ const { tenantRoutes } = require('../modules/tenant');
 const { enterpriseRoutes } = require('../modules/enterprise');
 const { getEnvironmentProfile } = require('../config/environments');
 const userCountRoutes = require('../modules/administration/routes/userCount.routes');
+const demoRoutes = require('../modules/demo/demo.routes');
 
 const router = express.Router();
 
@@ -60,6 +61,7 @@ router.use('/system', systemRoutes);
 router.use('/audit-logs', auditRoutes);
 
 // Blueprint & Subsystem Endpoints
+router.use('/demo', demoRoutes);
 router.use('/tenants', tenantRoutes);
 router.use('/voice-auth', voiceRoutes);
 router.use('/facial-recognition', faceRoutes);

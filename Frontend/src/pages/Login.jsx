@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Shield, Lock, UserCheck, Building2, ArrowRight, Eye, EyeOff,
-  KeyRound, CheckCircle2, AlertTriangle, Grid, Volume2, MapPin, Crosshair
+  KeyRound, CheckCircle2, AlertTriangle, Grid, Volume2, MapPin, Crosshair,
+  PlayCircle, Compass, ArrowLeft, ArrowUpRight
 } from 'lucide-react';
 import api, { devApi, sessionStore, getDeviceFingerprint } from '../services/api';
 import { ROLES_META, resolveRoleMeta } from '../constants/rolesMeta';
@@ -11,7 +12,8 @@ import VoiceChallengePanel from '../components/VoiceChallengePanel';
 /**
  * GBS Loan Management System — Dedicated Role-Specific Login & All-30-Role Account Registration
  * RULE: Hidden Developer Dashboard opens only from the Main Login Page via strictly masked password entry.
- * RULE: Tenant Login & Registration include Show/Hide Password eye toggles + GPS Address collection.
+ * RULE: Real-Life Production Login & Interactive Demo Walkthrough Sandbox are strictly separated.
+ * RULE: Every tab and portal card opens cleanly in a new window.
  */
 export default function Login({ onAuthenticated, onDevAuthenticated }) {
   const { roleSlug } = useParams();
@@ -19,8 +21,21 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
   const navigate = useNavigate();
 
   const roleMeta = resolveRoleMeta(roleSlug || 'member-portal');
-  const [mode, setMode] = useState(() => (searchParams.get('dev') === '1' ? 'dev-hidden' : 'login')); // 'login' | 'register' | 'verify-otp' | 'voice-check' | 'directory' | 'dev-hidden'
+  const resolveInitialEnv = (sp) => (sp.get('env') === 'demo' ? 'demo' : 'production');
+  const resolveInitialMode = (sp) => {
+    const reqMode = sp.get('mode');
+    if (sp.get('dev') === '1' || reqMode === 'dev-hidden') return 'dev-hidden';
+    if (['login', 'register', 'verify-otp', 'voice-check', 'directory', 'dev-hidden'].includes(reqMode)) {
+      return reqMode;
+    }
+    return 'login';
+  };
+
+  const [envMode, setEnvMode] = useState(() => resolveInitialEnv(searchParams)); // 'production' | 'demo'
+  const [mode, setMode] = useState(() => resolveInitialMode(searchParams)); // 'login' | 'register' | 'verify-otp' | 'voice-check' | 'directory' | 'dev-hidden'
   const [approvedTenants, setApprovedTenants] = useState([]);
+  const [demoCatalog, setDemoCatalog] = useState([]);
+  const [demoLoading, setDemoLoading] = useState(false);
 
   // Login Form State (strictly blank defaults)
   const [email, setEmail] = useState('');
@@ -61,6 +76,24 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
     setRegData((prev) => ({ ...prev, role: roleMeta.key }));
     setError('');
   }, [roleMeta.key]);
+
+  useEffect(() => {
+    setEnvMode(resolveInitialEnv(searchParams));
+    setMode(resolveInitialMode(searchParams));
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (envMode !== 'demo') return;
+    setDemoLoading(true);
+    api
+      .get('/demo/walkthrough-catalog')
+      .then((res) => {
+        const steps = res.data?.data?.walkthroughModules || res.data?.data?.walkthroughSteps;
+        if (Array.isArray(steps)) setDemoCatalog(steps);
+      })
+      .catch(() => null)
+      .finally(() => setDemoLoading(false));
+  }, [envMode]);
 
   useEffect(() => {
     api
@@ -258,14 +291,15 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setMode(mode === 'directory' ? 'login' : 'directory')}
+          <Link
+            to={mode === 'directory'
+              ? `/login/${roleMeta.slug}?env=${envMode}&mode=login&switch=1`
+              : `/login/${roleMeta.slug}?env=${envMode}&mode=directory&switch=1`}
             className="btn btn-secondary"
-            style={{ padding: '7px 12px', fontSize: '0.78rem' }}
+            style={{ padding: '7px 12px', fontSize: '0.78rem', textDecoration: 'none' }}
           >
             <Grid size={14} /> {mode === 'directory' ? 'Back to Sign In' : 'All 30 Role Portals'}
-          </button>
+          </Link>
         </div>
 
         <div style={{ position: 'relative', zIndex: 2, marginTop: 'auto' }}>
@@ -273,7 +307,7 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
             className="badge badge-gold"
             style={{ marginBottom: 10, borderColor: roleMeta.accent, color: roleMeta.accent }}
           >
-            {roleMeta.category}
+            {envMode === 'demo' ? 'DEMO SANDBOX WALKTHROUGH' : roleMeta.category}
           </span>
           <h1 style={{ fontSize: 'clamp(1.6rem, 3vw, 2.3rem)', fontWeight: 800, color: '#FFFFFF', marginBottom: 8 }}>
             {roleMeta.title} Portal
@@ -283,26 +317,93 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
           </p>
 
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            <span className="badge badge-success">PostgreSQL Multi-Tenant</span>
+            <span className={`badge ${envMode === 'demo' ? 'badge-warning' : 'badge-success'}`}>
+              {envMode === 'demo' ? 'Isolated Demo Sandbox' : 'PostgreSQL Multi-Tenant Live'}
+            </span>
             <span className="badge badge-cyan">Live SMS OTP</span>
             <span className="badge badge-gold">30 RBAC Portals</span>
           </div>
         </div>
       </div>
 
-      {/* RIGHT PANE: Authentication, All-30-Role Self-Registration, Voice Check or 30-Role Directory */}
+      {/* RIGHT PANE: Environment Switcher (Real Production vs Demo Walkthrough), 30-Role Auth & Directory */}
       <div className="split-login-form-pane">
-        <div style={{ maxWidth: 540, width: '100%', margin: '0 auto' }}>
+        <div style={{ maxWidth: 560, width: '100%', margin: '0 auto', paddingBottom: 24 }}>
+          {(envMode === 'demo' || mode !== 'login') && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => (window.history.state?.idx > 0 ? navigate(-1) : navigate(`/login/${roleMeta.slug}?env=production&mode=login&switch=1`))}
+                className="btn btn-secondary"
+                style={{ padding: '7px 14px', fontSize: '0.8rem', borderColor: 'rgba(212,175,55,0.45)', color: '#F4E07B' }}
+              >
+                <ArrowLeft size={15} /> Back
+              </button>
+              <Link
+                to={`/login/${roleMeta.slug}?env=production&mode=login&switch=1`}
+                className="btn btn-secondary"
+                style={{ padding: '7px 12px', fontSize: '0.78rem', textDecoration: 'none' }}
+              >
+                Main Sign In Page
+              </Link>
+            </div>
+          )}
+
+          {/* Explicit Environment Separator Bar — Opens Selected Environment Page With Scroll & Back Button */}
+          <div
+            className="glass-panel"
+            data-testid="environment-separator-bar"
+            style={{
+              padding: 12,
+              marginBottom: 14,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
+              borderColor: envMode === 'demo' ? 'rgba(245,158,11,0.55)' : 'rgba(16,185,129,0.45)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', color: '#CBD5E1', flexWrap: 'wrap', gap: 6 }}>
+              <span>ENVIRONMENT MODE (EVERY TAB OPENS IN ITS OWN PAGE):</span>
+              <span className={`badge ${envMode === 'demo' ? 'badge-warning' : 'badge-success'}`}>
+                {envMode === 'demo' ? 'DEMO_SANDBOX ACTIVE' : 'PRODUCTION_LIVE ACTIVE'}
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <Link
+                to={`/login/${roleMeta.slug}?env=production&mode=login&switch=1`}
+                className={envMode === 'production' ? 'btn btn-primary' : 'btn btn-secondary'}
+                style={{ flex: '1 1 210px', justifyContent: 'center', fontSize: '0.82rem', textDecoration: 'none' }}
+              >
+                <Shield size={15} /> Real-Life Production Login
+              </Link>
+              <Link
+                to={`/login/${roleMeta.slug}?env=demo&switch=1`}
+                className={envMode === 'demo' ? 'btn btn-primary' : 'btn btn-secondary'}
+                style={{
+                  flex: '1 1 210px',
+                  justifyContent: 'center',
+                  fontSize: '0.82rem',
+                  textDecoration: 'none',
+                  ...(envMode === 'demo'
+                    ? { background: 'linear-gradient(135deg, #F59E0B, #D97706)', color: '#09111F', fontWeight: 700 }
+                    : { borderColor: 'rgba(245,158,11,0.5)', color: '#FDE68A' }),
+                }}
+              >
+                <PlayCircle size={15} /> Demo Walkthrough Sandbox
+              </Link>
+            </div>
+          </div>
+
           {mode === 'directory' ? (
             <div>
               <h2 className="gold-gradient-text" style={{ fontSize: '1.4rem', marginBottom: 6 }}>
-                Select Your Institutional Role Portal (All 30 Roles)
+                Select Your Institutional Role Portal (All 30 Roles — {envMode === 'demo' ? 'Demo Mode' : 'Production'})
               </h2>
               <p style={{ fontSize: '0.82rem', color: '#94A3B8', marginBottom: 16 }}>
-                Each portal features tailored dashboards, GPS tracking, and dedicated authentication security.
+                Clicking any portal opens that role page cleanly with tailored dashboards, GPS tracking, and live verification.
               </p>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxHeight: '72vh', overflowY: 'auto', paddingRight: 4 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {Object.entries(groupedRoles).map(([cat, items]) => (
                   <div key={cat}>
                     <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#D4AF37', textTransform: 'uppercase', marginBottom: 8 }}>
@@ -310,13 +411,11 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 8 }}>
                       {items.map((r) => (
-                        <button
+                        <Link
                           key={r.key}
-                          type="button"
-                          onClick={() => {
-                            setMode('login');
-                            navigate(`/login/${r.slug}`);
-                          }}
+                          to={envMode === 'demo'
+                            ? `/demo-launch?role=${r.key}&tab=OVERVIEW`
+                            : `/login/${r.slug}?env=production&mode=login&switch=1`}
                           style={{
                             textAlign: 'left',
                             padding: 10,
@@ -328,6 +427,7 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
                             alignItems: 'center',
                             gap: 10,
                             color: '#F1F5F9',
+                            textDecoration: 'none',
                           }}
                         >
                           <img
@@ -335,15 +435,114 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
                             alt={r.title}
                             style={{ width: 40, height: 40, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }}
                           />
-                          <div>
+                          <div style={{ flex: 1 }}>
                             <div style={{ fontSize: '0.8rem', fontWeight: 700 }}>{r.title}</div>
-                            <div style={{ fontSize: '0.68rem', color: '#94A3B8' }}>/login/{r.slug}</div>
+                            <div style={{ fontSize: '0.68rem', color: '#94A3B8' }}>
+                              {envMode === 'demo' ? 'Open Demo Portal' : `/login/${r.slug}`}
+                            </div>
                           </div>
-                        </button>
+                          <ArrowUpRight size={13} color="#94A3B8" />
+                        </Link>
                       ))}
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+          ) : envMode === 'demo' && mode !== 'dev-hidden' ? (
+            <div className="glass-panel" style={{ padding: 24, borderColor: 'rgba(245, 158, 11, 0.5)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+                <div>
+                  <span className="badge badge-warning" style={{ marginBottom: 6 }}>ISOLATED SANDBOX (DEMO-SANDBOX)</span>
+                  <h2 className="gold-gradient-text" style={{ fontSize: '1.35rem', margin: '4px 0' }}>
+                    Interactive System Walkthrough
+                  </h2>
+                </div>
+                <Link
+                  to={`/demo-launch?role=${roleMeta.key}&tab=OVERVIEW`}
+                  className="btn btn-primary"
+                  style={{ background: 'linear-gradient(135deg, #F59E0B, #D97706)', color: '#09111F', textDecoration: 'none' }}
+                >
+                  <PlayCircle size={16} /> Launch {roleMeta.title} Demo <ArrowUpRight size={14} />
+                </Link>
+              </div>
+
+              <p style={{ fontSize: '0.83rem', color: '#CBD5E1', lineHeight: 1.5, marginBottom: 16 }}>
+                Explore every operational dashboard before going live. Demo sessions run strictly inside <strong>DEMO-SANDBOX</strong>{' '}
+                (with sample loans, GhanaPost GPS locator records, overdue repayment alerts, and staff attendance) and can{' '}
+                <strong>never</strong> alter real production institutions or access the Developer Control Center. Each walkthrough step opens its dedicated scrollable page with a Back button.
+              </p>
+
+              <div style={{ fontSize: '0.76rem', fontWeight: 700, color: '#FDE68A', marginBottom: 8, textTransform: 'uppercase' }}>
+                Guided Feature Walkthrough (Opens Each Module Page)
+              </div>
+              {demoLoading ? (
+                <div style={{ padding: 14, color: '#94A3B8', fontSize: '0.82rem' }}>Loading walkthrough modules...</div>
+              ) : (
+                <div style={{ display: 'grid', gap: 8, marginBottom: 18 }}>
+                  {demoCatalog.map((step) => (
+                    <Link
+                      key={step.id}
+                      to={`/demo-launch?role=${encodeURIComponent(step.role)}&tab=${encodeURIComponent(step.tab)}`}
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: 12,
+                        padding: '10px 12px',
+                        borderRadius: 10,
+                        border: '1px solid rgba(245, 158, 11, 0.3)',
+                        background: 'rgba(15, 27, 49, 0.72)',
+                        color: '#F8FAFC',
+                        textDecoration: 'none',
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: '0.83rem', fontWeight: 700, color: '#F4E07B' }}>
+                          {step.step}. {step.title}
+                        </div>
+                        <div style={{ fontSize: '0.74rem', color: '#CBD5E1', marginTop: 2 }}>{step.summary}</div>
+                      </div>
+                      <span className="badge badge-cyan" style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <Compass size={12} /> Try Step <ArrowUpRight size={12} />
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              )}
+
+              <div style={{ fontSize: '0.76rem', fontWeight: 700, color: '#D4AF37', marginBottom: 8, textTransform: 'uppercase' }}>
+                Or Test Any of All 30 Institutional Roles Directly
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(165px, 1fr))', gap: 6, marginBottom: 16 }}>
+                {ROLES_META.map((r) => (
+                  <Link
+                    key={r.key}
+                    to={`/demo-launch?role=${r.key}&tab=OVERVIEW`}
+                    className="btn btn-secondary"
+                    style={{ padding: '7px 9px', fontSize: '0.74rem', justifyContent: 'space-between', textDecoration: 'none' }}
+                  >
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</span>
+                    <ArrowUpRight size={12} />
+                  </Link>
+                ))}
+              </div>
+
+              <div style={{ paddingTop: 14, borderTop: '1px solid rgba(212,175,55,0.2)', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+                <Link
+                  to={`/login/${roleMeta.slug}?env=production&mode=login&switch=1`}
+                  className="btn btn-primary"
+                  style={{ fontSize: '0.8rem', textDecoration: 'none' }}
+                >
+                  <Shield size={14} /> Go to Real-Life Production Sign In
+                </Link>
+                <Link
+                  to="/onboard-tenant"
+                  className="btn btn-secondary"
+                  style={{ fontSize: '0.8rem', textDecoration: 'none' }}
+                >
+                  <Building2 size={14} /> Onboard Real Institution (1-Month Free Trial)
+                </Link>
               </div>
             </div>
           ) : mode === 'voice-check' ? (
@@ -381,40 +580,33 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
           ) : (
             <div className="glass-panel" style={{ padding: 28 }}>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
-                <button
-                  type="button"
-                  onClick={() => { setMode('login'); setError(''); }}
+                <Link
+                  to={`/login/${roleMeta.slug}?env=production&mode=login&switch=1`}
                   className={mode === 'login' ? 'btn btn-primary' : 'btn btn-secondary'}
-                  style={{ flex: '1 1 110px', justifyContent: 'center' }}
+                  style={{ flex: '1 1 110px', justifyContent: 'center', textDecoration: 'none' }}
                 >
                   <Lock size={15} /> Sign In
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setMode('register'); setError(''); }}
+                </Link>
+                <Link
+                  to={`/login/${roleMeta.slug}?env=production&mode=register&switch=1`}
                   className={mode === 'register' ? 'btn btn-primary' : 'btn btn-secondary'}
-                  style={{ flex: '1 1 130px', justifyContent: 'center' }}
+                  style={{ flex: '1 1 130px', justifyContent: 'center', textDecoration: 'none' }}
                 >
                   <UserCheck size={15} /> Register (30 Roles)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setError('');
-                    setSuccessMsg('');
-                    setDevEmail((prev) => prev || 'gabosei48@gmail.com');
-                    setMode((prev) => (prev === 'dev-hidden' ? 'login' : 'dev-hidden'));
-                  }}
+                </Link>
+                <Link
+                  to={`/login/${roleMeta.slug}?env=production&mode=dev-hidden&switch=1`}
                   className={mode === 'dev-hidden' ? 'btn btn-primary' : 'btn btn-secondary'}
                   style={{
                     flex: '1 1 140px',
                     justifyContent: 'center',
+                    textDecoration: 'none',
                     borderColor: mode === 'dev-hidden' ? '#DC2626' : 'rgba(220,38,38,0.45)',
                     color: mode === 'dev-hidden' ? '#FFFFFF' : '#FCA5A5',
                   }}
                 >
                   <Lock size={15} /> Developer Portal
-                </button>
+                </Link>
               </div>
 
               {error && (
@@ -710,7 +902,7 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
                 </form>
               )}
 
-              {/* Institutional Tenant Onboarding & Developer Authority CTA */}
+              {/* Institutional Tenant Onboarding, Demo Walkthrough & Developer Authority CTA */}
               <div
                 style={{
                   marginTop: 22,
@@ -723,10 +915,27 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
                   <span style={{ fontSize: '0.78rem', color: '#94A3B8' }}>
+                    Want to explore features before onboarding a live institution?
+                  </span>
+                  <Link
+                    to={`/login/${roleMeta.slug}?env=demo&switch=1`}
+                    className="btn btn-secondary"
+                    style={{ padding: '7px 12px', fontSize: '0.78rem', borderColor: 'rgba(245,158,11,0.5)', color: '#FDE68A', textDecoration: 'none' }}
+                  >
+                    <PlayCircle size={14} /> Launch Interactive Demo Walkthrough
+                  </Link>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                  <span style={{ fontSize: '0.78rem', color: '#94A3B8' }}>
                     Onboarding a new lending institution (1-Month Free Trial)?
                   </span>
-                  <Link to="/onboard-tenant" className="btn btn-secondary" style={{ padding: '7px 12px', fontSize: '0.78rem' }}>
-                    <Building2 size={14} /> Institutional Onboarding Form <ArrowRight size={13} />
+                  <Link
+                    to="/onboard-tenant"
+                    className="btn btn-secondary"
+                    style={{ padding: '7px 12px', fontSize: '0.78rem', textDecoration: 'none' }}
+                  >
+                    <Building2 size={14} /> Institutional Onboarding Form
                   </Link>
                 </div>
 
@@ -744,25 +953,21 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
                   <span style={{ fontSize: '0.78rem', color: '#CBD5E1' }}>
                     System Developer? Approve new institutions &amp; manage tenant locks:
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setError('');
-                      setSuccessMsg('');
-                      setDevEmail((prev) => prev || 'gabosei48@gmail.com');
-                      setMode((prev) => (prev === 'dev-hidden' ? 'login' : 'dev-hidden'));
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
-                    }}
+                  <Link
+                    to={mode === 'dev-hidden'
+                      ? `/login/${roleMeta.slug}?env=production&mode=login&switch=1`
+                      : `/login/${roleMeta.slug}?env=production&dev=1&switch=1`}
                     className="btn btn-secondary"
                     style={{
                       padding: '7px 12px',
                       fontSize: '0.78rem',
                       borderColor: 'rgba(220,38,38,0.55)',
                       color: '#FCA5A5',
+                      textDecoration: 'none',
                     }}
                   >
-                    <Lock size={13} /> {mode === 'dev-hidden' ? 'Back to Role Sign In' : 'Developer Dashboard Sign In'}
-                  </button>
+                    <Lock size={13} /> {mode === 'dev-hidden' ? 'Open Role Sign In' : 'Developer Dashboard Sign In'}
+                  </Link>
                 </div>
               </div>
             </div>

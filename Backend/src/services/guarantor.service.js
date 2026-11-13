@@ -231,6 +231,40 @@ async function signAgreement(id) {
   });
 }
 
+async function getMyGuarantees(userId) {
+  const guarantor = await prisma.guarantor.findFirst({
+    where: { userId },
+    include: {
+      user: {
+        select: {
+          id: true, firstName: true, lastName: true, email: true, phone: true,
+          address: true, gpsAddress: true, gpsLatitude: true, gpsLongitude: true, isHidden: true,
+        },
+      },
+      loanGuarantors: {
+        include: {
+          loan: {
+            include: {
+              member: { include: { user: { select: { firstName: true, lastName: true, phone: true, gpsAddress: true } } } },
+              penalties: true,
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!guarantor) return [];
+  return [
+    {
+      ...guarantor,
+      gpsAddress: guarantor.gpsAddress || guarantor.user?.gpsAddress || '',
+      gpsLatitude: guarantor.gpsLatitude ?? guarantor.user?.gpsLatitude ?? null,
+      gpsLongitude: guarantor.gpsLongitude ?? guarantor.user?.gpsLongitude ?? null,
+      isHidden: Boolean(guarantor.isHidden || guarantor.user?.isHidden),
+    },
+  ];
+}
+
 async function togglePenaltyNotifications(id, enabled) {
   const guarantor = await getById(id);
   return prisma.guarantor.update({
@@ -243,6 +277,7 @@ module.exports = {
   create,
   getAll,
   getById,
+  getMyGuarantees,
   update,
   getLoans,
   signAgreement,
