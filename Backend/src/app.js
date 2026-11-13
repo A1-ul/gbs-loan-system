@@ -1,4 +1,6 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
@@ -18,20 +20,32 @@ const apiGatewayService = require('./services/apiGateway.service');
 const app = express();
 app.set('trust proxy', 1);
 
+const frontendDistDir = path.resolve(__dirname, '../../Frontend/dist');
+const frontendIndexFile = path.join(frontendDistDir, 'index.html');
+
 function resolveCorsOrigin() {
   const raw = config.cors?.origin;
   if (!raw || raw === '*') return '*';
   const entries = String(raw).split(',').map((s) => s.trim()).filter(Boolean);
-  const allowed = new Set();
+  const exactAllowed = new Set();
+  const wildcardRegexes = [];
   for (const entry of entries) {
-    allowed.add(entry.replace(/\/$/, ''));
-    if (!/^https?:\/\//i.test(entry)) {
-      allowed.add(`https://${entry.replace(/\/$/, '')}`);
-      allowed.add(`http://${entry.replace(/\/$/, '')}`);
+    const normalized = entry.replace(/\/$/, '');
+    if (normalized.includes('*')) {
+      const escaped = normalized.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\\\*/g, '[^/]+');
+      wildcardRegexes.push(new RegExp(`^${escaped}$`, 'i'));
+      continue;
+    }
+    exactAllowed.add(normalized);
+    if (!/^https?:\/\//i.test(normalized)) {
+      exactAllowed.add(`https://${normalized}`);
+      exactAllowed.add(`http://${normalized}`);
     }
   }
   return (origin, callback) => {
-    if (!origin || allowed.has(origin.replace(/\/$/, ''))) {
+    if (!origin) return callback(null, true);
+    const cleaned = origin.replace(/\/$/, '');
+    if (exactAllowed.has(cleaned) || wildcardRegexes.some((rx) => rx.test(cleaned))) {
       return callback(null, true);
     }
     return callback(null, false);
@@ -80,6 +94,9 @@ app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/uploads', express.static(config.upload.path));
+if (fs.existsSync(frontendDistDir)) {
+  app.use(express.static(frontendDistDir, { index: false, maxAge: '7d' }));
+}
 
 // 5. Input Sanitization & Anti-XSS / Prototype Pollution Defense
 app.use(sanitizeInput);
@@ -138,6 +155,23 @@ app.get(`/api/${apiVersion}/gateway/status`, (req, res) => {
 
 // 11. Main API Routes
 app.use(`/api/${apiVersion}`, routes);
+
+// 11b. Unified Frontend SPA Delivery (for single free cloudhost deployment on Render)
+app.get('*', (req, res, next) => {
+  if (
+    req.path.startsWith('/api')
+    || req.path.startsWith('/uploads')
+    || req.path.startsWith('/socket.io')
+    || req.path === '/health'
+    || req.path === '/metrics'
+  ) {
+    return next();
+  }
+  if (fs.existsSync(frontendIndexFile)) {
+    return res.sendFile(frontendIndexFile);
+  }
+  return next();
+});
 
 // 12. Error Handlers
 app.use(notFoundHandler);
