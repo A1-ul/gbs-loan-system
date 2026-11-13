@@ -341,6 +341,7 @@ async function main() {
     { email: 'audit@accramfi.com', phone: '+233200000019', role: 'INTERNAL_AUDIT', firstName: 'Samuel', lastName: 'Owusu', qual: true },
     { email: 'investor@accramfi.com', phone: '+233200000020', role: 'INVESTOR', firstName: 'Daniel', lastName: 'Asante', qual: true },
     { email: 'guarantor@accramfi.com', phone: '+233200000021', role: 'GUARANTOR_PORTAL', firstName: 'Grace', lastName: 'Amoah', qual: true },
+    { email: 'member@gbsloan.com', phone: '+233200000022', role: 'MEMBER_PORTAL', firstName: 'Kwame', lastName: 'Mensah', qual: true },
     { email: 'staff@gbsloan.com', phone: '+233200000003', role: 'FIELD_OFFICER', firstName: 'Field', lastName: 'Staff', qual: true },
     { email: 'collector@gbsloan.com', phone: '+233200000004', role: 'COLLECTIONS', firstName: 'Payment', lastName: 'Collector', qual: true },
     { email: 'pending.officer@accramfi.com', phone: '+233200000029', role: 'CREDIT_ANALYST', firstName: 'Pending', lastName: 'Applicant', qual: false, status: 'PENDING_VERIFICATION' },
@@ -409,6 +410,29 @@ async function main() {
 
   // 4. Bind existing members & create LoanProducts, Loans, RepaymentSchedules, Payments, Guarantors, Compliance, Investors, Campaigns, Tickets
   await prisma.member.updateMany({ where: { tenantId: null }, data: { tenantId: accraTenant.id, branchId: accraBranch?.id, ...prov } });
+  const seedMemberUser = seededUsers['member@gbsloan.com'];
+  if (seedMemberUser) {
+    const existingMemberRec = await prisma.member.findUnique({ where: { userId: seedMemberUser.id } });
+    if (!existingMemberRec) {
+      await prisma.member.create({
+        data: {
+          tenantId: accraTenant.id,
+          branchId: accraBranch?.id,
+          userId: seedMemberUser.id,
+          memberNumber: 'MEM-2026-SEED-01',
+          ghanaCardNumber: 'GHA-100200300-1',
+          ghanaCardVerified: true,
+          ghanaCardVerifiedAt: now,
+          occupation: 'Retail Merchant',
+          employer: 'Accra Central Trading',
+          monthlyIncome: 5500,
+          creditScore: 740,
+          kycStatus: 'VERIFIED',
+          ...prov,
+        },
+      });
+    }
+  }
   const firstMember = await prisma.member.findFirst({ where: { tenantId: accraTenant.id }, include: { user: true } });
 
   const guarantorUser = seededUsers['guarantor@accramfi.com'];

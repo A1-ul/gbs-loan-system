@@ -29,13 +29,17 @@ async function logAudit(req) {
 
   await prisma.auditLog.create({
     data: {
-      userId: req.user.id,
+      userId: req.user?.isDeveloper ? null : req.user.id,
       action: actionMap[req.method] || 'READ',
       entityType: req.baseUrl.split('/').pop() || 'unknown',
       entityId: req.params.id || null,
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
-      metadata: { method: req.method, path: req.originalUrl },
+      metadata: {
+        method: req.method,
+        path: req.originalUrl,
+        ...(req.user?.isDeveloper ? { developerUserId: req.user.id, developerEmail: req.user.email } : {}),
+      },
     },
   });
 }
