@@ -1,0 +1,84 @@
+const service = require('./tenantManagement.service');
+
+const getTenants = async (req, res, next) => {
+  try {
+    const data = await service.getTenants(req.query.onboardingStatus || null);
+    res.json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const getPendingTenants = async (req, res, next) => {
+  try {
+    const data = await service.getPendingTenants();
+    res.json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const getTenantById = async (req, res, next) => {
+  try {
+    const tenant = await service.getTenantById(req.params.id);
+    res.json({ success: true, data: tenant });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const createTenant = async (req, res, next) => {
+  try {
+    const tenant = await service.createTenant(req.body, req.developer?.id || null);
+    res.status(201).json({ success: true, message: 'Tenant provisioned and approved', data: tenant });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const approveTenant = async (req, res, next) => {
+  try {
+    const tenant = await service.approveTenant(req.params.id, req.developer?.id, req.body || {});
+    res.json({ success: true, message: `Tenant ${tenant.name} approved and activated`, data: tenant });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const rejectTenant = async (req, res, next) => {
+  try {
+    const tenant = await service.rejectTenant(req.params.id, req.developer?.id, req.body?.reason);
+    res.json({ success: true, message: `Tenant ${tenant.name} rejected`, data: tenant });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const lockTenant = async (req, res, next) => {
+  try {
+    const result = await service.lockTenant(req.params.id, req.body?.reason);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const renewTenant = async (req, res, next) => {
+  try {
+    const result = await service.renewTenant(req.params.id, parseInt(req.body?.extensionDays, 10) || 90, req.body?.note);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = {
+  getTenants,
+  getPendingTenants,
+  getTenantById,
+  createTenant,
+  approveTenant,
+  rejectTenant,
+  lockTenant,
+  renewTenant,
+};

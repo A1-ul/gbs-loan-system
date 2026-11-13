@@ -1,0 +1,28 @@
+const express = require('express');
+const tenantController = require('./tenant.controller');
+const { authenticate } = require('../../middleware/auth');
+const { managementAndAbove } = require('../../middleware/rbac');
+
+const router = express.Router();
+
+// Public Institutional Onboarding & Safe Active Directory
+router.post('/onboard', tenantController.submitOnboarding);
+router.get('/onboarding-status/:identifier', tenantController.checkOnboardingStatus);
+router.get('/public-directory', tenantController.getPublicDirectory);
+
+// Authenticated Tenant Self-Service (strictly scoped to caller's tenantId)
+router.use(authenticate);
+router.get('/my/countdown', tenantController.getMyCountdown);
+router.get('/my/messages', tenantController.getMyMessages);
+
+router.get('/', managementAndAbove, tenantController.getAllTenants);
+router.get('/:id', managementAndAbove, tenantController.getTenantById);
+router.put('/:id', managementAndAbove, tenantController.updateTenant);
+
+// Branch Management Routes (Tenant Admin / Manager within their own institution)
+router.get('/:id/branches', managementAndAbove, tenantController.getBranches);
+router.post('/:id/branches', managementAndAbove, tenantController.createBranch);
+router.put('/:id/branches/:branchId', managementAndAbove, tenantController.updateBranch);
+router.delete('/:id/branches/:branchId', managementAndAbove, tenantController.deleteBranch);
+
+module.exports = router;

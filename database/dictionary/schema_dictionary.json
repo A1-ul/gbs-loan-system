@@ -1,0 +1,34 @@
+{
+  "version": "1.0.0",
+  "system": "GBS LOAN MANAGEMENT SYSTEM",
+  "engine": "PostgreSQL 15+",
+  "tables": [
+    "users",
+    "members",
+    "loans",
+    "repayments",
+    "payments",
+    "guarantors",
+    "staff",
+    "notifications",
+    "audit_logs",
+    "tenants"
+  ],
+  "auditTables": [
+    "audit_logs",
+    "security_audit",
+    "transaction_audit",
+    "user_audit",
+    "login_audit",
+    "system_event_audit"
+  ],
+  "historyTables": [
+    "loan_history",
+    "member_history",
+    "payment_history",
+    "repayment_history",
+    "salary_history",
+    "staff_history",
+    "guarantor_history"
+  ]
+}

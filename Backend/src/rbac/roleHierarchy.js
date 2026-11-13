@@ -1,0 +1,55 @@
+/**
+ * GBS LOAN MANAGEMENT SYSTEM - ROLE HIERARCHY
+ * Defines hierarchical weights for authorization inheritance across all 30 roles.
+ * Standard: Node.js CommonJS
+ */
+
+const { ROLES } = require('../constants/roles');
+
+const ROLE_HIERARCHY = {
+  [ROLES.SUPER_ADMIN]: 100,
+  [ROLES.COMPANY_OWNER]: 95,
+  [ROLES.BOARD_EXECUTIVE]: 90,
+  [ROLES.EXECUTIVE_MANAGEMENT]: 85,
+  [ROLES.REGIONAL_MANAGER]: 80,
+  [ROLES.BRANCH_MANAGER]: 75,
+  [ROLES.OPERATIONS_MANAGER]: 70,
+  [ROLES.MANAGER]: 70,
+  [ROLES.FINANCE_MANAGER]: 68,
+  [ROLES.RISK_MANAGEMENT]: 66,
+  [ROLES.SENIOR_CREDIT_OFFICER]: 65,
+  [ROLES.INTERNAL_AUDIT]: 64,
+  [ROLES.FRAUD_INVESTIGATION]: 63,
+  [ROLES.TREASURY]: 62,
+  [ROLES.CREDIT_ANALYST]: 60,
+  [ROLES.LOAN_UNDERWRITER]: 58,
+  [ROLES.COMPLIANCE]: 57,
+  [ROLES.LEGAL_DEPARTMENT]: 56,
+  [ROLES.COLLECTIONS]: 55,
+  [ROLES.HUMAN_RESOURCE]: 54,
+  [ROLES.ACCOUNTANT]: 52,
+  [ROLES.LOAN_OFFICER]: 50,
+  [ROLES.FIELD_OFFICER]: 48,
+  [ROLES.CUSTOMER_SERVICE]: 46,
+  [ROLES.RECEPTION]: 45,
+  [ROLES.MOBILE_STAFF]: 44,
+  [ROLES.STAFF]: 44,
+  [ROLES.COLLECTOR]: 44,
+  [ROLES.MARKETING]: 42,
+  [ROLES.INVESTOR]: 40,
+  [ROLES.GUARANTOR_PORTAL]: 30,
+  [ROLES.GUARANTOR]: 30,
+  [ROLES.MEMBER_PORTAL]: 20,
+  [ROLES.MEMBER]: 20,
+};
+
+function hasHigherOrEqualRole(userRole, requiredRole) {
+  const userWeight = ROLE_HIERARCHY[userRole] || 0;
+  const requiredWeight = ROLE_HIERARCHY[requiredRole] || 0;
+  return userWeight >= requiredWeight;
+}
+
+module.exports = {
+  ROLE_HIERARCHY,
+  hasHigherOrEqualRole,
+};

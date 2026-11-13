@@ -1,0 +1,86 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      target: production
+    container_name: gbs-loan-api
+    restart: unless-stopped
+    ports:
+      - "${PORT:-5000}:5000"
+      - "${METRICS_PORT:-9090}:9090"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://gbs_user:gbs_password@postgres:5432/gbs_loan_db?schema=public
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    volumes:
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+      - ./backups:/app/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - gbs-network
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: gbs-loan-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gbs_user
+      POSTGRES_PASSWORD: gbs_password
+      POSTGRES_DB: gbs_loan_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gbs_user -d gbs_loan_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - gbs-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: gbs-loan-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - gbs-network
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: gbs-loan-prometheus
+    restart: unless-stopped
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - gbs-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  prometheus_data:
+
+networks:
+  gbs-network:
+    driver: bridge

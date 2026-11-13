@@ -1,0 +1,92 @@
+name: GBS Loan System CI/CD (Render Exclusive)
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  validate-and-test:
+    name: Backend Integration Tests & Frontend Production Build
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: gbs_loan_db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: gbs_ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Backend Dependencies & Migrate PostgreSQL
+        working-directory: Backend
+        env:
+          DATABASE_URL: postgresql://postgres:gbs_ci_password@localhost:5432/gbs_loan_db?schema=public
+        run: |
+          npm install
+          npx prisma generate
+          npx prisma db push
+          node prisma/seed.js
+
+      - name: Run Backend Integration & Security Suite
+        working-directory: Backend
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://postgres:gbs_ci_password@localhost:5432/gbs_loan_db?schema=public
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: ci_tenant_jwt_secret_must_be_32_chars_min
+          JWT_REFRESH_SECRET: ci_tenant_refresh_secret_32_chars_min
+          DEVELOPER_JWT_SECRET: ci_developer_landlord_secret_32_chars_min
+        run: npm test -- --runInBand --forceExit
+
+      - name: Build Frontend Vite Bundle
+        working-directory: Frontend
+        run: |
+          npm install
+          npm run build
+
+      - name: Validate Master Blueprint Structure
+        run: node scripts/validate-gbs-enterprise.js
+
+  deploy-render:
+    name: Trigger Render.com Exclusive Production Deploy
+    needs: validate-and-test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy Backend Web Service & Worker + Static Frontend to Render
+        env:
+          RENDER_API_HOOK: ${{ secrets.RENDER_API_DEPLOY_HOOK }}
+          RENDER_WORKER_HOOK: ${{ secrets.RENDER_WORKER_DEPLOY_HOOK }}
+          RENDER_FRONTEND_HOOK: ${{ secrets.RENDER_FRONTEND_DEPLOY_HOOK }}
+        run: |
+          if [ -n "$RENDER_API_HOOK" ]; then curl -fsS -X POST "$RENDER_API_HOOK"; fi
+          if [ -n "$RENDER_WORKER_HOOK" ]; then curl -fsS -X POST "$RENDER_WORKER_HOOK"; fi
+          if [ -n "$RENDER_FRONTEND_HOOK" ]; then curl -fsS -X POST "$RENDER_FRONTEND_HOOK"; fi
+

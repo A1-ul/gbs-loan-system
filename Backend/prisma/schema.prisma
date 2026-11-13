@@ -1,0 +1,1401 @@
+// GBS Loan Management System - Authoritative Enterprise Database Schema
+// PostgreSQL + Prisma ORM (Multi-Tenant, Audited, Provenance-Tracked)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum UserRole {
+  SUPER_ADMIN
+  COMPANY_OWNER
+  EXECUTIVE_MANAGEMENT
+  REGIONAL_MANAGER
+  BRANCH_MANAGER
+  OPERATIONS_MANAGER
+  LOAN_OFFICER
+  SENIOR_CREDIT_OFFICER
+  CREDIT_ANALYST
+  LOAN_UNDERWRITER
+  COLLECTIONS
+  FIELD_OFFICER
+  CUSTOMER_SERVICE
+  RECEPTION
+  GUARANTOR_PORTAL
+  MEMBER_PORTAL
+  ACCOUNTANT
+  FINANCE_MANAGER
+  TREASURY
+  HUMAN_RESOURCE
+  LEGAL_DEPARTMENT
+  COMPLIANCE
+  INTERNAL_AUDIT
+  RISK_MANAGEMENT
+  FRAUD_INVESTIGATION
+  SECURITY_OPERATIONS
+  MARKETING
+  INVESTOR
+  BOARD_EXECUTIVE
+  MOBILE_STAFF
+  MANAGER
+  STAFF
+  COLLECTOR
+  MEMBER
+  GUARANTOR
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+  AWAITING_APPROVAL
+  DEACTIVATED
+  REJECTED
+}
+
+enum LoanStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  DISBURSED
+  ONGOING
+  PAID
+  OVERDUE
+  DEFAULTED
+  CLOSED
+  REJECTED
+}
+
+enum PaymentMethod {
+  MOMO
+  BANK_TRANSFER
+  CASH
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+  AWAITING_APPROVAL
+}
+
+enum NotificationType {
+  SMS
+  EMAIL
+  PUSH
+  IN_APP
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  FAILED
+}
+
+enum NotificationCategory {
+  PAYMENT_REMINDER
+  PAYMENT_DUE_TODAY
+  PAYMENT_DUE_WEEK
+  OVERDUE_ALERT
+  GUARANTOR_ALERT
+  LOAN_APPROVED
+  LOAN_DISBURSED
+  LOAN_REJECTED
+  OTP_VERIFICATION
+  SYSTEM_ALERT
+  MEETING_INVITE
+  TENANT_APPROVAL
+  TRIAL_COUNTDOWN
+}
+
+enum AuditAction {
+  CREATE
+  READ
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  APPROVE
+  REJECT
+  DISBURSE
+  PAYMENT
+  EXPORT
+  USER_REGISTERED
+  USER_QUALIFICATION_VERIFIED
+  TENANT_ONBOARDED
+  TENANT_APPROVED
+  TENANT_REJECTED
+  VOICE_VERIFIED
+  FACIAL_VERIFIED
+  DELETION_REQUESTED
+  DELETION_APPROVED
+  SYSTEM_LOCK
+  SYSTEM_UNLOCK
+  BACKUP_CREATED
+  MIGRATION_EXECUTED
+}
+
+enum SalaryStatus {
+  PENDING
+  PAID
+  CANCELLED
+}
+
+enum CollectorStatus {
+  ONLINE
+  OFFLINE
+  ON_ROUTE
+  AT_LOCATION
+  IDLE
+}
+
+enum ConsentType {
+  GPS_TRACKING
+  DATA_PROCESSING
+  MARKETING
+  GUARANTOR_AGREEMENT
+  PRIVACY_POLICY
+  TERMS_OF_SERVICE
+}
+
+enum MeetingStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum BackupStatus {
+  SUCCESS
+  FAILED
+  IN_PROGRESS
+}
+
+enum DataSource {
+  PRODUCTION_LIVE
+  DEVELOPMENT_SEED
+  STAGING_TEST
+  MIGRATED_IMPORT
+}
+
+enum EnvironmentTag {
+  DEVELOPMENT
+  TEST
+  STAGING
+  PRODUCTION
+}
+
+// ============================================
+// CORE USERS, SECURITY & AUDIT
+// ============================================
+
+model User {
+  id                    String         @id @default(uuid())
+  tenantId              String?        @map("tenant_id")
+  branchId              String?        @map("branch_id")
+  email                 String         @unique
+  username              String?        @map("username")
+  phone                 String         @unique
+  passwordHash          String         @map("password_hash")
+  role                  UserRole
+  status                UserStatus     @default(PENDING_VERIFICATION)
+  firstName             String         @map("first_name")
+  lastName              String         @map("last_name")
+  profilePicture        String?        @map("profile_picture")
+  address               String?
+  gpsLatitude           Float?         @map("gps_latitude")
+  gpsLongitude          Float?         @map("gps_longitude")
+  isEmailVerified       Boolean        @default(false) @map("is_email_verified")
+  isPhoneVerified       Boolean        @default(false) @map("is_phone_verified")
+  otpVerified           Boolean        @default(false) @map("otp_verified")
+  otpCode               String?        @map("otp_code")
+  otpExpiresAt          DateTime?      @map("otp_expires_at")
+  twoFactorEnabled      Boolean        @default(false) @map("two_factor_enabled")
+  twoFactorSecret       String?        @map("two_factor_secret")
+  facialEnrolled        Boolean        @default(false) @map("facial_enrolled")
+  facialDescriptorHash  String?        @map("facial_descriptor_hash")
+  lastDeviceFingerprint String?        @map("last_device_fingerprint")
+  trustedDevices        Json?          @map("trusted_devices")
+  qualificationVerified Boolean        @default(false) @map("qualification_verified")
+  approvedByAdminId     String?        @map("approved_by_admin_id")
+  deletionRequested     Boolean        @default(false) @map("deletion_requested")
+  deletionReason        String?        @map("deletion_reason")
+  deletionApprovedById  String?        @map("deletion_approved_by_id")
+  metadata              Json?
+  lastLoginAt           DateTime?      @map("last_login_at")
+  lastLoginIp           String?        @map("last_login_ip")
+  dataSource            DataSource     @default(PRODUCTION_LIVE) @map("data_source")
+  environmentTag        EnvironmentTag @default(DEVELOPMENT) @map("environment_tag")
+  isProductionRecord    Boolean        @default(true) @map("is_production_record")
+  createdAt             DateTime       @default(now()) @map("created_at")
+  updatedAt             DateTime       @updatedAt @map("updated_at")
+  deletedAt             DateTime?      @map("deleted_at")
+
+  tenant             Tenant?               @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  branch             Branch?               @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  memberProfile      Member?
+  guarantorProfile   Guarantor?
+  staffProfile       Staff?
+  collectorProfile   Collector?
+  refreshTokens      RefreshToken[]
+  auditLogs          AuditLog[]
+  consents           UserConsent[]
+  notifications      Notification[]
+  verificationLogs   UserVerificationLog[] @relation("UserVerifications")
+  adminVerifications UserVerificationLog[] @relation("AdminVerifications")
+  voiceProfile       VoiceProfile?
+
+  @@index([tenantId])
+  @@index([branchId])
+  @@index([email])
+  @@index([phone])
+  @@index([role])
+  @@index([status])
+  @@index([tenantId, role, status])
+  @@map("users")
+}
+
+model UserVerificationLog {
+  id           String   @id @default(uuid())
+  tenantId     String?  @map("tenant_id")
+  userId       String   @map("user_id")
+  adminId      String   @map("admin_id")
+  statusBefore String   @map("status_before")
+  statusAfter  String   @map("status_after")
+  isQualified  Boolean  @map("is_qualified")
+  notes        String?
+  ipAddress    String?  @map("ip_address")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user  User @relation("UserVerifications", fields: [userId], references: [id], onDelete: Cascade)
+  admin User @relation("AdminVerifications", fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([adminId])
+  @@map("user_verification_logs")
+}
+
+model RefreshToken {
+  id                String   @id @default(uuid())
+  token             String   @unique
+  userId            String   @map("user_id")
+  deviceFingerprint String?  @map("device_fingerprint")
+  ipAddress         String?  @map("ip_address")
+  expiresAt         DateTime @map("expires_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model UserConsent {
+  id          String      @id @default(uuid())
+  userId      String      @map("user_id")
+  consentType ConsentType @map("consent_type")
+  granted     Boolean     @default(false)
+  grantedAt   DateTime?   @map("granted_at")
+  revokedAt   DateTime?   @map("revoked_at")
+  ipAddress   String?     @map("ip_address")
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, consentType])
+  @@map("user_consents")
+}
+
+model AuditLog {
+  id                 String         @id @default(uuid())
+  tenantId           String?        @map("tenant_id")
+  userId             String?        @map("user_id")
+  action             AuditAction
+  entityType         String         @map("entity_type")
+  entityId           String?        @map("entity_id")
+  oldValues          Json?          @map("old_values")
+  newValues          Json?          @map("new_values")
+  ipAddress          String?        @map("ip_address")
+  userAgent          String?        @map("user_agent")
+  metadata           Json?
+  dataSource         DataSource     @default(PRODUCTION_LIVE) @map("data_source")
+  environmentTag     EnvironmentTag @default(DEVELOPMENT) @map("environment_tag")
+  isProductionRecord Boolean        @default(true) @map("is_production_record")
+  createdAt          DateTime       @default(now()) @map("created_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model SystemBackup {
+  id           String       @id @default(uuid())
+  status       BackupStatus
+  filePath     String?      @map("file_path")
+  fileSize     BigInt?      @map("file_size")
+  cloudPath    String?      @map("cloud_path")
+  checksum     String?
+  triggeredBy  String?      @map("triggered_by")
+  errorMessage String?      @map("error_message")
+  startedAt    DateTime     @map("started_at")
+  completedAt  DateTime?    @map("completed_at")
+  createdAt    DateTime     @default(now()) @map("created_at")
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("system_backups")
+}
+
+// ============================================
+// MEMBERS, GUARANTORS & PRODUCTS
+// ============================================
+
+model Member {
+  id                  String         @id @default(uuid())
+  tenantId            String?        @map("tenant_id")
+  branchId            String?        @map("branch_id")
+  userId              String         @unique @map("user_id")
+  memberNumber        String         @unique @map("member_number")
+  ghanaCardNumber     String?        @map("ghana_card_number")
+  ghanaCardVerified   Boolean        @default(false) @map("ghana_card_verified")
+  ghanaCardVerifiedAt DateTime?      @map("ghana_card_verified_at")
+  dateOfBirth         DateTime?      @map("date_of_birth")
+  occupation          String?
+  employer            String?
+  monthlyIncome       Decimal?       @map("monthly_income") @db.Decimal(12, 2)
+  emergencyContact    String?        @map("emergency_contact")
+  emergencyPhone      String?        @map("emergency_phone")
+  creditScore         Int            @default(650) @map("credit_score")
+  kycStatus           String         @default("PENDING") @map("kyc_status")
+  registrationDate    DateTime       @default(now()) @map("registration_date")
+  dataSource          DataSource     @default(PRODUCTION_LIVE) @map("data_source")
+  environmentTag      EnvironmentTag @default(DEVELOPMENT) @map("environment_tag")
+  isProductionRecord  Boolean        @default(true) @map("is_production_record")
+  createdAt           DateTime       @default(now()) @map("created_at")
+  updatedAt           DateTime       @updatedAt @map("updated_at")
+  deletedAt           DateTime?      @map("deleted_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  branch Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  loans  Loan[]
+
+  @@index([tenantId])
+  @@index([branchId])
+  @@index([memberNumber])
+  @@map("members")
+}
+
+model Guarantor {
+  id                   String    @id @default(uuid())
+  tenantId             String?   @map("tenant_id")
+  userId               String    @unique @map("user_id")
+  ghanaCardNumber      String?   @map("ghana_card_number")
+  relationship         String?
+  agreementSigned      Boolean   @default(false) @map("agreement_signed")
+  agreementSignedAt    DateTime? @map("agreement_signed_at")
+  penaltyNotifyEnabled Boolean   @default(true) @map("penalty_notify_enabled")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  tenant         Tenant?         @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  loanGuarantors LoanGuarantor[]
+
+  @@index([tenantId])
+  @@map("guarantors")
+}
+
+model LoanProduct {
+  id           String   @id @default(uuid())
+  tenantId     String?  @map("tenant_id")
+  code         String   @unique
+  name         String
+  category     String   @default("MICRO_LOAN") // MICRO_LOAN, SME_LOAN, GROUP_LOAN, SALARY_LOAN, EMERGENCY_LOAN
+  minAmount    Decimal  @default(500) @map("min_amount") @db.Decimal(12, 2)
+  maxAmount    Decimal  @default(250000) @map("max_amount") @db.Decimal(12, 2)
+  interestRate Decimal  @default(15.0) @map("interest_rate") @db.Decimal(5, 2)
+  penaltyRate  Decimal  @default(5.0) @map("penalty_rate") @db.Decimal(5, 2)
+  minTermMonths Int     @default(3) @map("min_term_months")
+  maxTermMonths Int     @default(36) @map("max_term_months")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@map("loan_products")
+}
+
+// ============================================
+// CORE LOAN SYSTEM & COLLATERAL
+// ============================================
+
+model Loan {
+  id                String         @id @default(uuid())
+  tenantId          String?        @map("tenant_id")
+  branchId          String?        @map("branch_id")
+  loanNumber        String         @unique @map("loan_number")
+  memberId          String         @map("member_id")
+  loanProductId     String?        @map("loan_product_id")
+  principalAmount   Decimal        @map("principal_amount") @db.Decimal(12, 2)
+  interestRate      Decimal        @map("interest_rate") @db.Decimal(5, 2)
+  penaltyRate       Decimal        @map("penalty_rate") @db.Decimal(5, 2)
+  termMonths        Int            @map("term_months")
+  totalAmount       Decimal        @map("total_amount") @db.Decimal(12, 2)
+  amountPaid        Decimal        @default(0) @map("amount_paid") @db.Decimal(12, 2)
+  outstandingAmount Decimal        @map("outstanding_amount") @db.Decimal(12, 2)
+  status            LoanStatus     @default(PENDING)
+  purpose           String?
+  riskScore         Int?           @map("risk_score")
+  applicationDate   DateTime       @default(now()) @map("application_date")
+  reviewedAt        DateTime?      @map("reviewed_at")
+  reviewedById      String?        @map("reviewed_by_id")
+  approvedAt        DateTime?      @map("approved_at")
+  approvedById      String?        @map("approved_by_id")
+  disbursedAt       DateTime?      @map("disbursed_at")
+  disbursedById     String?        @map("disbursed_by_id")
+  dueDate           DateTime?      @map("due_date")
+  closedAt          DateTime?      @map("closed_at")
+  rejectionReason   String?        @map("rejection_reason")
+  notes             String?
+  dataSource        DataSource     @default(PRODUCTION_LIVE) @map("data_source")
+  environmentTag    EnvironmentTag @default(DEVELOPMENT) @map("environment_tag")
+  isProductionRecord Boolean       @default(true) @map("is_production_record")
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+
+  tenant         Tenant?             @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  branch         Branch?             @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  member         Member              @relation(fields: [memberId], references: [id])
+  payments       Payment[]
+  schedule       RepaymentSchedule[]
+  workflowLogs   LoanWorkflowLog[]
+  loanGuarantors LoanGuarantor[]
+  penalties      LoanPenalty[]
+  collaterals    CollateralItem[]
+
+  @@index([tenantId])
+  @@index([branchId])
+  @@index([memberId])
+  @@index([status])
+  @@index([applicationDate])
+  @@index([dueDate])
+  @@map("loans")
+}
+
+model CollateralItem {
+  id             String   @id @default(uuid())
+  tenantId       String?  @map("tenant_id")
+  loanId         String   @map("loan_id")
+  title          String
+  assetType      String   @map("asset_type") // PROPERTY, VEHICLE, EQUIPMENT, CASH_DEPOSIT
+  estimatedValue Decimal  @map("estimated_value") @db.Decimal(12, 2)
+  documentRef    String?  @map("document_ref")
+  status         String   @default("VERIFIED")
+  verifiedById   String?  @map("verified_by_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  loan Loan @relation(fields: [loanId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([loanId])
+  @@map("collateral_items")
+}
+
+model LoanGuarantor {
+  id          String   @id @default(uuid())
+  loanId      String   @map("loan_id")
+  guarantorId String   @map("guarantor_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  loan      Loan      @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  guarantor Guarantor @relation(fields: [guarantorId], references: [id])
+
+  @@unique([loanId, guarantorId])
+  @@map("loan_guarantors")
+}
+
+model LoanWorkflowLog {
+  id          String     @id @default(uuid())
+  loanId      String     @map("loan_id")
+  fromStatus  LoanStatus @map("from_status")
+  toStatus    LoanStatus @map("to_status")
+  performedBy String?    @map("performed_by")
+  notes       String?
+  createdAt   DateTime   @default(now()) @map("created_at")
+
+  loan Loan @relation(fields: [loanId], references: [id], onDelete: Cascade)
+
+  @@index([loanId])
+  @@map("loan_workflow_logs")
+}
+
+model RepaymentSchedule {
+  id            String    @id @default(uuid())
+  loanId        String    @map("loan_id")
+  installmentNo Int       @map("installment_no")
+  dueDate       DateTime  @map("due_date")
+  principalDue  Decimal   @map("principal_due") @db.Decimal(12, 2)
+  interestDue   Decimal   @map("interest_due") @db.Decimal(12, 2)
+  totalDue      Decimal   @map("total_due") @db.Decimal(12, 2)
+  amountPaid    Decimal   @default(0) @map("amount_paid") @db.Decimal(12, 2)
+  isPaid        Boolean   @default(false) @map("is_paid")
+  paidAt        DateTime? @map("paid_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  loan Loan @relation(fields: [loanId], references: [id], onDelete: Cascade)
+
+  @@index([loanId])
+  @@index([dueDate])
+  @@map("repayment_schedules")
+}
+
+model LoanPenalty {
+  id        String   @id @default(uuid())
+  loanId    String   @map("loan_id")
+  amount    Decimal  @db.Decimal(12, 2)
+  reason    String
+  appliedAt DateTime @default(now()) @map("applied_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  loan Loan @relation(fields: [loanId], references: [id], onDelete: Cascade)
+
+  @@index([loanId])
+  @@map("loan_penalties")
+}
+
+model Payment {
+  id                 String         @id @default(uuid())
+  tenantId           String?        @map("tenant_id")
+  branchId           String?        @map("branch_id")
+  paymentRef         String         @unique @map("payment_ref")
+  loanId             String         @map("loan_id")
+  amount             Decimal        @db.Decimal(12, 2)
+  method             PaymentMethod
+  status             PaymentStatus  @default(PENDING)
+  momoTransactionId  String?        @map("momo_transaction_id")
+  momoPhone          String?        @map("momo_phone")
+  bankReference      String?        @map("bank_reference")
+  receiptNumber      String?        @map("receipt_number")
+  collectedById      String?        @map("collected_by_id")
+  approvedById       String?        @map("approved_by_id")
+  approvedAt         DateTime?      @map("approved_at")
+  notes              String?
+  paidAt             DateTime?      @map("paid_at")
+  dataSource         DataSource     @default(PRODUCTION_LIVE) @map("data_source")
+  environmentTag     EnvironmentTag @default(DEVELOPMENT) @map("environment_tag")
+  isProductionRecord Boolean        @default(true) @map("is_production_record")
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  loan   Loan    @relation(fields: [loanId], references: [id])
+
+  @@index([tenantId])
+  @@index([loanId])
+  @@index([status])
+  @@index([method])
+  @@index([paidAt])
+  @@map("payments")
+}
+
+// ============================================
+// OPERATIONS: STAFF, COLLECTORS, GPS, NOTIFICATIONS, SALARIES
+// ============================================
+
+model Staff {
+  id         String   @id @default(uuid())
+  tenantId   String?  @map("tenant_id")
+  branchId   String?  @map("branch_id")
+  userId     String   @unique @map("user_id")
+  employeeId String   @unique @map("employee_id")
+  department String?
+  position   String?
+  hireDate   DateTime @map("hire_date")
+  baseSalary Decimal  @map("base_salary") @db.Decimal(12, 2)
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  tenant        Tenant?                @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  user          User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  salaries      StaffSalary[]
+  salaryProfile EmployeeSalaryProfile?
+
+  @@index([tenantId])
+  @@index([employeeId])
+  @@map("staff")
+}
+
+model StaffSalary {
+  id         String       @id @default(uuid())
+  tenantId   String?      @map("tenant_id")
+  staffId    String       @map("staff_id")
+  month      Int
+  year       Int
+  baseAmount Decimal      @map("base_amount") @db.Decimal(12, 2)
+  bonuses    Decimal      @default(0) @db.Decimal(12, 2)
+  deductions Decimal      @default(0) @db.Decimal(12, 2)
+  netAmount  Decimal      @map("net_amount") @db.Decimal(12, 2)
+  status     SalaryStatus @default(PENDING)
+  paidAt     DateTime?    @map("paid_at")
+  paidById   String?      @map("paid_by_id")
+  notes      String?
+  createdAt  DateTime     @default(now()) @map("created_at")
+  updatedAt  DateTime     @updatedAt @map("updated_at")
+
+  staff Staff @relation(fields: [staffId], references: [id])
+
+  @@unique([staffId, month, year])
+  @@index([tenantId])
+  @@index([status])
+  @@map("staff_salaries")
+}
+
+model Collector {
+  id             String          @id @default(uuid())
+  tenantId       String?         @map("tenant_id")
+  branchId       String?         @map("branch_id")
+  userId         String          @unique @map("user_id")
+  employeeId     String          @unique @map("employee_id")
+  assignedZone   String?         @map("assigned_zone")
+  status         CollectorStatus @default(OFFLINE)
+  lastLatitude   Float?          @map("last_latitude")
+  lastLongitude  Float?          @map("last_longitude")
+  lastSpeed      Float?          @map("last_speed")
+  lastLocationAt DateTime?       @map("last_location_at")
+  isActive       Boolean         @default(true) @map("is_active")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  tenant       Tenant?                @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  user         User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  locationLogs CollectorLocationLog[]
+  visits       CustomerVisit[]
+
+  @@index([tenantId])
+  @@index([employeeId])
+  @@index([status])
+  @@map("collectors")
+}
+
+model CollectorLocationLog {
+  id            String          @id @default(uuid())
+  collectorId   String          @map("collector_id")
+  latitude      Float
+  longitude     Float
+  speed         Float?
+  status        CollectorStatus
+  accuracy      Float?
+  isOfflineSync Boolean         @default(false) @map("is_offline_sync")
+  recordedAt    DateTime        @map("recorded_at")
+  createdAt     DateTime        @default(now()) @map("created_at")
+
+  collector Collector @relation(fields: [collectorId], references: [id], onDelete: Cascade)
+
+  @@index([collectorId])
+  @@index([recordedAt])
+  @@map("collector_location_logs")
+}
+
+model CustomerVisit {
+  id           String   @id @default(uuid())
+  tenantId     String?  @map("tenant_id")
+  collectorId  String   @map("collector_id")
+  customerName String   @map("customer_name")
+  loanNumber   String?  @map("loan_number")
+  visitOutcome String   @map("visit_outcome") // COLLECTED, PROMISE_TO_PAY, RESCHEDULED, UNREACHABLE
+  amountCollected Decimal @default(0) @map("amount_collected") @db.Decimal(12, 2)
+  latitude     Float?
+  longitude    Float?
+  notes        String?
+  visitedAt    DateTime @default(now()) @map("visited_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  collector Collector @relation(fields: [collectorId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([collectorId])
+  @@map("customer_visits")
+}
+
+model Notification {
+  id           String               @id @default(uuid())
+  tenantId     String?              @map("tenant_id")
+  userId       String               @map("user_id")
+  type         NotificationType
+  category     NotificationCategory
+  status       NotificationStatus   @default(QUEUED)
+  title        String
+  message      String
+  recipient    String
+  isRead       Boolean              @default(false) @map("is_read")
+  metadata     Json?
+  sentAt       DateTime?            @map("sent_at")
+  deliveredAt  DateTime?            @map("delivered_at")
+  failedAt     DateTime?            @map("failed_at")
+  errorMessage String?              @map("error_message")
+  retryCount   Int                  @default(0) @map("retry_count")
+  createdAt    DateTime             @default(now()) @map("created_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([status])
+  @@index([category])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+// ============================================
+// ENTERPRISE DEPARTMENT MODULES (30-ROLE BACKING)
+// ============================================
+
+model ZoomMeeting {
+  id            String        @id @default(uuid())
+  tenantId      String?       @map("tenant_id")
+  zoomMeetingId String        @unique @map("zoom_meeting_id")
+  topic         String
+  hostId        String        @map("host_id")
+  startTime     DateTime      @map("start_time")
+  duration      Int
+  joinUrl       String        @map("join_url")
+  password      String?
+  status        MeetingStatus @default(SCHEDULED)
+  participants  Json?
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([hostId])
+  @@index([startTime])
+  @@map("zoom_meetings")
+}
+
+model ReportSnapshot {
+  id            String   @id @default(uuid())
+  tenantId      String?  @map("tenant_id")
+  reportType    String   @map("report_type")
+  periodStart   DateTime @map("period_start")
+  periodEnd     DateTime @map("period_end")
+  data          Json
+  generatedById String?  @map("generated_by_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([reportType])
+  @@index([periodStart, periodEnd])
+  @@map("report_snapshots")
+}
+
+model SystemHealthLog {
+  id              String    @id @default(uuid())
+  serverStatus    String    @map("server_status")
+  databaseStatus  String    @map("database_status")
+  redisStatus     String    @map("redis_status")
+  uptimeSeconds   BigInt    @map("uptime_seconds")
+  memoryUsageMb   Float?    @map("memory_usage_mb")
+  cpuUsagePercent Float?    @map("cpu_usage_percent")
+  lastBackupAt    DateTime? @map("last_backup_at")
+  backupStatus    String?   @map("backup_status")
+  recordedAt      DateTime  @default(now()) @map("recorded_at")
+
+  @@index([recordedAt])
+  @@map("system_health_logs")
+}
+
+model DocumentRecord {
+  id           String   @id @default(uuid())
+  tenantId     String?  @map("tenant_id")
+  entityType   String   @map("entity_type") // MEMBER, LOAN, TENANT, STAFF
+  entityId     String   @map("entity_id")
+  title        String
+  category     String   @default("KYC") // KYC, CONTRACT, LICENSE, IDENTITY, COLLATERAL
+  filePath     String   @map("file_path")
+  mimeType     String?  @map("mime_type")
+  fileSize     Int      @default(0) @map("file_size")
+  uploadedById String?  @map("uploaded_by_id")
+  verified     Boolean  @default(false)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([entityType, entityId])
+  @@map("document_records")
+}
+
+model ComplianceCase {
+  id           String   @id @default(uuid())
+  tenantId     String?  @map("tenant_id")
+  caseCode     String   @unique @map("case_code")
+  category     String   // COMPLIANCE, RISK, FRAUD, AUDIT, LEGAL, SECURITY_OPS
+  severity     String   @default("MEDIUM") // LOW, MEDIUM, HIGH, CRITICAL
+  title        String
+  description  String
+  entityType   String?  @map("entity_type")
+  entityId     String?  @map("entity_id")
+  status       String   @default("OPEN") // OPEN, INVESTIGATING, RESOLVED, ESCALATED
+  assignedToId String?  @map("assigned_to_id")
+  resolution   String?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([category, status])
+  @@map("compliance_cases")
+}
+
+model SupportTicket {
+  id           String   @id @default(uuid())
+  tenantId     String?  @map("tenant_id")
+  ticketNumber String   @unique @map("ticket_number")
+  requesterName String  @map("requester_name")
+  requesterPhone String? @map("requester_phone")
+  channel      String   @default("WALK_IN") // WALK_IN, PHONE, PORTAL, EMAIL
+  subject      String
+  description  String
+  priority     String   @default("NORMAL")
+  status       String   @default("OPEN") // OPEN, IN_PROGRESS, RESOLVED, CLOSED
+  assignedToId String?  @map("assigned_to_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("support_tickets")
+}
+
+model InvestorAccount {
+  id              String   @id @default(uuid())
+  tenantId        String?  @map("tenant_id")
+  investorCode    String   @unique @map("investor_code")
+  investorName    String   @map("investor_name")
+  email           String?
+  committedCapital Decimal @map("committed_capital") @db.Decimal(14, 2)
+  deployedCapital  Decimal @default(0) @map("deployed_capital") @db.Decimal(14, 2)
+  annualYieldRate  Decimal @default(18.5) @map("annual_yield_rate") @db.Decimal(5, 2)
+  returnsAccrued   Decimal @default(0) @map("returns_accrued") @db.Decimal(14, 2)
+  status          String   @default("ACTIVE")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@map("investor_accounts")
+}
+
+model MarketingCampaign {
+  id             String   @id @default(uuid())
+  tenantId       String?  @map("tenant_id")
+  campaignCode   String   @unique @map("campaign_code")
+  name           String
+  channel        String   @default("SMS_OUTREACH")
+  targetSegment  String?  @map("target_segment")
+  leadsCount     Int      @default(0) @map("leads_count")
+  conversions    Int      @default(0)
+  budget         Decimal  @default(0) @db.Decimal(12, 2)
+  status         String   @default("ACTIVE")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@map("marketing_campaigns")
+}
+
+model DeletionApprovalRequest {
+  id            String    @id @default(uuid())
+  tenantId      String?   @map("tenant_id")
+  entityType    String    @map("entity_type") // MEMBER, STAFF, USER, LOAN
+  entityId      String    @map("entity_id")
+  entityLabel   String?   @map("entity_label")
+  reason        String
+  requestedById String    @map("requested_by_id")
+  reviewedById  String?   @map("reviewed_by_id")
+  status        String    @default("PENDING_MANAGER_APPROVAL") // PENDING_MANAGER_APPROVAL, APPROVED, REJECTED
+  reviewNotes   String?   @map("review_notes")
+  reviewedAt    DateTime? @map("reviewed_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("deletion_approval_requests")
+}
+
+// ============================================
+// HR EMPLOYEE SALARY GROUPING
+// ============================================
+
+model QualificationLevel {
+  id            String   @id @default(uuid())
+  code          String   @unique
+  name          String
+  description   String?
+  baseAllowance Decimal  @default(0) @map("base_allowance") @db.Decimal(12, 2)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  salaryProfiles EmployeeSalaryProfile[]
+
+  @@map("qualification_levels")
+}
+
+model SalaryGrade {
+  id          String   @id @default(uuid())
+  gradeCode   String   @unique @map("grade_code")
+  name        String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  steps          SalaryStep[]
+  salaryProfiles EmployeeSalaryProfile[]
+
+  @@map("salary_grades")
+}
+
+model SalaryStep {
+  id            String   @id @default(uuid())
+  salaryGradeId String   @map("salary_grade_id")
+  stepNumber    Int      @map("step_number")
+  amount        Decimal  @db.Decimal(12, 2)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  salaryGrade    SalaryGrade             @relation(fields: [salaryGradeId], references: [id], onDelete: Cascade)
+  salaryProfiles EmployeeSalaryProfile[]
+
+  @@unique([salaryGradeId, stepNumber])
+  @@map("salary_steps")
+}
+
+model ServiceBand {
+  id        String   @id @default(uuid())
+  bandName  String   @unique @map("band_name")
+  minYears  Int      @map("min_years")
+  maxYears  Int      @map("max_years")
+  allowance Decimal  @default(0) @db.Decimal(12, 2)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  salaryProfiles EmployeeSalaryProfile[]
+
+  @@map("service_bands")
+}
+
+model EmployeeSalaryProfile {
+  id                        String   @id @default(uuid())
+  staffId                   String   @unique @map("staff_id")
+  qualificationLevelId      String?  @map("qualification_level_id")
+  salaryGradeId             String?  @map("salary_grade_id")
+  salaryStepId              String?  @map("salary_step_id")
+  serviceBandId             String?  @map("service_band_id")
+  yearsOfService            Int      @default(0) @map("years_of_service")
+  branchAllowance           Decimal  @default(0) @map("branch_allowance") @db.Decimal(12, 2)
+  responsibilityAllowance   Decimal  @default(0) @map("responsibility_allowance") @db.Decimal(12, 2)
+  housingTransportAllowance Decimal  @default(0) @map("housing_transport_allowance") @db.Decimal(12, 2)
+  performanceBonus          Decimal  @default(0) @map("performance_bonus") @db.Decimal(12, 2)
+  totalComputedSalary       Decimal  @default(0) @map("total_computed_salary") @db.Decimal(12, 2)
+  createdAt                 DateTime @default(now()) @map("created_at")
+  updatedAt                 DateTime @updatedAt @map("updated_at")
+
+  staff              Staff                    @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  qualificationLevel QualificationLevel?      @relation(fields: [qualificationLevelId], references: [id], onDelete: SetNull)
+  salaryGrade        SalaryGrade?             @relation(fields: [salaryGradeId], references: [id], onDelete: SetNull)
+  salaryStep         SalaryStep?              @relation(fields: [salaryStepId], references: [id], onDelete: SetNull)
+  serviceBand        ServiceBand?             @relation(fields: [serviceBandId], references: [id], onDelete: SetNull)
+  incrementHistory   SalaryIncrementHistory[]
+
+  @@map("employee_salary_profiles")
+}
+
+model SalaryIncrementHistory {
+  id                      String   @id @default(uuid())
+  employeeSalaryProfileId String   @map("employee_salary_profile_id")
+  previousGrade           String?  @map("previous_grade")
+  newGrade                String?  @map("new_grade")
+  previousStep            Int?     @map("previous_step")
+  newStep                 Int?     @map("new_step")
+  previousSalary          Decimal  @map("previous_salary") @db.Decimal(12, 2)
+  newSalary               Decimal  @map("new_salary") @db.Decimal(12, 2)
+  reason                  String
+  effectiveDate           DateTime @default(now()) @map("effective_date")
+  approvedById            String?  @map("approved_by_id")
+  createdAt               DateTime @default(now()) @map("created_at")
+
+  employeeSalaryProfile EmployeeSalaryProfile @relation(fields: [employeeSalaryProfileId], references: [id], onDelete: Cascade)
+
+  @@index([employeeSalaryProfileId])
+  @@map("salary_increment_history")
+}
+
+// ============================================
+// VOICE IDENTITY VERIFICATION
+// ============================================
+
+model VoiceProfile {
+  id               String    @id @default(uuid())
+  userId           String    @unique @map("user_id")
+  voiceprintHash   String    @map("voiceprint_hash")
+  acousticSignature Json?    @map("acoustic_signature")
+  sampleRate       Int       @default(16000) @map("sample_rate")
+  isEnrolled       Boolean   @default(false) @map("is_enrolled")
+  passphraseText   String?   @map("passphrase_text")
+  enrolledAt       DateTime? @map("enrolled_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  user             User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  verificationLogs VoiceVerificationLog[]
+
+  @@map("voice_profiles")
+}
+
+model VoiceVerificationLog {
+  id              String   @id @default(uuid())
+  voiceProfileId  String   @map("voice_profile_id")
+  actionAttempted String   @map("action_attempted")
+  matchScore      Float    @map("match_score")
+  passed          Boolean  @default(false)
+  transcription   String?
+  ipAddress       String?  @map("ip_address")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  voiceProfile VoiceProfile @relation(fields: [voiceProfileId], references: [id], onDelete: Cascade)
+
+  @@index([voiceProfileId])
+  @@map("voice_verification_logs")
+}
+
+// ============================================
+// DEVELOPER PLATFORM, TENANT APPROVAL & GIS
+// ============================================
+
+model DeveloperUser {
+  id              String    @id @default(uuid())
+  username        String    @unique
+  email           String    @unique
+  passwordHash    String    @map("password_hash")
+  accessLevel     String    @default("LEAD_DEVELOPER") @map("access_level")
+  isActive        Boolean   @default(true) @map("is_active")
+  twoFactorSecret String?   @map("two_factor_secret")
+  voiceprintHash  String?   @map("voiceprint_hash")
+  facialHash      String?   @map("facial_hash")
+  allowedIps      Json?     @map("allowed_ips")
+  lastLoginAt     DateTime? @map("last_login_at")
+  lastLoginIp     String?   @map("last_login_ip")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  sessions  DeveloperSession[]
+  auditLogs DeveloperAuditLog[]
+
+  @@map("developer_users")
+}
+
+model DeveloperSession {
+  id                String   @id @default(uuid())
+  developerUserId   String   @map("developer_user_id")
+  sessionToken      String   @unique @map("session_token")
+  ipAddress         String?  @map("ip_address")
+  userAgent         String?  @map("user_agent")
+  deviceFingerprint String?  @map("device_fingerprint")
+  expiresAt         DateTime @map("expires_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  developerUser DeveloperUser @relation(fields: [developerUserId], references: [id], onDelete: Cascade)
+
+  @@index([developerUserId])
+  @@map("developer_sessions")
+}
+
+model DeveloperAuditLog {
+  id              String   @id @default(uuid())
+  developerUserId String?  @map("developer_user_id")
+  action          String
+  targetComponent String   @map("target_component")
+  details         Json?
+  ipAddress       String?  @map("ip_address")
+  status          String   @default("SUCCESS")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  developerUser DeveloperUser? @relation(fields: [developerUserId], references: [id], onDelete: SetNull)
+
+  @@index([developerUserId])
+  @@index([createdAt])
+  @@map("developer_audit_logs")
+}
+
+model SystemLockState {
+  id              String    @id @default(uuid())
+  isLocked        Boolean   @default(false) @map("is_locked")
+  maintenanceMode Boolean   @default(false) @map("maintenance_mode")
+  lockReason      String?   @map("lock_reason")
+  lockedBy        String?   @map("locked_by")
+  lockedAt        DateTime? @map("locked_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@map("system_lock_states")
+}
+
+model DeploymentHistory {
+  id          String   @id @default(uuid())
+  version     String
+  environment String   @default("production")
+  provider    String   @default("render")
+  commitSha   String?  @map("commit_sha")
+  status      String   @default("DEPLOYED")
+  deployedBy  String?  @map("deployed_by")
+  notes       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([environment, createdAt])
+  @@map("deployment_history")
+}
+
+model SecurityAlert {
+  id          String    @id @default(uuid())
+  tenantId    String?   @map("tenant_id")
+  alertType   String    @map("alert_type") // BRUTE_FORCE, GEOFENCE_BREACH, UNAUTHORIZED_ACCESS, VOICE_MISMATCH
+  severity    String    @default("HIGH")
+  title       String
+  description String
+  ipAddress   String?   @map("ip_address")
+  resolved    Boolean   @default(false)
+  resolvedAt  DateTime? @map("resolved_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([resolved, createdAt])
+  @@map("security_alerts")
+}
+
+model Tenant {
+  id                    String         @id @default(uuid())
+  code                  String         @unique
+  institutionId         String?        @unique @map("institution_id")
+  name                  String
+  domain                String?        @unique
+  institutionType       String         @default("MICROFINANCE") @map("institution_type")
+  status                String         @default("PENDING") // PENDING, ACTIVE, EXPIRING_SOON, LOCKED_EXPIRED, SUSPENDED, REJECTED
+  onboardingStatus      String         @default("PENDING") @map("onboarding_status") // PENDING, VERIFICATION_REQUIRED, APPROVED, PROVISIONING, ACTIVE_TRIAL, TRIAL_EXPIRING, TRIAL_EXPIRED, ACTIVE_PAID, GRACE_PERIOD, SUSPENDED, LOCKED, REJECTED
+  planTier              String         @default("Enterprise") @map("plan_tier")
+  contactEmail          String?        @map("contact_email")
+  contactPhone          String?        @map("contact_phone")
+  country               String?        @default("Ghana")
+  region                String?        @default("Greater Accra")
+  city                  String?        @default("Accra")
+  location              String?
+  latitude              Float?
+  longitude             Float?
+  registrationNumber    String?        @map("registration_number")
+  businessLicenseNumber String?        @map("business_license_number")
+  tinNumber             String?        @map("tin_number")
+  logoUrl               String?        @map("logo_url")
+  representativeName    String?        @map("representative_name")
+  representativeEmail   String?        @map("representative_email")
+  representativePhone   String?        @map("representative_phone")
+  representativeRole    String?        @map("representative_role")
+  termsAccepted         Boolean        @default(true) @map("terms_accepted")
+  approvedByDeveloperId String?        @map("approved_by_developer_id")
+  approvedAt            DateTime?      @map("approved_at")
+  rejectionReason       String?        @map("rejection_reason")
+  currency              String         @default("GHS")
+  timezone              String         @default("Africa/Accra")
+  subStart              DateTime       @default(now()) @map("sub_start")
+  subExpiry             DateTime?      @map("sub_expiry")
+  daysLeft              Int            @default(90) @map("days_left")
+  alertSent             Boolean        @default(false) @map("alert_sent")
+  settings              Json?
+  dataSource            DataSource     @default(PRODUCTION_LIVE) @map("data_source")
+  environmentTag        EnvironmentTag @default(DEVELOPMENT) @map("environment_tag")
+  isProductionRecord    Boolean        @default(true) @map("is_production_record")
+  createdAt             DateTime       @default(now()) @map("created_at")
+  updatedAt             DateTime       @updatedAt @map("updated_at")
+
+  branches        Branch[]
+  subscriptions   TenantSubscription[]
+  locations       TenantLocation[]
+  users           User[]
+  members         Member[]
+  guarantors      Guarantor[]
+  loans           Loan[]
+  payments        Payment[]
+  staff           Staff[]
+  collectors      Collector[]
+  notifications   Notification[]
+  auditLogs       AuditLog[]
+  zoomMeetings    ZoomMeeting[]
+  documents       DocumentRecord[]
+  loanProducts    LoanProduct[]
+  complianceCases ComplianceCase[]
+  tickets         SupportTicket[]
+  investors       InvestorAccount[]
+  campaigns       MarketingCampaign[]
+  deletionReqs    DeletionApprovalRequest[]
+  messages        TenantMessage[]
+
+  @@index([status])
+  @@index([onboardingStatus])
+  @@map("tenants")
+}
+
+model TenantMessage {
+  id          String   @id @default(uuid())
+  tenantId    String?  @map("tenant_id") // null = broadcast to all tenants
+  senderType  String   @default("DEVELOPER") // DEVELOPER, SYSTEM
+  senderName  String   @default("GBS Developer Authority") @map("sender_name")
+  subject     String
+  body        String
+  priority    String   @default("NORMAL")
+  isRead      Boolean  @default(false) @map("is_read")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("tenant_messages")
+}
+
+model Branch {
+  id             String   @id @default(uuid())
+  tenantId       String   @map("tenant_id")
+  name           String
+  code           String   @unique
+  type           String   @default("DISTRICT")
+  region         String?
+  city           String?
+  address        String?
+  latitude       Float?
+  longitude      Float?
+  geofenceRadius Float    @default(500) @map("geofence_radius")
+  isMain         Boolean  @default(false) @map("is_main")
+  status         String   @default("ACTIVE")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  users     User[]
+  members   Member[]
+  loans     Loan[]
+  locations TenantLocation[]
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("branches")
+}
+
+model TenantLocation {
+  id             String   @id @default(uuid())
+  tenantId       String   @map("tenant_id")
+  branchId       String?  @map("branch_id")
+  name           String?
+  branchName     String   @default("Branch Location") @map("branch_name")
+  region         String?
+  city           String?
+  latitude       Float
+  longitude      Float
+  address        String?
+  geofenceRadius Float    @default(500) @map("geofence_radius")
+  isHQ           Boolean  @default(false) @map("is_hq")
+  status         String   @default("ACTIVE")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([branchId])
+  @@map("tenant_locations")
+}
+
+model TenantSubscription {
+  id              String    @id @default(uuid())
+  tenantId        String    @unique @map("tenant_id")
+  planName        String    @map("plan_name")
+  status          String    @default("ACTIVE")
+  startDate       DateTime  @map("start_date")
+  endDate         DateTime  @map("end_date")
+  gracePeriodDays Int       @default(7) @map("grace_period_days")
+  autoRenew       Boolean   @default(true) @map("auto_renew")
+  lastPaymentAt   DateTime? @map("last_payment_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_subscriptions")
+}
+
+model MigrationJob {
+  id               String   @id @default(uuid())
+  tenantId         String?  @map("tenant_id")
+  jobType          String   @map("job_type")
+  targetEntity     String   @default("MEMBERS") @map("target_entity")
+  fileName         String?  @map("file_name")
+  columnMapping    Json?    @map("column_mapping")
+  importedIds      Json?    @map("imported_ids")
+  totalRecords     Int      @default(0) @map("total_records")
+  processedRecords Int      @default(0) @map("processed_records")
+  failedRecords    Int      @default(0) @map("failed_records")
+  rolledBack       Boolean  @default(false) @map("rolled_back")
+  status           String   @default("PENDING")
+  errorLog         Json?    @map("error_log")
+  createdById      String?  @map("created_by_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("migration_jobs")
+}
+
+model AIDiagnosticLog {
+  id             String   @id @default(uuid())
+  issueType      String   @map("issue_type")
+  severity       String   @default("INFO")
+  description    String
+  stackTrace     String?  @map("stack_trace")
+  recommendedFix String?  @map("recommended_fix")
+  autoFixed      Boolean  @default(false) @map("auto_fixed")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([issueType])
+  @@map("ai_diagnostic_logs")
+}

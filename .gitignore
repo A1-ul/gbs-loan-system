@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+dist/
+coverage/
+.build/
+
+# Environment Variables & Secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# Logs & Runtime Outputs
+logs/
+*.log
+
+# Uploads & Local Snapshots
+uploads/
+backups/
+Backend/backups/baseline_pre_rebuild.*
+Backend/uploads/
+
+# System & IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
