@@ -26,6 +26,25 @@ async function main() {
   // Always seed HR reference salary grades, steps, qualifications & service bands
   await seedSalaryDefaults();
 
+  // Ensure initial Lead Developer Authority exists on first boot (all environments including production)
+  const devEmail = process.env.DEV_BOOTSTRAP_EMAIL || 'developer@gbsloan.com';
+  const existingDevCount = await prisma.developerUser.count();
+  if (existingDevCount === 0) {
+    const bootstrapHash = await bcrypt.hash(process.env.DEV_BOOTSTRAP_PASSWORD || 'DevMaster@2026!', 12);
+    await prisma.developerUser.create({
+      data: {
+        id: 'usr-dev-2026',
+        username: 'lead_developer',
+        email: devEmail,
+        passwordHash: bootstrapHash,
+        accessLevel: 'LEAD_DEVELOPER',
+        isActive: true,
+        allowedIps: [],
+      },
+    });
+    console.log(`[Seed] Bootstrapped initial Lead Developer authority: ${devEmail}`);
+  }
+
   if (!envProfile.allowSeeders) {
     console.log('[Seed] Production mode detected — skipping development seeders.');
     return;

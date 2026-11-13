@@ -5,7 +5,7 @@ import {
   MapPin, ShieldAlert, Send, CheckCircle2, XCircle, Clock, LogOut, Wrench
 } from 'lucide-react';
 import { io } from 'socket.io-client';
-import { devApi, sessionStore } from '../services/api';
+import { devApi, sessionStore, API_ORIGIN } from '../services/api';
 import { DEVELOPER_PORTAL_META } from '../constants/rolesMeta';
 import LiveLocationTrackerMap from './LiveLocationTrackerMap';
 
@@ -91,7 +91,7 @@ export default function DeveloperControlCenter({ onLogout }) {
     fetchAll();
 
     // Live Socket.IO telemetry stream for GPS pings & onboarding submissions
-    const socket = io('/', { transports: ['websocket', 'polling'] });
+    const socket = io(API_ORIGIN || '/', { transports: ['websocket', 'polling'] });
     socket.on('developer:gps_update', (pin) => {
       setGisData((prev) => ({
         ...prev,

@@ -1,14 +1,8 @@
-const Redis = require('ioredis');
-const config = require('../config');
+const { createRedisClient } = require('../config/redis');
 
 class CacheService {
   constructor() {
-    this.redis = new Redis({
-      host: config.redis.host,
-      port: config.redis.port,
-      password: config.redis.password,
-      lazyConnect: true
-    });
+    this.redis = createRedisClient({ lazyConnect: true });
   }
 
   async get(key) {

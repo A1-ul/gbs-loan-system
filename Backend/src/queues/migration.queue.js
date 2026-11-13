@@ -1,5 +1,5 @@
 const Bull = require('bull');
-const config = require('../config');
+const { createRedisClient } = require('../config/redis');
 const logger = require('../utils/logger');
 
 let migrationQueue = null;
@@ -8,13 +8,7 @@ function getMigrationQueue() {
   if (!migrationQueue) {
     try {
       migrationQueue = new Bull('gbs-migrations', {
-        redis: {
-          host: config.redis.host,
-          port: config.redis.port,
-          password: config.redis.password,
-          maxRetriesPerRequest: null,
-          enableReadyCheck: false,
-        },
+        createClient: () => createRedisClient({ maxRetriesPerRequest: null, enableReadyCheck: false }),
       });
       migrationQueue.on('error', (err) => logger.warn(`Migration Queue warning: ${err.message}`));
     } catch (err) {

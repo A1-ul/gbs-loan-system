@@ -16,6 +16,27 @@ const { sanitizeInput } = require('./middleware/sanitize');
 const apiGatewayService = require('./services/apiGateway.service');
 
 const app = express();
+app.set('trust proxy', 1);
+
+function resolveCorsOrigin() {
+  const raw = config.cors?.origin;
+  if (!raw || raw === '*') return '*';
+  const entries = String(raw).split(',').map((s) => s.trim()).filter(Boolean);
+  const allowed = new Set();
+  for (const entry of entries) {
+    allowed.add(entry.replace(/\/$/, ''));
+    if (!/^https?:\/\//i.test(entry)) {
+      allowed.add(`https://${entry.replace(/\/$/, '')}`);
+      allowed.add(`http://${entry.replace(/\/$/, '')}`);
+    }
+  }
+  return (origin, callback) => {
+    if (!origin || allowed.has(origin.replace(/\/$/, ''))) {
+      return callback(null, true);
+    }
+    return callback(null, false);
+  };
+}
 
 // 1. API Gateway Request Correlation & Tracking
 app.use(requestIdMiddleware);
@@ -39,7 +60,7 @@ app.use(helmet({
 
 // 3. Strict Cross-Origin Resource Sharing (CORS)
 app.use(cors({
-  origin: config.cors?.origin || '*',
+  origin: resolveCorsOrigin(),
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: [
     'Content-Type',

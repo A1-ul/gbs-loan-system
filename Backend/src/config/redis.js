@@ -4,15 +4,31 @@ const logger = require('../utils/logger');
 
 let redisClient = null;
 
+function createRedisClient(extraOptions = {}) {
+  const baseOptions = {
+    maxRetriesPerRequest: null,
+    retryStrategy: (times) => Math.min(times * 50, 2000),
+    ...extraOptions,
+  };
+
+  if (config.redis.url) {
+    const tlsOpts = config.redis.url.startsWith('rediss://')
+      ? { tls: { rejectUnauthorized: false } }
+      : {};
+    return new Redis(config.redis.url, { ...tlsOpts, ...baseOptions });
+  }
+
+  return new Redis({
+    host: config.redis.host,
+    port: config.redis.port,
+    password: config.redis.password,
+    ...baseOptions,
+  });
+}
+
 function getRedisClient() {
   if (!redisClient) {
-    redisClient = new Redis({
-      host: config.redis.host,
-      port: config.redis.port,
-      password: config.redis.password,
-      maxRetriesPerRequest: null,
-      retryStrategy: (times) => Math.min(times * 50, 2000),
-    });
+    redisClient = createRedisClient();
 
     redisClient.on('connect', () => logger.info('Redis connected'));
     redisClient.on('error', (err) => logger.error('Redis error:', err));
@@ -31,6 +47,7 @@ async function checkRedisHealth() {
 }
 
 module.exports = {
+  createRedisClient,
   getRedisClient,
   checkRedisHealth,
 };
