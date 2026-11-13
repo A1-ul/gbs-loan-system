@@ -2,7 +2,22 @@ const { prisma } = require('../../../config/database');
 const tenantService = require('../../tenant/tenant.service');
 const tenantProvisioner = require('../../tenant/tenantProvisioner.service');
 const trialExpiration = require('../../tenant/trialExpiration.service');
-const { NotFoundError } = require('../../../utils/errors');
+const { NotFoundError, BadRequestError } = require('../../../utils/errors');
+
+async function recordDeveloperTenantAudit(developerId, action, details = {}) {
+  try {
+    await prisma.developerAuditLog.create({
+      data: {
+        developerUserId: developerId || null,
+        action,
+        targetComponent: 'TENANT_MANAGEMENT',
+        details,
+      },
+    });
+  } catch {
+    // Audit logging should not crash primary transaction post-commit
+  }
+}
 
 class TenantManagementService {
   async getTenants(statusFilter = null) {
@@ -85,19 +100,174 @@ class TenantManagementService {
   }
 
   async approveTenant(tenantId, developerId, options = {}) {
-    return tenantProvisioner.approvePendingTenant(tenantId, developerId, options);
+    const tenant = await tenantProvisioner.approvePendingTenant(tenantId, developerId, options);
+    await recordDeveloperTenantAudit(developerId, 'TENANT_APPROVED', { tenantId: tenant.id, name: tenant.name });
+    return tenant;
   }
 
   async rejectTenant(tenantId, developerId, reason) {
-    return tenantProvisioner.rejectPendingTenant(tenantId, developerId, reason);
+    const tenant = await tenantProvisioner.rejectPendingTenant(tenantId, developerId, reason);
+    await recordDeveloperTenantAudit(developerId, 'TENANT_REJECTED', { tenantId: tenant.id, name: tenant.name, reason });
+    return tenant;
   }
 
-  async lockTenant(tenantId, reason) {
-    return trialExpiration.lockTenant(tenantId, reason);
+  async lockTenant(tenantId, reason, developerId = null) {
+    const res = await trialExpiration.lockTenant(tenantId, reason);
+    await recordDeveloperTenantAudit(developerId, 'TENANT_LOCKED', { tenantId, reason });
+    return res;
   }
 
-  async renewTenant(tenantId, extensionDays = 90, note) {
-    return trialExpiration.unlockTenant(tenantId, extensionDays, note);
+  async unlockTenant(tenantId, extensionDays = 90, note = 'Developer authorized unlock', developerId = null) {
+    const res = await trialExpiration.unlockTenant(tenantId, extensionDays, note);
+    await recordDeveloperTenantAudit(developerId, 'TENANT_UNLOCKED', { tenantId, extensionDays, note });
+    return res;
+  }
+
+  async bulkLockTenants(tenantIds = [], reason = 'Bulk Developer Security Lock', developerId = null) {
+    const uniqueIds = [...new Set((Array.isArray(tenantIds) ? tenantIds : []).filter(Boolean))];
+    if (uniqueIds.length === 0) throw new BadRequestError('Select at least one tenant to lock');
+
+    const results = [];
+    const failures = [];
+    for (const id of uniqueIds) {
+      try {
+        const res = await trialExpiration.lockTenant(id, reason);
+        results.push({ id, name: res.tenant?.name, status: res.tenant?.status });
+      } catch (err) {
+        failures.push({ id, error: err.message });
+      }
+    }
+    await recordDeveloperTenantAudit(developerId, 'TENANTS_BULK_LOCKED', { count: results.length, tenantIds: uniqueIds, reason });
+    return {
+      success: true,
+      message: `Locked ${results.length} tenant(s)`,
+      count: results.length,
+      results,
+      failures,
+    };
+  }
+
+  async bulkUnlockTenants(tenantIds = [], extensionDays = 90, note = 'Bulk Developer Unlock', developerId = null) {
+    const uniqueIds = [...new Set((Array.isArray(tenantIds) ? tenantIds : []).filter(Boolean))];
+    if (uniqueIds.length === 0) throw new BadRequestError('Select at least one tenant to unlock');
+
+    const results = [];
+    const failures = [];
+    for (const id of uniqueIds) {
+      try {
+        const res = await trialExpiration.unlockTenant(id, extensionDays, note);
+        results.push({ id, name: res.tenant?.name, status: res.tenant?.status });
+      } catch (err) {
+        failures.push({ id, error: err.message });
+      }
+    }
+    await recordDeveloperTenantAudit(developerId, 'TENANTS_BULK_UNLOCKED', { count: results.length, tenantIds: uniqueIds, extensionDays, note });
+    return {
+      success: true,
+      message: `Unlocked ${results.length} tenant(s)`,
+      count: results.length,
+      results,
+      failures,
+    };
+  }
+
+  async deleteTenant(tenantId, developerId = null) {
+    const tenant = await prisma.tenant.findFirst({
+      where: { OR: [{ id: tenantId }, { code: tenantId }] },
+    });
+    if (!tenant) throw new NotFoundError(`Tenant '${tenantId}'`);
+
+    const [loans, staff, collectors, users, guarantors] = await Promise.all([
+      prisma.loan.findMany({ where: { tenantId: tenant.id }, select: { id: true } }),
+      prisma.staff.findMany({ where: { tenantId: tenant.id }, select: { id: true } }),
+      prisma.collector.findMany({ where: { tenantId: tenant.id }, select: { id: true } }),
+      prisma.user.findMany({ where: { tenantId: tenant.id }, select: { id: true } }),
+      prisma.guarantor.findMany({ where: { tenantId: tenant.id }, select: { id: true } }),
+    ]);
+
+    const loanIds = loans.map((l) => l.id);
+    const staffIds = staff.map((s) => s.id);
+    const collectorIds = collectors.map((c) => c.id);
+    const userIds = users.map((u) => u.id);
+    const guarantorIds = guarantors.map((g) => g.id);
+
+    await prisma.$transaction(async (tx) => {
+      if (loanIds.length > 0) {
+        await tx.payment.deleteMany({ where: { loanId: { in: loanIds } } });
+        await tx.loanGuarantor.deleteMany({ where: { loanId: { in: loanIds } } });
+        await tx.collateralItem.deleteMany({ where: { loanId: { in: loanIds } } });
+        await tx.loanWorkflowLog.deleteMany({ where: { loanId: { in: loanIds } } });
+        await tx.repaymentSchedule.deleteMany({ where: { loanId: { in: loanIds } } });
+        await tx.loanPenalty.deleteMany({ where: { loanId: { in: loanIds } } });
+      }
+
+      await tx.payment.deleteMany({ where: { tenantId: tenant.id } });
+      await tx.loan.deleteMany({ where: { tenantId: tenant.id } });
+
+      if (guarantorIds.length > 0) {
+        await tx.loanGuarantor.deleteMany({ where: { guarantorId: { in: guarantorIds } } });
+      }
+      await tx.guarantor.deleteMany({ where: { tenantId: tenant.id } });
+      await tx.member.deleteMany({ where: { tenantId: tenant.id } });
+
+      if (collectorIds.length > 0) {
+        await tx.customerVisit.deleteMany({ where: { collectorId: { in: collectorIds } } });
+        await tx.collectorLocationLog.deleteMany({ where: { collectorId: { in: collectorIds } } });
+      }
+      await tx.customerVisit.deleteMany({ where: { tenantId: tenant.id } });
+      await tx.collector.deleteMany({ where: { tenantId: tenant.id } });
+
+      if (staffIds.length > 0) {
+        await tx.staffSalary.deleteMany({ where: { staffId: { in: staffIds } } });
+      }
+      await tx.staffSalary.deleteMany({ where: { tenantId: tenant.id } });
+      await tx.staff.deleteMany({ where: { tenantId: tenant.id } });
+
+      await tx.notification.deleteMany({ where: { tenantId: tenant.id } });
+      if (userIds.length > 0) {
+        await tx.auditLog.deleteMany({
+          where: { OR: [{ tenantId: tenant.id }, { userId: { in: userIds } }] },
+        });
+      } else {
+        await tx.auditLog.deleteMany({ where: { tenantId: tenant.id } });
+      }
+      await tx.user.deleteMany({ where: { tenantId: tenant.id } });
+
+      await tx.zoomMeeting.deleteMany({ where: { tenantId: tenant.id } });
+      await tx.reportSnapshot.deleteMany({ where: { tenantId: tenant.id } });
+      await tx.documentRecord.deleteMany({ where: { tenantId: tenant.id } });
+      await tx.loanProduct.deleteMany({ where: { tenantId: tenant.id } });
+      await tx.complianceCase.deleteMany({ where: { tenantId: tenant.id } });
+      await tx.supportTicket.deleteMany({ where: { tenantId: tenant.id } });
+      await tx.investorAccount.deleteMany({ where: { tenantId: tenant.id } });
+      await tx.marketingCampaign.deleteMany({ where: { tenantId: tenant.id } });
+      await tx.deletionApprovalRequest.deleteMany({ where: { tenantId: tenant.id } });
+      await tx.securityAlert.deleteMany({ where: { tenantId: tenant.id } });
+      await tx.migrationJob.deleteMany({ where: { tenantId: tenant.id } });
+      await tx.tenantMessage.deleteMany({ where: { tenantId: tenant.id } });
+      await tx.tenantLocation.deleteMany({ where: { tenantId: tenant.id } });
+      await tx.branch.deleteMany({ where: { tenantId: tenant.id } });
+      await tx.tenantSubscription.deleteMany({ where: { tenantId: tenant.id } });
+
+      await tx.tenant.delete({ where: { id: tenant.id } });
+    });
+
+    await recordDeveloperTenantAudit(developerId, 'TENANT_DELETED', {
+      deletedTenantId: tenant.id,
+      code: tenant.code,
+      name: tenant.name,
+    });
+
+    return {
+      success: true,
+      message: `Tenant ${tenant.name} (${tenant.code}) permanently deleted`,
+      deletedId: tenant.id,
+      code: tenant.code,
+    };
+  }
+
+  async renewTenant(tenantId, extensionDays = 90, note, developerId = null) {
+    return this.unlockTenant(tenantId, extensionDays, note, developerId);
   }
 }
 

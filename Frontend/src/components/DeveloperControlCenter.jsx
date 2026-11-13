@@ -2,10 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Terminal, Cpu, Lock, Unlock, Database, RefreshCw, Activity, Building2,
-  MapPin, ShieldAlert, Send, CheckCircle2, XCircle, Clock, LogOut, Wrench
+  MapPin, ShieldAlert, Send, CheckCircle2, XCircle, Clock, LogOut, Wrench, Trash2
 } from 'lucide-react';
 import { io } from 'socket.io-client';
-import { devApi, sessionStore, API_ORIGIN } from '../services/api';
+import api, { devApi, sessionStore, API_ORIGIN } from '../services/api';
 import { DEVELOPER_PORTAL_META } from '../constants/rolesMeta';
 import LiveLocationTrackerMap from './LiveLocationTrackerMap';
 
@@ -30,6 +30,9 @@ export default function DeveloperControlCenter({ onLogout }) {
   const [msgForm, setMsgForm] = useState({ tenantId: '', title: '', body: '', messageType: 'ANNOUNCEMENT' });
   const [lockReason, setLockReason] = useState('');
   const [rejectReasons, setRejectReasons] = useState({});
+  const [selectedTenantIds, setSelectedTenantIds] = useState([]);
+  const [confirmDeleteId, setConfirmDeleteId] = useState('');
+  const [envInfo, setEnvInfo] = useState({ environment: 'production', dataMode: 'PRODUCTION_LIVE' });
   const [toast, setToast] = useState(null);
   const [busyAction, setBusyAction] = useState('');
   const navigate = useNavigate();
@@ -54,6 +57,7 @@ export default function DeveloperControlCenter({ onLogout }) {
         alertsRes,
         backupsRes,
         msgsRes,
+        resHealth,
       ] = await Promise.all([
         devApi.get('/developer/dashboard'),
         devApi.get('/developer/performance'),
@@ -65,6 +69,7 @@ export default function DeveloperControlCenter({ onLogout }) {
         devApi.get('/developer/security-alerts'),
         devApi.get('/developer/backups'),
         devApi.get('/developer/messages'),
+        api.get('/health').catch(() => ({ data: { data: null } })),
       ]);
 
       setDashboard(dashRes.data?.data || null);
@@ -77,6 +82,10 @@ export default function DeveloperControlCenter({ onLogout }) {
       setAlerts(alertsRes.data?.data || []);
       setBackups(backupsRes.data?.data || []);
       setMessages(msgsRes.data?.data || []);
+      const healthData = resHealth?.data?.data || resHealth?.data;
+      if (healthData?.dataMode) {
+        setEnvInfo({ environment: healthData.environment, dataMode: healthData.dataMode });
+      }
     } catch (err) {
       if (err.response?.status === 401 || err.response?.status === 403) {
         sessionStore.clearDevSession();
@@ -163,6 +172,83 @@ export default function DeveloperControlCenter({ onLogout }) {
       notify(err.response?.data?.message || 'Lock failed', true);
     } finally {
       setBusyAction('');
+    }
+  };
+
+  const handleUnlockTenant = async (id, days = 90) => {
+    setBusyAction(`unlock-${id}`);
+    try {
+      await devApi.post(`/developer/tenants/${id}/unlock`, { extensionDays: days, note: 'Unlocked by Developer Control Authority' });
+      notify(`Tenant unlocked (+${days} days).`);
+      await fetchAll();
+    } catch (err) {
+      notify(err.response?.data?.message || 'Unlock failed', true);
+    } finally {
+      setBusyAction('');
+    }
+  };
+
+  const handleBulkLockSelected = async () => {
+    if (selectedTenantIds.length === 0) return;
+    setBusyAction('bulk-lock');
+    try {
+      const res = await devApi.post('/developer/tenants/bulk-lock', {
+        tenantIds: selectedTenantIds,
+        reason: 'Multi-tenant lock by Developer Authority',
+      });
+      notify(res.data?.message || `Locked ${selectedTenantIds.length} tenant(s).`);
+      setSelectedTenantIds([]);
+      await fetchAll();
+    } catch (err) {
+      notify(err.response?.data?.message || 'Bulk lock failed', true);
+    } finally {
+      setBusyAction('');
+    }
+  };
+
+  const handleBulkUnlockSelected = async () => {
+    if (selectedTenantIds.length === 0) return;
+    setBusyAction('bulk-unlock');
+    try {
+      const res = await devApi.post('/developer/tenants/bulk-unlock', {
+        tenantIds: selectedTenantIds,
+        extensionDays: 90,
+        note: 'Multi-tenant unlock (+90d) by Developer Authority',
+      });
+      notify(res.data?.message || `Unlocked ${selectedTenantIds.length} tenant(s).`);
+      setSelectedTenantIds([]);
+      await fetchAll();
+    } catch (err) {
+      notify(err.response?.data?.message || 'Bulk unlock failed', true);
+    } finally {
+      setBusyAction('');
+    }
+  };
+
+  const handleDeleteTenant = async (id, name) => {
+    setBusyAction(`delete-${id}`);
+    try {
+      const res = await devApi.delete(`/developer/tenants/${id}`);
+      notify(res.data?.message || `Tenant "${name}" permanently deleted.`);
+      setConfirmDeleteId('');
+      setSelectedTenantIds((prev) => prev.filter((sid) => sid !== id));
+      await fetchAll();
+    } catch (err) {
+      notify(err.response?.data?.message || 'Tenant deletion failed', true);
+    } finally {
+      setBusyAction('');
+    }
+  };
+
+  const toggleSelectTenant = (id) => {
+    setSelectedTenantIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
+  };
+
+  const toggleSelectAllTenants = () => {
+    if (selectedTenantIds.length === tenants.length) {
+      setSelectedTenantIds([]);
+    } else {
+      setSelectedTenantIds(tenants.map((t) => t.id));
     }
   };
 
@@ -282,6 +368,9 @@ export default function DeveloperControlCenter({ onLogout }) {
         </div>
 
         <div className="header-actions">
+          <span className={`badge ${envInfo.dataMode === 'PRODUCTION_LIVE' ? 'badge-success' : 'badge-warning'}`}>
+            {envInfo.dataMode === 'PRODUCTION_LIVE' ? 'PRODUCTION LIVE' : 'DEV / DEMO MODE'}
+          </span>
           <span className={`badge ${isGlobalLocked ? 'badge-danger' : 'badge-success'}`}>
             {isGlobalLocked ? 'GLOBAL SYSTEM LOCKED' : 'PLATFORM ONLINE'}
           </span>
@@ -461,11 +550,46 @@ export default function DeveloperControlCenter({ onLogout }) {
             </div>
 
             <div className="glass-panel" style={{ padding: 20 }}>
-              <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>All Registered Institutions &amp; 90-Day Countdown Ledger</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
+                <h3 style={{ margin: 0, color: '#D4AF37' }}>
+                  All Registered Institutions &amp; 90-Day Countdown Ledger ({tenants.length})
+                </h3>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.78rem', color: '#94A3B8' }}>
+                    {selectedTenantIds.length} selected
+                  </span>
+                  <button
+                    type="button"
+                    disabled={selectedTenantIds.length === 0 || busyAction === 'bulk-unlock'}
+                    onClick={handleBulkUnlockSelected}
+                    className="btn btn-primary"
+                    style={{ padding: '6px 12px', fontSize: '0.76rem' }}
+                  >
+                    <Unlock size={13} /> Unlock Selected (+90d)
+                  </button>
+                  <button
+                    type="button"
+                    disabled={selectedTenantIds.length === 0 || busyAction === 'bulk-lock'}
+                    onClick={handleBulkLockSelected}
+                    className="btn btn-danger"
+                    style={{ padding: '6px 12px', fontSize: '0.76rem' }}
+                  >
+                    <Lock size={13} /> Lock Selected
+                  </button>
+                </div>
+              </div>
               <div className="data-table-container">
                 <table className="data-table">
                   <thead>
                     <tr>
+                      <th style={{ width: 34 }}>
+                        <input
+                          type="checkbox"
+                          checked={tenants.length > 0 && selectedTenantIds.length === tenants.length}
+                          onChange={toggleSelectAllTenants}
+                          aria-label="Select all tenants"
+                        />
+                      </th>
                       <th>Institution</th>
                       <th>Code / Location</th>
                       <th>Onboarding</th>
@@ -475,8 +599,18 @@ export default function DeveloperControlCenter({ onLogout }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {tenants.map((t) => (
+                    {tenants.map((t) => {
+                      const isTenantLocked = ['LOCKED_EXPIRED', 'LOCKED', 'SUSPENDED'].includes(t.status) || t.onboardingStatus === 'LOCKED';
+                      return (
                       <tr key={t.id}>
+                        <td>
+                          <input
+                            type="checkbox"
+                            checked={selectedTenantIds.includes(t.id)}
+                            onChange={() => toggleSelectTenant(t.id)}
+                            aria-label={`Select ${t.name}`}
+                          />
+                        </td>
                         <td>
                           <strong>{t.name}</strong>
                           <div style={{ fontSize: '0.74rem', color: '#94A3B8' }}>{t.representativeEmail}</div>
@@ -498,7 +632,7 @@ export default function DeveloperControlCenter({ onLogout }) {
                           </span>
                         </td>
                         <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                          {!['APPROVED', 'ACTIVE_TRIAL'].includes(t.onboardingStatus) && (
+                          {!['APPROVED', 'ACTIVE_TRIAL', 'ACTIVE_PAID'].includes(t.onboardingStatus) && (
                             <button type="button" className="btn btn-primary" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => handleApproveTenant(t.id, t.name)}>
                               Approve
                             </button>
@@ -506,12 +640,48 @@ export default function DeveloperControlCenter({ onLogout }) {
                           <button type="button" className="btn btn-secondary" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => handleRenewTenant(t.id, 90)}>
                             +90 Days
                           </button>
-                          <button type="button" className="btn btn-danger" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => handleLockTenant(t.id)}>
-                            Lock
-                          </button>
+                          {isTenantLocked ? (
+                            <button type="button" className="btn btn-primary" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => handleUnlockTenant(t.id, 90)}>
+                              <Unlock size={12} /> Unlock
+                            </button>
+                          ) : (
+                            <button type="button" className="btn btn-danger" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => handleLockTenant(t.id)}>
+                              <Lock size={12} /> Lock
+                            </button>
+                          )}
+                          {confirmDeleteId === t.id ? (
+                            <>
+                              <button
+                                type="button"
+                                disabled={busyAction === `delete-${t.id}`}
+                                className="btn btn-danger"
+                                style={{ padding: '5px 10px', fontSize: '0.75rem', background: '#991B1B' }}
+                                onClick={() => handleDeleteTenant(t.id, t.name)}
+                              >
+                                Confirm Delete
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-secondary"
+                                style={{ padding: '5px 10px', fontSize: '0.75rem' }}
+                                onClick={() => setConfirmDeleteId('')}
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              style={{ padding: '5px 10px', fontSize: '0.75rem', borderColor: 'rgba(239,68,68,0.45)', color: '#FCA5A5' }}
+                              onClick={() => setConfirmDeleteId(t.id)}
+                            >
+                              <Trash2 size={12} /> Delete
+                            </button>
+                          )}
                         </td>
                       </tr>
-                    ))}
+                    );})}
                   </tbody>
                 </table>
               </div>
@@ -519,9 +689,9 @@ export default function DeveloperControlCenter({ onLogout }) {
           </div>
         )}
 
-        {/* TAB 2: REAL INTERACTIVE GIS MAP */}
+        {/* TAB 2: REAL INTERACTIVE GIS & GOOGLE MAPS PHONE LOCATOR */}
         {activeTab === 'GIS_MAP' && (
-          <LiveLocationTrackerMap markers={gisData.features || []} />
+          <LiveLocationTrackerMap markers={gisData.features || []} mode="developer" />
         )}
 
         {/* TAB 3: AI DIAGNOSTICS, CRASHES & DEVELOPER LOGS */}

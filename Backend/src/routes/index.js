@@ -24,12 +24,22 @@ const { assistantRoutes } = require('../modules/ai-developer');
 const { migrationRoutes } = require('../modules/migration');
 const { tenantRoutes } = require('../modules/tenant');
 const { enterpriseRoutes } = require('../modules/enterprise');
+const { getEnvironmentProfile } = require('../config/environments');
 const userCountRoutes = require('../modules/administration/routes/userCount.routes');
 
 const router = express.Router();
 
 router.get('/health', (req, res) => {
-  res.json({ status: 'ok', service: 'gbs-loan-api', timestamp: new Date().toISOString() });
+  const envProfile = getEnvironmentProfile();
+  res.json({
+    status: 'ok',
+    service: 'gbs-loan-api',
+    environment: envProfile.nodeEnv,
+    environmentTag: envProfile.environmentTag,
+    dataMode: envProfile.isProduction ? 'PRODUCTION_LIVE' : 'DEVELOPMENT_DEMO',
+    isProduction: envProfile.isProduction,
+    timestamp: new Date().toISOString(),
+  });
 });
 
 router.use('/auth', authRoutes);

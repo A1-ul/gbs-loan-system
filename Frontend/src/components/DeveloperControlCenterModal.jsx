@@ -65,7 +65,7 @@ export default function DeveloperControlCenterModal({ isOpen, onClose }) {
         setLogs((prev) => [`[${new Date().toLocaleTimeString()}] TENANT_ADDED: ${data.data?.name} registered on 90-day cycle`, ...prev]);
         setNewTenant({ name: '', location: 'Tamale, Northern', lat: '9.4008', lng: '-0.8393', plan: 'Enterprise' });
       } else {
-        alert(data.message || 'Failed to add tenant');
+        setLogs((prev) => [`[${new Date().toLocaleTimeString()}] ERROR: ${data.message || 'Failed to add tenant'}`, ...prev]);
       }
     } catch (err) {
       console.error('Add tenant error:', err);

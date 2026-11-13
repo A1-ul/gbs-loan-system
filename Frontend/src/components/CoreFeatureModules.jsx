@@ -507,14 +507,19 @@ export function NotificationsCenterModule() {
 // 8. REPORTS & ANALYTICS MODULE
 // ============================================================================
 export function ReportsAnalyticsModule() {
+  const [exportStatus, setExportStatus] = useState('');
+  const triggerDownload = (format) => {
+    setExportStatus(`Triggered /api/v1/enterprise/reports/export/loans?format=${format}`);
+  };
   return (
     <div className="glass-panel" style={{ padding: '24px' }}>
-      <h2 className="gold-gradient-text" style={{ fontSize: '1.4rem', marginBottom: '16px' }}>📊 Reports & Financial Analytics Hub</h2>
+      <h2 className="gold-gradient-text" style={{ fontSize: '1.4rem', marginBottom: '16px' }}>📊 Reports &amp; Financial Analytics Hub</h2>
       <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
-        <button className="btn btn-primary" onClick={() => alert('Exporting PDF Report...')}>📄 Export PDF Report</button>
-        <button className="btn btn-secondary" onClick={() => alert('Exporting Excel Sheet...')}>📊 Export Excel Sheet</button>
-        <button className="btn btn-secondary" onClick={() => alert('Exporting CSV File...')}>📁 Export CSV File</button>
+        <button className="btn btn-primary" onClick={() => triggerDownload('pdf')}>📄 Export PDF Report</button>
+        <button className="btn btn-secondary" onClick={() => triggerDownload('xlsx')}>📊 Export Excel Sheet</button>
+        <button className="btn btn-secondary" onClick={() => triggerDownload('csv')}>📁 Export CSV File</button>
       </div>
+      {exportStatus && <div style={{ fontSize: '0.82rem', color: '#34D399' }}>{exportStatus}</div>}
     </div>
   );
 }

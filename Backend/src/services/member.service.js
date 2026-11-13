@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const { prisma } = require('../config/database');
 const logger = require('../utils/logger');
 const { getRecordProvenance } = require('../config/environments');
+const { buildPhoneSearchVariants } = require('./gps.service');
 const { NotFoundError, ValidationError, ConflictError } = require('../utils/errors');
 
 /**
@@ -121,23 +122,44 @@ async function create(data) {
  */
 async function getAll({ page = 1, limit = 50, search, status, tenantId } = {}) {
   const skip = (page - 1) * limit;
-  const where = {};
-  if (tenantId) where.tenantId = tenantId;
+  const andConditions = [];
+  if (tenantId) andConditions.push({ tenantId });
 
-  if (search) {
-    where.OR = [
-      { memberNumber: { contains: search, mode: 'insensitive' } },
-      { ghanaCardNumber: { contains: search, mode: 'insensitive' } },
-      { user: { firstName: { contains: search, mode: 'insensitive' } } },
-      { user: { lastName: { contains: search, mode: 'insensitive' } } },
-      { user: { email: { contains: search, mode: 'insensitive' } } },
-      { user: { phone: { contains: search, mode: 'insensitive' } } },
+  if (search && String(search).trim()) {
+    const q = String(search).trim();
+    const tokens = q.split(/\s+/).filter(Boolean);
+    const phoneVariants = buildPhoneSearchVariants(q);
+
+    const searchOr = [
+      { memberNumber: { contains: q, mode: 'insensitive' } },
+      { ghanaCardNumber: { contains: q, mode: 'insensitive' } },
+      { occupation: { contains: q, mode: 'insensitive' } },
+      { employer: { contains: q, mode: 'insensitive' } },
+      { user: { firstName: { contains: q, mode: 'insensitive' } } },
+      { user: { lastName: { contains: q, mode: 'insensitive' } } },
+      { user: { email: { contains: q, mode: 'insensitive' } } },
+      ...phoneVariants.map((pv) => ({ user: { phone: { contains: pv, mode: 'insensitive' } } })),
     ];
+
+    if (tokens.length > 1) {
+      searchOr.push({
+        AND: tokens.map((tok) => ({
+          OR: [
+            { user: { firstName: { contains: tok, mode: 'insensitive' } } },
+            { user: { lastName: { contains: tok, mode: 'insensitive' } } },
+          ],
+        })),
+      });
+    }
+
+    andConditions.push({ OR: searchOr });
   }
 
   if (status) {
-    where.user = { status };
+    andConditions.push({ user: { status } });
   }
+
+  const where = andConditions.length > 0 ? { AND: andConditions } : {};
 
   const [members, total] = await Promise.all([
     prisma.member.findMany({

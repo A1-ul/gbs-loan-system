@@ -29,6 +29,7 @@ router.use(authenticateDeveloper);
 router.get('/dashboard', developerController.getDashboard);
 router.get('/locations', developerController.getLocations);
 router.get('/locations/live', developerController.getLocations);
+router.get('/locations/lookup', developerController.lookupLocationByPhone);
 
 // 1. Remote Monitoring
 router.get('/monitoring', remoteMonitoring.controller.getMetrics);
@@ -82,12 +83,16 @@ router.post('/security-alerts/:id/resolve', securityAlerts.controller.resolveAle
 // 12. Tenant Management & Institutional Approval Authority
 router.get('/tenants', tenantManagement.controller.getTenants);
 router.get('/tenants/pending', tenantManagement.controller.getPendingTenants);
-router.get('/tenants/:id', tenantManagement.controller.getTenantById);
 router.post('/tenants', sensitiveOpLimiter, tenantManagement.controller.createTenant);
+router.post('/tenants/bulk-lock', sensitiveOpLimiter, tenantManagement.controller.bulkLockTenants);
+router.post('/tenants/bulk-unlock', sensitiveOpLimiter, tenantManagement.controller.bulkUnlockTenants);
+router.get('/tenants/:id', tenantManagement.controller.getTenantById);
 router.post('/tenants/:id/approve', sensitiveOpLimiter, tenantManagement.controller.approveTenant);
 router.post('/tenants/:id/reject', sensitiveOpLimiter, tenantManagement.controller.rejectTenant);
 router.post('/tenants/:id/lock', sensitiveOpLimiter, tenantManagement.controller.lockTenant);
+router.post('/tenants/:id/unlock', sensitiveOpLimiter, tenantManagement.controller.unlockTenant);
 router.post('/tenants/:id/renew', sensitiveOpLimiter, tenantManagement.controller.renewTenant);
+router.delete('/tenants/:id', sensitiveOpLimiter, tenantManagement.controller.deleteTenant);
 
 // 13. Developer <-> Tenant Broadcast & Direct Messaging
 router.get('/messages', developerController.getMessages);

@@ -48,4 +48,29 @@ async function revokeConsent(req, res, next) {
   } catch (err) { next(err); }
 }
 
-module.exports = { updateLocation, batchSync, getTrackingData, grantConsent, revokeConsent };
+async function shareMyLocation(req, res, next) {
+  try {
+    const loc = await gpsService.shareMyLocation(req.user.id, req.body);
+    emitToDeveloper('gps:live_update', loc);
+    if (req.user?.tenantId) {
+      emitToTenant(req.user.tenantId, 'gps:live_update', loc);
+      emitToTenant(req.user.tenantId, 'collector:location_update', {
+        ...loc,
+        latitude: loc.coordinates.latitude,
+        longitude: loc.coordinates.longitude,
+      });
+    }
+    return success(res, loc, 'Live GPS coordinates synchronized');
+  } catch (err) { next(err); }
+}
+
+async function locateByPhone(req, res, next) {
+  try {
+    const phone = req.query.phone || '';
+    const tenantId = req.tenantId || req.user?.tenantId || null;
+    const result = await gpsService.locateByPhone({ phone, tenantId, allowCrossTenant: false });
+    return success(res, result, result.totalMatches > 0 ? 'Location resolved for mobile number' : 'No registered account matches this mobile number');
+  } catch (err) { next(err); }
+}
+
+module.exports = { updateLocation, batchSync, getTrackingData, grantConsent, revokeConsent, shareMyLocation, locateByPhone };

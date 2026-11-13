@@ -54,7 +54,7 @@ services:
       - key: ENCRYPTION_IV
         generateValue: true
       - key: DEV_BOOTSTRAP_EMAIL
-        value: developer@gbsloan.com
+        value: gabose48@gmail.com
       - key: EMAIL_FROM
         value: gabosei48@gmail.com
       - key: CORS_ORIGIN

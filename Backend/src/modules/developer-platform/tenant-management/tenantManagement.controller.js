@@ -56,7 +56,53 @@ const rejectTenant = async (req, res, next) => {
 
 const lockTenant = async (req, res, next) => {
   try {
-    const result = await service.lockTenant(req.params.id, req.body?.reason);
+    const result = await service.lockTenant(req.params.id, req.body?.reason, req.developer?.id || null);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const unlockTenant = async (req, res, next) => {
+  try {
+    const result = await service.unlockTenant(
+      req.params.id,
+      parseInt(req.body?.extensionDays, 10) || 90,
+      req.body?.note || 'Developer authorized unlock',
+      req.developer?.id || null
+    );
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const bulkLockTenants = async (req, res, next) => {
+  try {
+    const result = await service.bulkLockTenants(req.body?.tenantIds, req.body?.reason, req.developer?.id || null);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const bulkUnlockTenants = async (req, res, next) => {
+  try {
+    const result = await service.bulkUnlockTenants(
+      req.body?.tenantIds,
+      parseInt(req.body?.extensionDays, 10) || 90,
+      req.body?.note,
+      req.developer?.id || null
+    );
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const deleteTenant = async (req, res, next) => {
+  try {
+    const result = await service.deleteTenant(req.params.id, req.developer?.id || null);
     res.json(result);
   } catch (err) {
     next(err);
@@ -65,7 +111,12 @@ const lockTenant = async (req, res, next) => {
 
 const renewTenant = async (req, res, next) => {
   try {
-    const result = await service.renewTenant(req.params.id, parseInt(req.body?.extensionDays, 10) || 90, req.body?.note);
+    const result = await service.renewTenant(
+      req.params.id,
+      parseInt(req.body?.extensionDays, 10) || 90,
+      req.body?.note,
+      req.developer?.id || null
+    );
     res.json(result);
   } catch (err) {
     next(err);
@@ -80,5 +131,9 @@ module.exports = {
   approveTenant,
   rejectTenant,
   lockTenant,
+  unlockTenant,
+  bulkLockTenants,
+  bulkUnlockTenants,
+  deleteTenant,
   renewTenant,
 };

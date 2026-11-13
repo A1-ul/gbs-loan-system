@@ -16,12 +16,12 @@ router.post('/collateral', creditTeam, ctrl.createCollateral);
 
 // Field Customer Visits
 router.get('/visits', staffAndAbove, ctrl.getCustomerVisits);
-router.post('/visits', fieldTeam, ctrl.recordCustomerVisit);
+router.post('/visits', authorize('SUPER_ADMIN', 'COMPANY_OWNER', 'COLLECTIONS', 'FIELD_OFFICER', 'STAFF', 'MOBILE_STAFF', 'COLLECTOR', 'LOAN_OFFICER', 'BRANCH_MANAGER', 'OPERATIONS_MANAGER', 'MANAGER'), ctrl.recordCustomerVisit);
 
 // Compliance, Audit, Fraud, Risk & Legal Cases
 router.get('/compliance-cases', staffAndAbove, ctrl.getComplianceCases);
-router.post('/compliance-cases', securityAndAudit, ctrl.createComplianceCase);
-router.put('/compliance-cases/:id', securityAndAudit, ctrl.updateComplianceCase);
+router.post('/compliance-cases', authorize('SUPER_ADMIN', 'COMPANY_OWNER', 'INTERNAL_AUDIT', 'COMPLIANCE', 'FRAUD_INVESTIGATION', 'SECURITY_OPERATIONS', 'RISK_MANAGEMENT', 'LEGAL_DEPARTMENT', 'OPERATIONS_MANAGER', 'BRANCH_MANAGER', 'REGIONAL_MANAGER', 'EXECUTIVE_MANAGEMENT', 'BOARD_EXECUTIVE'), ctrl.createComplianceCase);
+router.put('/compliance-cases/:id', authorize('SUPER_ADMIN', 'COMPANY_OWNER', 'INTERNAL_AUDIT', 'COMPLIANCE', 'FRAUD_INVESTIGATION', 'SECURITY_OPERATIONS', 'RISK_MANAGEMENT', 'LEGAL_DEPARTMENT', 'OPERATIONS_MANAGER', 'BRANCH_MANAGER', 'REGIONAL_MANAGER', 'EXECUTIVE_MANAGEMENT', 'BOARD_EXECUTIVE'), ctrl.updateComplianceCase);
 
 // Customer Service & Reception Tickets
 router.get('/support-tickets', staffAndAbove, ctrl.getSupportTickets);

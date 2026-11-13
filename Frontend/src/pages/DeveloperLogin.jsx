@@ -9,7 +9,7 @@ import { DEVELOPER_PORTAL_META } from '../constants/rolesMeta';
  * Never linked from public tenant pages or navigation bars.
  */
 export default function DeveloperLogin({ onDevAuthenticated }) {
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState('gabose48@gmail.com');
   const [password, setPassword] = useState('');
   const [totpToken, setTotpToken] = useState('');
   const [loading, setLoading] = useState(false);
@@ -90,14 +90,15 @@ export default function DeveloperLogin({ onDevAuthenticated }) {
 
           <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div>
-              <label className="gbs-label">Landlord Email</label>
+              <label className="gbs-label">Permanent Developer Gmail</label>
               <input
                 type="email"
                 required
                 className="gbs-input"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="developer@gbsloan.com"
+                placeholder="gabose48@gmail.com"
+                autoComplete="username"
               />
             </div>
 
@@ -109,7 +110,8 @@ export default function DeveloperLogin({ onDevAuthenticated }) {
                 className="gbs-input"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter isolated landlord password"
+                placeholder="Enter isolated landlord password (required)"
+                autoComplete="new-password"
               />
             </div>
 

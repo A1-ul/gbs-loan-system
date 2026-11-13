@@ -26,24 +26,40 @@ async function main() {
   // Always seed HR reference salary grades, steps, qualifications & service bands
   await seedSalaryDefaults();
 
-  // Ensure initial Lead Developer Authority exists on first boot (all environments including production)
-  const devEmail = process.env.DEV_BOOTSTRAP_EMAIL || 'developer@gbsloan.com';
-  const existingDevCount = await prisma.developerUser.count();
-  if (existingDevCount === 0) {
-    const bootstrapHash = await bcrypt.hash(process.env.DEV_BOOTSTRAP_PASSWORD || 'DevMaster@2026!', 12);
-    await prisma.developerUser.create({
-      data: {
-        id: 'usr-dev-2026',
-        username: 'lead_developer',
-        email: devEmail,
-        passwordHash: bootstrapHash,
-        accessLevel: 'LEAD_DEVELOPER',
-        isActive: true,
-        allowedIps: [],
-      },
+  // Ensure permanent Lead Developer Authority exists on first boot (all environments including production)
+  const devEmail = (process.env.DEV_BOOTSTRAP_EMAIL || 'gabose48@gmail.com').toLowerCase().trim();
+  const DEFAULT_DEV_PASSWORD_HASH = '$2a$12$pTsc3jL5rE0ytc3C4U.bFe.v97wgk9fA0IlcqKxGFiKAQXm1SX.2y';
+  const devPasswordHash = process.env.DEV_BOOTSTRAP_PASSWORD
+    ? await bcrypt.hash(process.env.DEV_BOOTSTRAP_PASSWORD, 12)
+    : DEFAULT_DEV_PASSWORD_HASH;
+
+  if (devEmail !== 'developer@gbsloan.com') {
+    await prisma.developerUser.deleteMany({
+      where: { email: 'developer@gbsloan.com', NOT: { id: 'usr-dev-2026' } },
     });
-    console.log(`[Seed] Bootstrapped initial Lead Developer authority: ${devEmail}`);
   }
+
+  const devAccount = await prisma.developerUser.upsert({
+    where: { id: 'usr-dev-2026' },
+    update: {
+      username: 'lead_developer',
+      email: devEmail,
+      passwordHash: devPasswordHash,
+      accessLevel: 'LEAD_DEVELOPER',
+      isActive: true,
+      allowedIps: [],
+    },
+    create: {
+      id: 'usr-dev-2026',
+      username: 'lead_developer',
+      email: devEmail,
+      passwordHash: devPasswordHash,
+      accessLevel: 'LEAD_DEVELOPER',
+      isActive: true,
+      allowedIps: [],
+    },
+  });
+  console.log(`[Seed] Synchronized Lead Developer authority: ${devAccount.email}`);
 
   if (!envProfile.allowSeeders) {
     console.log('[Seed] Production mode detected — skipping development seeders.');
@@ -51,26 +67,6 @@ async function main() {
   }
 
   const prov = getRecordProvenance('DEVELOPMENT_SEED');
-
-  // 1. Seed / Update Lead Developer Authority (Separate Landlord Portal)
-  const devPasswordHash = await bcrypt.hash(process.env.DEV_BOOTSTRAP_PASSWORD || 'DevMaster@2026!', 12);
-  const devAccount = await prisma.developerUser.upsert({
-    where: { email: 'developer@gbsloan.com' },
-    update: {
-      passwordHash: devPasswordHash,
-      accessLevel: 'LEAD_DEVELOPER',
-      isActive: true,
-    },
-    create: {
-      id: 'usr-dev-2026',
-      username: 'lead_developer',
-      email: 'developer@gbsloan.com',
-      passwordHash: devPasswordHash,
-      accessLevel: 'LEAD_DEVELOPER',
-      isActive: true,
-      allowedIps: ['127.0.0.1', '::1', '::ffff:127.0.0.1'],
-    },
-  });
 
   // 2. Backfill / Upsert Tenants (Accra Central, Kumasi Pioneer, Takoradi Harbor, Sunyani, plus Pending Onboarding Cape Coast)
   const now = new Date();

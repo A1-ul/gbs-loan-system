@@ -6,11 +6,12 @@ import {
 import {
   Landmark, CreditCard, Users, ShieldCheck, AlertTriangle, Download, Plus, Video,
   Navigation, Clock, CheckCircle2, Database, Briefcase, Megaphone, TrendingUp,
-  Bell, ArrowUpRight, RefreshCw, Upload
+  Bell, ArrowUpRight, RefreshCw, Upload, Search, MapPin
 } from 'lucide-react';
 import api, { sessionStore } from '../services/api';
 import { resolveRoleMeta, USER_COUNT_DROPDOWN_ROLES } from '../constants/rolesMeta';
 import { useNavigationState } from '../context/NavigationContext';
+import LiveLocationTrackerMap from '../components/LiveLocationTrackerMap';
 
 const formatGHS = (n) =>
   `GHS ${Number(n || 0).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -55,6 +56,10 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
 
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
+  const [memberSearchInput, setMemberSearchInput] = useState('');
+  const [memberSearching, setMemberSearching] = useState(false);
+  const [memberSearchCount, setMemberSearchCount] = useState(null);
+  const [locatePhoneTarget, setLocatePhoneTarget] = useState('');
 
   // Operational Forms
   const [newMember, setNewMember] = useState({ firstName: '', lastName: '', phone: '', email: '', ghanaCardNumber: '', occupation: '', monthlyIncome: '', address: '' });
@@ -186,6 +191,26 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
       showToast(`Exported ${type.toUpperCase()} report as .${format.toUpperCase()}`);
     } catch (err) {
       showToast(err.response?.data?.message || 'Report export failed', true);
+    }
+  };
+
+  // Click-to-Search Members / Customers directly against PostgreSQL
+  const handleSearchMembers = async (e, overrideQuery = null) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const q = overrideQuery !== null ? overrideQuery : memberSearchInput.trim();
+    setMemberSearching(true);
+    try {
+      const res = await api.get('/members', { params: { search: q || undefined, limit: 100 } });
+      const rows = res.data?.data || [];
+      setMembers(rows);
+      setMemberSearchCount(rows.length);
+      if (q) {
+        showToast(`Found ${rows.length} borrower/customer record(s) matching "${q}".`);
+      }
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Customer search failed', true);
+    } finally {
+      setMemberSearching(false);
     }
   };
 
@@ -381,8 +406,8 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
   if (isGuarantorOnly || !isMemberOnly) {
     tabs.push({ id: 'GUARANTORS', label: 'Guarantors' });
   }
-  if (isField || isManagement) {
-    tabs.push({ id: 'FIELD_OPS', label: 'Collectors & Visits' });
+  if (isField || isCredit || isManagement) {
+    tabs.push({ id: 'FIELD_OPS', label: 'Live GPS Map & Visits' });
   }
   if (isHR || isFinance) {
     tabs.push({ id: 'HR_PAYROLL', label: 'Staff & Payroll' });
@@ -545,6 +570,53 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
               <Users size={26} color="#F4E07B" />
             </div>
           </div>
+
+          {!isMemberOnly && !isGuarantorOnly && (
+            <div className="glass-panel" style={{ padding: 16 }}>
+              <form
+                onSubmit={(e) => handleSearchMembers(e)}
+                style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}
+              >
+                <Search size={18} color="#00F2FE" />
+                <input
+                  type="search"
+                  className="gbs-input"
+                  style={{ flex: 1, minWidth: 230 }}
+                  placeholder="Quick customer/member search by Name, Phone, Member # or Ghana Card..."
+                  value={memberSearchInput}
+                  onChange={(e) => setMemberSearchInput(e.target.value)}
+                />
+                <button type="submit" disabled={memberSearching} className="btn btn-primary" style={{ padding: '9px 16px' }}>
+                  <Search size={14} /> {memberSearching ? 'Searching...' : 'Search Customers'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setActiveTab('MEMBERS')}
+                >
+                  Open Directory ({members.length})
+                </button>
+              </form>
+              {memberSearchCount !== null && (
+                <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {members.slice(0, 6).map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ padding: '5px 10px', fontSize: '0.76rem' }}
+                      onClick={() => navigate(`/members/${m.id}`)}
+                    >
+                      {m.memberNumber} — {m.user?.firstName} {m.user?.lastName} ({m.user?.phone})
+                    </button>
+                  ))}
+                  {members.length === 0 && (
+                    <span style={{ fontSize: '0.8rem', color: '#FBBF24' }}>No customers matched your search query.</span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {!isMemberOnly && !isGuarantorOnly && (
             <div className="gbs-grid-2">
@@ -808,6 +880,34 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
 
           <div className="glass-panel" style={{ padding: 20 }}>
             <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}>Borrowers Directory ({members.length})</h3>
+            <form
+              onSubmit={(e) => handleSearchMembers(e)}
+              style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}
+            >
+              <input
+                type="search"
+                className="gbs-input"
+                style={{ flex: 1, minWidth: 200 }}
+                placeholder="Search customer by name, phone, MBR #, Ghana Card..."
+                value={memberSearchInput}
+                onChange={(e) => setMemberSearchInput(e.target.value)}
+              />
+              <button type="submit" disabled={memberSearching} className="btn btn-primary" style={{ padding: '8px 14px' }}>
+                <Search size={14} /> {memberSearching ? 'Searching...' : 'Search'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ padding: '8px 12px' }}
+                onClick={() => {
+                  setMemberSearchInput('');
+                  setMemberSearchCount(null);
+                  handleSearchMembers(null, '');
+                }}
+              >
+                Show All
+              </button>
+            </form>
             <div className="data-table-container" style={{ maxHeight: 420 }}>
               <table className="data-table">
                 <thead>
@@ -816,7 +916,7 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                     <th>Full Name</th>
                     <th>Phone</th>
                     <th>KYC Status</th>
-                    <th>View</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -826,9 +926,32 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                       <td>{m.user?.firstName} {m.user?.lastName}</td>
                       <td>{m.user?.phone}</td>
                       <td><span className={`badge ${m.ghanaCardVerified ? 'badge-success' : 'badge-warning'}`}>{m.ghanaCardVerified ? 'KYC VERIFIED' : 'PENDING KYC'}</span></td>
-                      <td><button type="button" className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.74rem' }}>Open</button></td>
+                      <td style={{ display: 'flex', gap: 6 }}>
+                        <button type="button" className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.74rem' }}>Open</button>
+                        {m.user?.phone && (
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            style={{ padding: '4px 8px', fontSize: '0.74rem' }}
+                            onClick={(ev) => {
+                              ev.stopPropagation();
+                              setLocatePhoneTarget(m.user.phone);
+                              setActiveTab('FIELD_OPS');
+                            }}
+                          >
+                            <MapPin size={12} /> Locate
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))}
+                  {members.length === 0 && (
+                    <tr>
+                      <td colSpan={5} style={{ textAlign: 'center', color: '#94A3B8', padding: 24 }}>
+                        No members/customers found matching your search.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -870,10 +993,27 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
       )}
 
       {/* ===================================================================== */}
-      {/* TAB: FIELD COLLECTORS & VISITS                                        */}
+      {/* TAB: LIVE GOOGLE MAPS PHONE LOCATOR, FIELD COLLECTORS & VISITS        */}
       {/* ===================================================================== */}
       {activeTab === 'FIELD_OPS' && (
-        <div className="gbs-grid-2">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <LiveLocationTrackerMap
+            mode="tenant"
+            initialPhone={locatePhoneTarget}
+            onLocationPublished={loadDashboardData}
+            markers={collectors
+              .filter((c) => c.lastLatitude != null && c.lastLongitude != null)
+              .map((c) => ({
+                id: c.id,
+                type: 'COLLECTOR',
+                name: `${c.user?.firstName || 'Collector'} ${c.user?.lastName || ''}`.trim(),
+                phone: c.user?.phone,
+                status: c.status,
+                lastUpdatedAt: c.lastLocationAt,
+                coordinates: { latitude: Number(c.lastLatitude), longitude: Number(c.lastLongitude) },
+              }))}
+          />
+          <div className="gbs-grid-2">
           <div className="glass-panel" style={{ padding: 20 }}>
             <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>Log Customer Visit &amp; GPS Telemetry</h3>
             <form onSubmit={handleRecordVisit} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -901,9 +1041,9 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                   <tr>
                     <th>ID</th>
                     <th>Collector</th>
-                    <th>Zone</th>
+                    <th>Phone</th>
                     <th>Status</th>
-                    <th>Route</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -911,15 +1051,31 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                     <tr key={c.id} onClick={() => navigate(`/collectors/${c.id}`)} style={{ cursor: 'pointer' }}>
                       <td>{c.employeeId}</td>
                       <td>{c.user?.firstName} {c.user?.lastName}</td>
-                      <td>{c.assignedZone || 'General'}</td>
+                      <td>{c.user?.phone || c.assignedZone || 'N/A'}</td>
                       <td><span className="badge badge-success">{c.status}</span></td>
-                      <td><button type="button" className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.75rem' }}><Navigation size={12} /> History</button></td>
+                      <td style={{ display: 'flex', gap: 6 }}>
+                        <button type="button" className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.75rem' }}><Navigation size={12} /> History</button>
+                        {c.user?.phone && (
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+                            onClick={(ev) => {
+                              ev.stopPropagation();
+                              setLocatePhoneTarget(c.user.phone);
+                            }}
+                          >
+                            <MapPin size={12} /> Pin
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           </div>
+        </div>
         </div>
       )}
 

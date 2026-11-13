@@ -57,6 +57,7 @@ class TrialExpirationService {
       where: { id: tenant.id },
       data: {
         status: 'ACTIVE',
+        onboardingStatus: tenant.onboardingStatus === 'ACTIVE_PAID' ? 'ACTIVE_PAID' : 'ACTIVE_TRIAL',
         subStart: now,
         subExpiry: newExpiry,
         daysLeft: extensionDays,
@@ -95,6 +96,7 @@ class TrialExpirationService {
       where: { id: tenant.id },
       data: {
         status: 'LOCKED_EXPIRED',
+        onboardingStatus: 'LOCKED',
         daysLeft: 0,
       },
     });

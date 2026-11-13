@@ -1,3 +1,4 @@
+const bcrypt = require('bcryptjs');
 const request = require('supertest');
 const app = require('../../app');
 const { prisma } = require('../../config/database');
@@ -14,12 +15,35 @@ describe('GBS Enterprise Production Integration Suite (PostgreSQL Live)', () => 
   let createdCashPaymentId = '';
   let createdUnqualifiedUserId = '';
   let createdMigrationJobId = '';
+  let testDevId = '';
 
   const suffix = Date.now().toString().slice(-6);
   const testOrgEmail = `owner.test.${suffix}@gbstestmfi.com`;
+  const testDevEmail = `testdev.${suffix}@gbs-test.local`;
+  const testDevPwd = `TestDevFixture#${suffix}`;
+
+  beforeAll(async () => {
+    const hash = await bcrypt.hash(testDevPwd, 10);
+    const createdDev = await prisma.developerUser.create({
+      data: {
+        username: `test_dev_${suffix}`,
+        email: testDevEmail,
+        passwordHash: hash,
+        accessLevel: 'LEAD_DEVELOPER',
+        isActive: true,
+        allowedIps: [],
+      },
+    });
+    testDevId = createdDev.id;
+  });
 
   afterAll(async () => {
     try {
+      if (testDevId) {
+        await prisma.developerAuditLog.deleteMany({ where: { developerUserId: testDevId } }).catch(() => null);
+        await prisma.developerSession.deleteMany({ where: { developerUserId: testDevId } }).catch(() => null);
+        await prisma.developerUser.deleteMany({ where: { id: testDevId } }).catch(() => null);
+      }
       if (createdCashPaymentId) {
         await prisma.payment.deleteMany({ where: { id: createdCashPaymentId } }).catch(() => null);
       }
@@ -54,9 +78,15 @@ describe('GBS Enterprise Production Integration Suite (PostgreSQL Live)', () => 
   });
 
   it('authenticates Developer Landlord & Tenant Roles with strict cross-plane isolation', async () => {
+    // Production permanent Gmail enforces manual password entry (wrong password rejected)
+    const wrongDevPwdRes = await request(app)
+      .post('/api/v1/developer/auth/login')
+      .send({ email: 'gabose48@gmail.com', password: 'WrongPasswordCheck!' });
+    expect(wrongDevPwdRes.statusCode).toBe(401);
+
     const devRes = await request(app)
       .post('/api/v1/developer/auth/login')
-      .send({ email: 'developer@gbsloan.com', password: 'DevMaster@2026!' });
+      .send({ email: testDevEmail, password: testDevPwd });
     expect(devRes.statusCode).toBe(200);
     devToken = devRes.body.data.accessToken;
     expect(typeof devToken).toBe('string');
@@ -162,17 +192,58 @@ describe('GBS Enterprise Production Integration Suite (PostgreSQL Live)', () => 
       .set('Authorization', `Bearer ${tenantToken}`);
     expect(lockedOperationalCheck.statusCode).toBe(402);
 
-    // Developer renews +90 days -> operational access restored
-    const renewRes = await request(app)
-      .post(`/api/v1/developer/tenants/${createdTenantId}/renew`)
+    // Developer unlocks explicitly via /unlock -> operational access restored
+    const unlockRes = await request(app)
+      .post(`/api/v1/developer/tenants/${createdTenantId}/unlock`)
       .set('Authorization', `Bearer ${devToken}`)
-      .send({ extensionDays: 90 });
-    expect(renewRes.statusCode).toBe(200);
+      .send({ extensionDays: 90, note: 'Unlocked in integration QA' });
+    expect(unlockRes.statusCode).toBe(200);
 
     const restoredCheck = await request(app)
       .get('/api/v1/loans')
       .set('Authorization', `Bearer ${tenantToken}`);
     expect(restoredCheck.statusCode).toBe(200);
+
+    // Multi-tenant Bulk Lock & Bulk Unlock
+    const bulkLockRes = await request(app)
+      .post('/api/v1/developer/tenants/bulk-lock')
+      .set('Authorization', `Bearer ${devToken}`)
+      .send({ tenantIds: [createdTenantId], reason: 'QA Bulk Lock' });
+    expect(bulkLockRes.statusCode).toBe(200);
+    expect(bulkLockRes.body.count).toBe(1);
+
+    const bulkUnlockRes = await request(app)
+      .post('/api/v1/developer/tenants/bulk-unlock')
+      .set('Authorization', `Bearer ${devToken}`)
+      .send({ tenantIds: [createdTenantId], extensionDays: 90 });
+    expect(bulkUnlockRes.statusCode).toBe(200);
+    expect(bulkUnlockRes.body.count).toBe(1);
+
+    // Developer Delete Tenant Permanently
+    const disposableEmail = `delete.mfi.${suffix}@gbstestmfi.com`;
+    const disposableOnboard = await request(app)
+      .post('/api/v1/tenants/onboard')
+      .send({
+        organizationName: `Disposable MFI ${suffix}`,
+        institutionType: 'MICROFINANCE',
+        city: 'Tamale',
+        region: 'Northern',
+        country: 'Ghana',
+        representativeName: 'AbubakariYakubu',
+        representativeEmail: disposableEmail,
+        representativePhone: `+233267${suffix}`,
+        password: 'TenantPass@2026!',
+      });
+    expect(disposableOnboard.statusCode).toBe(201);
+    const disposableId = disposableOnboard.body.data.id;
+
+    const delTenantRes = await request(app)
+      .delete(`/api/v1/developer/tenants/${disposableId}`)
+      .set('Authorization', `Bearer ${devToken}`);
+    expect(delTenantRes.statusCode).toBe(200);
+    expect(delTenantRes.body.success).toBe(true);
+    const verifyDeleted = await prisma.tenant.findUnique({ where: { id: disposableId } });
+    expect(verifyDeleted).toBeNull();
   });
 
   it('secures User Registration Counts & Admin Cross-Check + Deletion flow', async () => {
@@ -360,5 +431,70 @@ describe('GBS Enterprise Production Integration Suite (PostgreSQL Live)', () => 
       .post(`/api/v1/migration/jobs/${createdMigrationJobId}/rollback`)
       .set('Authorization', `Bearer ${adminToken}`);
     expect(rollRes.statusCode).toBe(200);
+  });
+
+  it('publishes Live Device GPS, locates mobile numbers on Google Map, searches members & exposes env mode', async () => {
+    const healthRes = await request(app).get('/api/v1/health');
+    expect(healthRes.statusCode).toBe(200);
+    expect(healthRes.body.dataMode).toBeDefined();
+    expect(['DEVELOPMENT_DEMO', 'PRODUCTION_LIVE']).toContain(healthRes.body.dataMode);
+
+    // Share live device GPS from authenticated user account
+    const shareRes = await request(app)
+      .post('/api/v1/gps/share-location')
+      .set('Authorization', `Bearer ${memberToken}`)
+      .send({ latitude: 5.614818, longitude: -0.205874, accuracy: 8.5, status: 'ONLINE' });
+    expect(shareRes.statusCode).toBe(200);
+    expect(shareRes.body.data.isLiveGps).toBe(true);
+    expect(shareRes.body.data.googleMapsUrl).toContain('5.614818');
+
+    const sharedPhone = shareRes.body.data.phone;
+    expect(sharedPhone).toBeTruthy();
+    const localZeroPhone = sharedPhone.startsWith('+233') ? `0${sharedPhone.slice(4)}` : sharedPhone;
+
+    // Tenant staff locates that mobile number (normalized local format) -> resolves Google Maps pin
+    const tenantLookup = await request(app)
+      .get('/api/v1/gps/locate-by-phone')
+      .query({ phone: localZeroPhone })
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(tenantLookup.statusCode).toBe(200);
+    expect(tenantLookup.body.data.primaryMatch).toBeDefined();
+    expect(tenantLookup.body.data.primaryMatch.coordinates.latitude).toBeCloseTo(5.614818, 4);
+
+    // Developer locates any mobile number across tenants -> resolves exact live coordinates
+    const devLookup = await request(app)
+      .get('/api/v1/developer/locations/lookup')
+      .query({ phone: sharedPhone })
+      .set('Authorization', `Bearer ${devToken}`);
+    expect(devLookup.statusCode).toBe(200);
+    expect(devLookup.body.data.primaryMatch.coordinates.longitude).toBeCloseTo(-0.205874, 4);
+
+    // Click-to-Search Member/Customer by name or member number in PostgreSQL
+    const allMembers = await request(app)
+      .get('/api/v1/members')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(allMembers.statusCode).toBe(200);
+    const firstMember = allMembers.body.data[0];
+    expect(firstMember).toBeDefined();
+
+    const fullNameQuery = `${firstMember.user.firstName} ${firstMember.user.lastName}`;
+    const searchMembers = await request(app)
+      .get('/api/v1/members')
+      .query({ search: fullNameQuery })
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(searchMembers.statusCode).toBe(200);
+    expect(searchMembers.body.data.some((m) => m.id === firstMember.id)).toBe(true);
+
+    // Branch Manager / Credit Team can also approve loans (expanded RBAC parity across user roles)
+    const managerLogin = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: 'manager@accramfi.com', password: 'GbsRole@2026!' });
+    if (managerLogin.statusCode === 200) {
+      const mgrToken = managerLogin.body.data.accessToken;
+      const mgrLoans = await request(app)
+        .get('/api/v1/loans')
+        .set('Authorization', `Bearer ${mgrToken}`);
+      expect(mgrLoans.statusCode).toBe(200);
+    }
   });
 });

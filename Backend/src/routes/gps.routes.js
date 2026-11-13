@@ -8,6 +8,8 @@ const { gpsSchemas } = require('../validators');
 const router = express.Router();
 
 router.post('/location', authenticate, collectorOnly, validate(gpsSchemas.updateLocation), gpsController.updateLocation);
+router.post('/share-location', authenticate, validate(gpsSchemas.shareLocation), gpsController.shareMyLocation);
+router.get('/locate-by-phone', authenticate, staffAndAbove, gpsController.locateByPhone);
 router.post('/sync', authenticate, collectorOnly, validate(gpsSchemas.batchSync), gpsController.batchSync);
 router.get('/tracking/:collectorId', authenticate, staffAndAbove, gpsController.getTrackingData);
 router.post('/consent', authenticate, gpsController.grantConsent);

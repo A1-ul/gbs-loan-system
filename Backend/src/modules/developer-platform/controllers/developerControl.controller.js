@@ -1,6 +1,7 @@
 const os = require('os');
 const developerControlService = require('../services/developerControl.service');
 const developerAuthService = require('../services/developerAuth.service');
+const gpsService = require('../../../services/gps.service');
 const { checkDatabaseHealth } = require('../../../config/database');
 const { checkRedisHealth } = require('../../../config/redis');
 const { getSocketStats } = require('../../../config/socket');
@@ -113,6 +114,16 @@ async function getLocations(req, res, next) {
   }
 }
 
+async function lookupLocationByPhone(req, res, next) {
+  try {
+    const phone = req.query.phone || '';
+    const data = await gpsService.locateByPhone({ phone, allowCrossTenant: true });
+    return res.status(200).json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function checkSubscriptions(req, res, next) {
   try {
     const summary = await developerControlService.inspectSubscriptions();
@@ -188,6 +199,7 @@ module.exports = {
   getPerformance,
   lockSystem,
   getLocations,
+  lookupLocationByPhone,
   checkSubscriptions,
   getLogs,
   getLockState,

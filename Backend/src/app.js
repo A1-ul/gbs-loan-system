@@ -7,6 +7,7 @@ const compression = require('compression');
 const morgan = require('morgan');
 
 const config = require('./config');
+const { getEnvironmentProfile } = require('./config/environments');
 const logger = require('./utils/logger');
 const routes = require('./routes');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
@@ -116,32 +117,21 @@ app.use(auditMiddleware);
 // 9. Root & Health Check Endpoints
 const apiVersion = config.app?.apiVersion || 'v1';
 
-app.get('/health', (req, res) => {
+const sendHealthResponse = (req, res) => {
+  const envProfile = getEnvironmentProfile();
   res.json({
     status: 'ok',
     service: 'gbs-loan-api',
+    environment: envProfile.nodeEnv,
+    environmentTag: envProfile.environmentTag,
+    dataMode: envProfile.isProduction ? 'PRODUCTION_LIVE' : 'DEVELOPMENT_DEMO',
+    isProduction: envProfile.isProduction,
     requestId: req.id,
     timestamp: new Date().toISOString(),
   });
-});
+};
 
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    service: 'gbs-loan-api',
-    requestId: req.id,
-    timestamp: new Date().toISOString(),
-  });
-});
-
-app.get(`/api/${apiVersion}/health`, (req, res) => {
-  res.json({
-    status: 'ok',
-    service: 'gbs-loan-api',
-    requestId: req.id,
-    timestamp: new Date().toISOString(),
-  });
-});
+app.get(['/health', '/api/health', `/api/${apiVersion}/health`], sendHealthResponse);
 
 // 10. API Gateway Status & Service Catalog
 app.get(`/api/${apiVersion}/gateway/status`, (req, res) => {

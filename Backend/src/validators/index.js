@@ -109,6 +109,13 @@ const gpsSchemas = {
     recordedAt: Joi.date().optional(),
     isOfflineSync: Joi.boolean().default(false),
   }),
+  shareLocation: Joi.object({
+    latitude: Joi.number().min(-90).max(90).required(),
+    longitude: Joi.number().min(-180).max(180).required(),
+    accuracy: Joi.number().min(0).optional(),
+    speed: Joi.number().min(0).optional(),
+    status: Joi.string().valid('ONLINE', 'OFFLINE', 'ON_ROUTE', 'AT_LOCATION', 'IDLE').optional(),
+  }),
   batchSync: Joi.object({
     locations: Joi.array().items(
       Joi.object({

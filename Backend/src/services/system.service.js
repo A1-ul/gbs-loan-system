@@ -4,8 +4,10 @@ const { checkDatabaseHealth } = require('../config/database');
 const { checkRedisHealth } = require('../config/redis');
 const backupService = require('./backup.service');
 const config = require('../config');
+const { getEnvironmentProfile } = require('../config/environments');
 
 async function getSystemStatus() {
+  const envProfile = getEnvironmentProfile();
   const [dbHealth, redisHealth, lastBackup] = await Promise.all([
     checkDatabaseHealth(),
     checkRedisHealth(),
@@ -13,6 +15,11 @@ async function getSystemStatus() {
   ]);
 
   return {
+    environment: envProfile.nodeEnv,
+    environmentTag: envProfile.environmentTag,
+    dataMode: envProfile.isProduction ? 'PRODUCTION_LIVE' : 'DEVELOPMENT_DEMO',
+    isProduction: envProfile.isProduction,
+    allowSeeders: envProfile.allowSeeders,
     server: {
       status: 'Online',
       uptime: formatUptime(process.uptime()),
@@ -38,6 +45,7 @@ async function getSystemStatus() {
 }
 
 async function getHealthCheck() {
+  const envProfile = getEnvironmentProfile();
   const db = await checkDatabaseHealth();
   const redis = await checkRedisHealth();
 
@@ -45,6 +53,10 @@ async function getHealthCheck() {
 
   return {
     status: healthy ? 'healthy' : 'degraded',
+    environment: envProfile.nodeEnv,
+    environmentTag: envProfile.environmentTag,
+    dataMode: envProfile.isProduction ? 'PRODUCTION_LIVE' : 'DEVELOPMENT_DEMO',
+    isProduction: envProfile.isProduction,
     checks: { database: db, redis },
     timestamp: new Date().toISOString(),
   };

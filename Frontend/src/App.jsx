@@ -25,6 +25,14 @@ import {
 function TenantShell({ user, onLogout, lockBanner }) {
   const navigate = useNavigate();
   const roleMeta = resolveRoleMeta(user?.role);
+  const [dataMode, setDataMode] = useState(null);
+
+  useEffect(() => {
+    api.get('/health').then((res) => {
+      const payload = res.data?.data || res.data;
+      if (payload?.dataMode) setDataMode(payload.dataMode);
+    }).catch(() => null);
+  }, []);
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-dark)' }}>
@@ -43,6 +51,11 @@ function TenantShell({ user, onLogout, lockBanner }) {
         </div>
 
         <div className="header-actions">
+          {dataMode && (
+            <span className={`badge ${dataMode === 'PRODUCTION_LIVE' ? 'badge-success' : 'badge-warning'}`}>
+              {dataMode === 'PRODUCTION_LIVE' ? 'PRODUCTION LIVE' : 'DEMO / DEV MODE'}
+            </span>
+          )}
           <UserCountDropdownWidget userRole={user?.role} />
           <Link to="/profile" className="btn btn-secondary" style={{ padding: '7px 12px', fontSize: '0.8rem' }}>
             <ShieldCheck size={14} /> Security &amp; Voice ID
