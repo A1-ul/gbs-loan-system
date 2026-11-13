@@ -21,8 +21,8 @@
   --text-muted: #94A3B8;
   --text-dim: #64748B;
 
-  --font-heading: 'Outfit', sans-serif;
-  --font-body: 'Inter', sans-serif;
+  --font-heading: 'Times New Roman', Times, serif;
+  --font-body: 'Times New Roman', Times, serif;
   
   --radius-sm: 8px;
   --radius-md: 14px;
@@ -37,10 +37,11 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  font-family: 'Times New Roman', Times, serif;
 }
 
-body {
-  font-family: var(--font-body);
+html, body {
+  font-family: 'Times New Roman', Times, serif;
   background-color: var(--bg-dark);
   background-image: 
     radial-gradient(circle at 10% 20%, rgba(212, 175, 55, 0.05) 0%, transparent 40%),
@@ -50,6 +51,10 @@ body {
   min-height: 100vh;
   overflow-x: hidden;
   line-height: 1.5;
+}
+
+button, input, select, textarea, h1, h2, h3, h4, h5, h6, th, td, code {
+  font-family: 'Times New Roman', Times, serif;
 }
 
 /* Glassmorphism Panel */
@@ -657,5 +662,115 @@ body {
     padding: 20px 16px;
   }
 }
+
+/* ==========================================================================
+   GBS Enterprise v3.0: Gold-Wine-Grey-Brown Onboarding Gradient, Password Reveal & Mobile Responsive Polish
+   ========================================================================== */
+.onboarding-gold-wine-gradient {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 12% 15%, rgba(212, 175, 55, 0.38) 0%, transparent 48%),
+    radial-gradient(circle at 86% 18%, rgba(107, 29, 47, 0.55) 0%, transparent 50%),
+    radial-gradient(circle at 75% 85%, rgba(75, 78, 83, 0.52) 0%, transparent 48%),
+    linear-gradient(135deg, #3D2B1F 0%, #6B1D2F 28%, #4B4E53 62%, #4E342E 84%, #8E6E1E 100%);
+  color: #F8FAFC;
+}
+
+.onboarding-gold-wine-glass {
+  background: linear-gradient(155deg, rgba(30, 18, 24, 0.84) 0%, rgba(44, 46, 52, 0.86) 55%, rgba(56, 37, 28, 0.88) 100%);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(212, 175, 55, 0.42);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.55);
+}
+
+.gbs-password-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.gbs-password-wrap .gbs-input {
+  padding-right: 44px;
+}
+
+.gbs-password-toggle {
+  position: absolute;
+  right: 10px;
+  background: transparent;
+  border: none;
+  color: #D4AF37;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: 6px;
+}
+
+.gbs-password-toggle:hover {
+  background: rgba(212, 175, 55, 0.16);
+  color: #F4E07B;
+}
+
+.mobile-menu-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: rgba(15, 27, 49, 0.9);
+  color: #F4E07B;
+  cursor: pointer;
+}
+
+@media (max-width: 768px) {
+  .mobile-menu-btn {
+    display: inline-flex;
+  }
+
+  .header-bar {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 12px 14px;
+  }
+
+  .header-actions-collapsible {
+    display: none;
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    padding-top: 8px;
+    border-top: 1px solid rgba(212, 175, 55, 0.2);
+  }
+
+  .header-actions-collapsible.open {
+    display: flex;
+  }
+
+  .gbs-grid-2,
+  .gbs-grid-3,
+  .dashboard-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .role-hero-banner {
+    min-height: 150px;
+  }
+
+  .role-hero-overlay {
+    padding: 16px;
+  }
+
+  .top-back-bar {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 12px;
+  }
+}
+
 
 

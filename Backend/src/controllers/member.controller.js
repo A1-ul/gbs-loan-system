@@ -13,9 +13,16 @@ async function create(req, res, next) {
 
 async function getAll(req, res, next) {
   try {
-    const { page = 1, limit = 20, search, status } = req.query;
+    const { page = 1, limit = 20, search, status, includeHidden } = req.query;
     const tenantId = req.tenantId || req.user?.tenantId;
-    const result = await memberService.getAll({ page: +page, limit: +limit, search, status, tenantId });
+    const result = await memberService.getAll({
+      page: +page,
+      limit: +limit,
+      search,
+      status,
+      tenantId,
+      includeHidden: includeHidden === 'true',
+    });
     return paginated(res, result.data, result.pagination);
   } catch (err) {
     next(err);

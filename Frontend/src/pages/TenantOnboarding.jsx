@@ -1,15 +1,23 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Building2, CheckCircle2, Clock, AlertTriangle, ArrowLeft, Search, MapPin } from 'lucide-react';
+import {
+  Building2, CheckCircle2, Clock, AlertTriangle, LogIn, Search,
+  MapPin, Eye, EyeOff, Crosshair, ShieldCheck
+} from 'lucide-react';
 import api from '../services/api';
 import { ONBOARDING_META } from '../constants/rolesMeta';
+import { FaceScanner } from '../components/biometric/FaceScanner';
 
 /**
- * Public Multi-Tenant Institutional Onboarding Form + Application Tracker
- * Workflow: Institution applies -> Status: PENDING -> Lead Developer Approves -> 90-Day Trial Activated
+ * Multi-Tenant Institutional Onboarding Form (Default Entry Page) + Application Tracker
+ * Workflow: Institution applies with GPS Address -> Lead Developer Approves -> 1-Month (30-Day) Free Trial Activated
+ * Afterward institution selects 3, 6, 9, 12 Months, or Lifetime subscription.
  */
 export default function TenantOnboarding() {
   const [tab, setTab] = useState('apply'); // 'apply' | 'track'
+  const [showPassword, setShowPassword] = useState(false);
+  const [geoLoading, setGeoLoading] = useState(false);
+
   const [form, setForm] = useState({
     organizationName: '',
     institutionType: 'MICROFINANCE',
@@ -19,6 +27,7 @@ export default function TenantOnboarding() {
     region: 'Greater Accra',
     city: 'Accra',
     address: '',
+    gpsAddress: '',
     latitude: '5.6037',
     longitude: '-0.1870',
     registrationNumber: '',
@@ -29,7 +38,8 @@ export default function TenantOnboarding() {
     representativePhone: '',
     representativeRole: 'COMPANY_OWNER',
     password: '',
-    planTier: 'ENTERPRISE',
+    planTier: 'TRIAL_1M',
+    adminFaceImage: '',
   });
 
   const [submitting, setSubmitting] = useState(false);
@@ -40,6 +50,23 @@ export default function TenantOnboarding() {
   const [lookupResult, setLookupResult] = useState(null);
   const [lookupErr, setLookupErr] = useState('');
 
+  const detectHqGps = () => {
+    if (!navigator.geolocation) return;
+    setGeoLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setForm((prev) => ({
+          ...prev,
+          latitude: Number(pos.coords.latitude).toFixed(6),
+          longitude: Number(pos.coords.longitude).toFixed(6),
+        }));
+        setGeoLoading(false);
+      },
+      () => setGeoLoading(false),
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
@@ -47,9 +74,10 @@ export default function TenantOnboarding() {
     setSubmittedResult(null);
     try {
       const res = await api.post('/tenants/onboard', form);
-      setSubmittedResult(res.data?.data || res.data);
-      if (res.data?.data?.institutionId) {
-        setLookupId(res.data.data.institutionId);
+      const data = res.data?.data || res.data;
+      setSubmittedResult(data);
+      if (data?.institutionId || data?.tenantCode) {
+        setLookupId(data.tenantCode || data.institutionId);
       }
     } catch (err) {
       setError(err.response?.data?.message || 'Unable to submit onboarding application.');
@@ -71,34 +99,59 @@ export default function TenantOnboarding() {
   };
 
   return (
-    <div className="split-login-layout">
-      {/* Left Real-Life Institutional Photo Pane */}
-      <div className="split-login-photo-pane">
-        <img src={ONBOARDING_META.loginImage} alt="Institutional Loan Onboarding" className="hero-photo" />
-        <div className="split-login-photo-scrim" />
+    <div className="split-login-layout onboarding-gold-wine-gradient">
+      {/* Left Real-Life Institutional Photo Pane + Blended Gold/Wine/Grey/Brown Scrim */}
+      <div
+        className="split-login-photo-pane"
+        style={{
+          borderColor: 'rgba(212, 175, 55, 0.35)',
+          background: 'linear-gradient(145deg, rgba(107,29,47,0.45), rgba(75,78,83,0.4), rgba(78,52,46,0.55))',
+        }}
+      >
+        <img src={ONBOARDING_META.loginImage} alt="Institutional Loan Onboarding" className="hero-photo" style={{ opacity: 0.48 }} />
+        <div
+          className="split-login-photo-scrim"
+          style={{
+            background: 'linear-gradient(155deg, rgba(107,29,47,0.72) 0%, rgba(75,78,83,0.55) 48%, rgba(78,52,46,0.86) 80%, rgba(168,128,16,0.62) 100%)',
+          }}
+        />
 
-        <div style={{ position: 'relative', zIndex: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Link to="/login" className="btn btn-secondary" style={{ padding: '8px 14px', fontSize: '0.82rem' }}>
-            <ArrowLeft size={15} /> Back to Sign In
+        <div style={{ position: 'relative', zIndex: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div className="logo-icon">GBS</div>
+            <div>
+              <div style={{ fontWeight: 800, color: '#F4E07B', fontSize: '1.02rem' }}>GBS LOAN SYSTEM</div>
+              <div style={{ fontSize: '0.72rem', color: '#E2E8F0' }}>Enterprise Multi-Tenant Platform</div>
+            </div>
+          </div>
+
+          <Link to="/login" className="btn btn-primary" style={{ padding: '8px 14px', fontSize: '0.82rem' }}>
+            <LogIn size={15} /> Existing Institution Sign In
           </Link>
-          <span className="badge badge-gold">Enterprise SaaS Onboarding</span>
         </div>
 
         <div style={{ position: 'relative', zIndex: 2, marginTop: 'auto' }}>
-          <h1 style={{ fontSize: 'clamp(1.6rem, 2.8vw, 2.2rem)', fontWeight: 800, color: '#FFFFFF', marginBottom: 10 }}>
-            Deploy Your Institution on GBS Loan System
+          <span className="badge badge-gold" style={{ marginBottom: 10, background: 'rgba(212,175,55,0.22)' }}>
+            1-Month Free Trial • Up to Lifetime Plans
+          </span>
+          <h1 style={{ fontSize: 'clamp(1.6rem, 2.8vw, 2.25rem)', fontWeight: 800, color: '#FFFFFF', marginBottom: 10 }}>
+            Launch Your Financial Institution on GBS
           </h1>
-          <p style={{ fontSize: '0.92rem', color: '#E2E8F0', maxWidth: 500, marginBottom: 18 }}>
-            Every onboarded Credit Union, Microfinance, or Commercial Lending Institution receives isolated
-            multi-tenant PostgreSQL schemas, 30 role dashboards, Mobile Money & Bank workflows, and Voice Identity Protection.
+          <p style={{ fontSize: '0.92rem', color: '#F1F5F9', maxWidth: 510, marginBottom: 18 }}>
+            Onboard your Credit Union, Microfinance, Savings &amp; Loans, or Lending House. Every approved organization starts
+            with a <strong>1-Month (30-Day) Free Trial</strong> and unlocks 30 dedicated role portals, company branding &amp; logo customization,
+            integer-pesewa ledger auditing, mobile CCTV monitoring, and live GPS location tracking.
           </p>
 
-          <div className="glass-panel" style={{ padding: 14, background: 'rgba(6,12,24,0.8)' }}>
-            <div style={{ fontSize: '0.74rem', fontWeight: 700, color: '#D4AF37', marginBottom: 6 }}>
-              MANDATORY APPROVAL GOVERNANCE
+          <div className="onboarding-gold-wine-glass" style={{ padding: 14 }}>
+            <div style={{ fontSize: '0.74rem', fontWeight: 700, color: '#F4E07B', marginBottom: 6 }}>
+              MANDATORY GOVERNANCE &amp; SUBSCRIPTION FLOW
             </div>
-            <div style={{ fontSize: '0.8rem', color: '#CBD5E1' }}>
-              1. Submit KYB Registration → 2. GBS Developer Authority Reviews &amp; Approves → 3. 90-Day Trial Activated Live
+            <div style={{ fontSize: '0.8rem', color: '#E2E8F0', display: 'grid', gap: 4 }}>
+              <div>1. Submit Institution Onboarding &amp; GPS Location Form</div>
+              <div>2. Lead Developer Reviews &amp; Approves Application → <strong>1-Month (30-Day) Free Trial Activated</strong></div>
+              <div>3. Company Owner Signs In, Brands Company Name/Logo, Creates &amp; Approves Staff</div>
+              <div>4. After 1-Month Trial: Upgrade to <strong>3 Months, 6 Months, 9 Months, 12 Months, or Lifetime</strong></div>
             </div>
           </div>
         </div>
@@ -106,59 +159,66 @@ export default function TenantOnboarding() {
 
       {/* Right Onboarding Form & Status Tracker */}
       <div className="split-login-form-pane">
-        <div style={{ maxWidth: 600, width: '100%', margin: '0 auto' }}>
-          <div style={{ display: 'flex', gap: 10, marginBottom: 18 }}>
+        <div style={{ maxWidth: 620, width: '100%', margin: '0 auto' }}>
+          <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
             <button
               type="button"
               onClick={() => setTab('apply')}
               className={tab === 'apply' ? 'btn btn-primary' : 'btn btn-secondary'}
-              style={{ flex: 1, justifyContent: 'center' }}
+              style={{ flex: 1, justifyContent: 'center', minWidth: 180 }}
             >
-              <Building2 size={16} /> New Institutional Application
+              <Building2 size={16} /> Onboard New Institution
             </button>
             <button
               type="button"
               onClick={() => setTab('track')}
               className={tab === 'track' ? 'btn btn-primary' : 'btn btn-secondary'}
-              style={{ flex: 1, justifyContent: 'center' }}
+              style={{ flex: 1, justifyContent: 'center', minWidth: 180 }}
             >
-              <Search size={16} /> Track Approval Status
+              <Search size={16} /> Check Approval Status
             </button>
           </div>
 
           {tab === 'apply' && (
-            <div className="glass-panel" style={{ padding: 24 }}>
+            <div className="onboarding-gold-wine-glass" style={{ padding: 24 }}>
               {error && (
-                <div style={{ padding: 12, marginBottom: 14, borderRadius: 8, background: 'rgba(239,68,68,0.14)', border: '1px solid rgba(239,68,68,0.4)', color: '#FCA5A5', fontSize: '0.84rem', display: 'flex', gap: 8 }}>
+                <div style={{ padding: 12, marginBottom: 14, borderRadius: 8, background: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.5)', color: '#FECACA', fontSize: '0.84rem', display: 'flex', gap: 8 }}>
                   <AlertTriangle size={16} /> <span>{error}</span>
                 </div>
               )}
 
               {submittedResult ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#FBBF24' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#F4E07B' }}>
                     <Clock size={24} />
-                    <h3 style={{ margin: 0 }}>Application Submitted — Awaiting Developer Approval</h3>
+                    <h3 style={{ margin: 0 }}>Application Submitted — Pending Developer Approval</h3>
                   </div>
-                  <p style={{ fontSize: '0.86rem', color: '#CBD5E1' }}>
-                    Your institution <strong>{submittedResult.name}</strong> is currently <strong>{submittedResult.onboardingStatus}</strong>.
-                    Your 90-day trial countdown begins automatically once the Lead Developer approves your institution.
+                  <p style={{ fontSize: '0.86rem', color: '#E2E8F0' }}>
+                    Your organization <strong>{submittedResult.name}</strong> has been registered with status{' '}
+                    <strong>{submittedResult.onboardingStatus}</strong>. As soon as the Developer approves your institution,
+                    your <strong>1-Month (30-Day) Free Trial</strong> starts and your Company Owner can create &amp; approve staff accounts.
                   </p>
-                  <div style={{ background: 'rgba(6,12,24,0.85)', padding: 14, borderRadius: 10, border: '1px solid rgba(212,175,55,0.25)', fontSize: '0.85rem' }}>
+                  <div style={{ background: 'rgba(15,10,14,0.75)', padding: 14, borderRadius: 10, border: '1px solid rgba(212,175,55,0.35)', fontSize: '0.85rem' }}>
                     <div><strong>Tenant Code:</strong> {submittedResult.code || submittedResult.tenantCode}</div>
                     <div><strong>Institution ID:</strong> {submittedResult.institutionId}</div>
-                    <div><strong>Admin Email:</strong> {submittedResult.representativeEmail || form.representativeEmail}</div>
+                    <div><strong>Owner Login Email:</strong> {submittedResult.representativeEmail || form.representativeEmail}</div>
+                    <div><strong>Trial Period on Approval:</strong> 1 Month Free Trial (30 Days)</div>
                   </div>
-                  <button type="button" className="btn btn-primary" onClick={() => setTab('track')}>
-                    Check Live Status Now
-                  </button>
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    <button type="button" className="btn btn-primary" onClick={() => setTab('track')}>
+                      Track Live Approval Status
+                    </button>
+                    <Link to="/login" className="btn btn-secondary">
+                      Go to Sign In Page
+                    </Link>
+                  </div>
                 </div>
               ) : (
                 <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   <div className="gbs-grid-2" style={{ gap: 10 }}>
                     <div>
                       <label className="gbs-label">Institution Name *</label>
-                      <input type="text" required className="gbs-input" value={form.organizationName} onChange={(e) => setForm({ ...form, organizationName: e.target.value })} placeholder="Kumasi Trust MFI Ltd" />
+                      <input type="text" required className="gbs-input" value={form.organizationName} onChange={(e) => setForm({ ...form, organizationName: e.target.value })} placeholder="e.g. Golden Star Microfinance Ltd" />
                     </div>
                     <div>
                       <label className="gbs-label">Institution Type</label>
@@ -179,6 +239,30 @@ export default function TenantOnboarding() {
                     <div>
                       <label className="gbs-label">Central Bank License / TIN</label>
                       <input type="text" className="gbs-input" value={form.businessLicenseNumber} onChange={(e) => setForm({ ...form, businessLicenseNumber: e.target.value })} placeholder="BoG-MFI-8821" />
+                    </div>
+                  </div>
+
+                  <div className="gbs-grid-2" style={{ gap: 10 }}>
+                    <div>
+                      <label className="gbs-label">Official GPS Digital Address *</label>
+                      <input
+                        type="text"
+                        required
+                        className="gbs-input"
+                        value={form.gpsAddress}
+                        onChange={(e) => setForm({ ...form, gpsAddress: e.target.value })}
+                        placeholder="e.g. GA-183-8164 or AK-039-5028"
+                      />
+                    </div>
+                    <div>
+                      <label className="gbs-label">Physical HQ Street Address</label>
+                      <input
+                        type="text"
+                        className="gbs-input"
+                        value={form.address}
+                        onChange={(e) => setForm({ ...form, address: e.target.value })}
+                        placeholder="Plot 14, Liberation Rd, Accra"
+                      />
                     </div>
                   </div>
 
@@ -203,20 +287,25 @@ export default function TenantOnboarding() {
                       <input type="text" className="gbs-input" value={form.latitude} onChange={(e) => setForm({ ...form, latitude: e.target.value })} />
                     </div>
                     <div>
-                      <label className="gbs-label"><MapPin size={12} /> HQ GPS Longitude</label>
+                      <label className="gbs-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span><MapPin size={12} /> HQ GPS Longitude</span>
+                        <button type="button" onClick={detectHqGps} style={{ background: 'none', border: 'none', color: '#F4E07B', cursor: 'pointer', fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                          <Crosshair size={11} /> {geoLoading ? 'Detecting...' : 'Use Current GPS'}
+                        </button>
+                      </label>
                       <input type="text" className="gbs-input" value={form.longitude} onChange={(e) => setForm({ ...form, longitude: e.target.value })} />
                     </div>
                   </div>
 
-                  <hr style={{ borderColor: 'rgba(212,175,55,0.18)', margin: '4px 0' }} />
+                  <hr style={{ borderColor: 'rgba(212,175,55,0.25)', margin: '4px 0' }} />
 
                   <div className="gbs-grid-2" style={{ gap: 10 }}>
                     <div>
-                      <label className="gbs-label">Primary Admin Full Name *</label>
+                      <label className="gbs-label">Company Owner / Admin Name *</label>
                       <input type="text" required className="gbs-input" value={form.representativeName} onChange={(e) => setForm({ ...form, representativeName: e.target.value })} placeholder="Ama Boateng" />
                     </div>
                     <div>
-                      <label className="gbs-label">Primary Role</label>
+                      <label className="gbs-label">Primary Executive Role</label>
                       <select className="gbs-select" value={form.representativeRole} onChange={(e) => setForm({ ...form, representativeRole: e.target.value })}>
                         <option value="COMPANY_OWNER">Company Owner</option>
                         <option value="SUPER_ADMIN">Super Admin</option>
@@ -226,22 +315,50 @@ export default function TenantOnboarding() {
 
                   <div className="gbs-grid-2" style={{ gap: 10 }}>
                     <div>
-                      <label className="gbs-label">Representative Email *</label>
+                      <label className="gbs-label">Owner / Admin Email *</label>
                       <input type="email" required className="gbs-input" value={form.representativeEmail} onChange={(e) => setForm({ ...form, representativeEmail: e.target.value })} placeholder="owner@institution.com" />
                     </div>
                     <div>
-                      <label className="gbs-label">Phone Number *</label>
+                      <label className="gbs-label">Phone Number (SMS OTP) *</label>
                       <input type="tel" required className="gbs-input" value={form.representativePhone} onChange={(e) => setForm({ ...form, representativePhone: e.target.value })} placeholder="+233240000111" />
                     </div>
                   </div>
 
                   <div>
-                    <label className="gbs-label">Initial Admin Password *</label>
-                    <input type="password" required minLength={8} className="gbs-input" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Min 8 characters" />
+                    <label className="gbs-label">Company Owner Account Password *</label>
+                    <div className="gbs-password-wrap">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        required
+                        minLength={8}
+                        className="gbs-input"
+                        value={form.password}
+                        onChange={(e) => setForm({ ...form, password: e.target.value })}
+                        placeholder="Min 8 characters"
+                      />
+                      <button
+                        type="button"
+                        className="gbs-password-toggle"
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                        onClick={() => setShowPassword((prev) => !prev)}
+                      >
+                        {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="gbs-label">Company Owner / Admin Face Biometric Capture</label>
+                    <FaceScanner
+                      mode="capture"
+                      title="Launch Face Camera Scanner (Admin / Company Owner)"
+                      onCapture={(dataUrl) => setForm((prev) => ({ ...prev, adminFaceImage: dataUrl }))}
+                    />
                   </div>
 
                   <button type="submit" disabled={submitting} className="btn btn-primary" style={{ justifyContent: 'center', marginTop: 4 }}>
-                    {submitting ? 'Submitting to Developer Authority...' : 'Submit Onboarding Application'}
+                    <ShieldCheck size={16} />
+                    {submitting ? 'Submitting to Developer Approval Queue...' : 'Register Organization & Request 1-Month Free Trial'}
                   </button>
                 </form>
               )}
@@ -249,46 +366,57 @@ export default function TenantOnboarding() {
           )}
 
           {tab === 'track' && (
-            <div className="glass-panel" style={{ padding: 24 }}>
-              <form onSubmit={handleTrackStatus} style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+            <div className="onboarding-gold-wine-glass" style={{ padding: 24 }}>
+              <form onSubmit={handleTrackStatus} style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
                 <input
                   type="text"
                   required
                   className="gbs-input"
+                  style={{ flex: 1, minWidth: 200 }}
                   value={lookupId}
                   onChange={(e) => setLookupId(e.target.value)}
                   placeholder="Enter Tenant Code (TNT-xxxx) or Institution ID"
                 />
-                <button type="submit" className="btn btn-primary">Check</button>
+                <button type="submit" className="btn btn-primary">Check Status</button>
               </form>
 
               {lookupErr && <div style={{ color: '#FCA5A5', fontSize: '0.85rem' }}>{lookupErr}</div>}
 
               {lookupResult && (
-                <div style={{ background: 'rgba(6,12,24,0.85)', padding: 16, borderRadius: 10, border: '1px solid rgba(212,175,55,0.28)' }}>
+                <div style={{ background: 'rgba(15,10,14,0.8)', padding: 16, borderRadius: 10, border: '1px solid rgba(212,175,55,0.35)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                     <h3 style={{ margin: 0, color: '#FFFFFF' }}>{lookupResult.name}</h3>
-                    <span className={`badge ${['APPROVED', 'ACTIVE_TRIAL'].includes(lookupResult.onboardingStatus) ? 'badge-success' : lookupResult.onboardingStatus === 'REJECTED' ? 'badge-danger' : 'badge-warning'}`}>
+                    <span className={`badge ${['APPROVED', 'ACTIVE_TRIAL', 'ACTIVE_PAID'].includes(lookupResult.onboardingStatus) ? 'badge-success' : lookupResult.onboardingStatus === 'REJECTED' ? 'badge-danger' : 'badge-warning'}`}>
                       {lookupResult.onboardingStatus}
                     </span>
                   </div>
-                  <div style={{ fontSize: '0.84rem', color: '#CBD5E1', display: 'grid', gap: 4 }}>
+                  <div style={{ fontSize: '0.84rem', color: '#E2E8F0', display: 'grid', gap: 4 }}>
                     <div><strong>Code:</strong> {lookupResult.code} • <strong>ID:</strong> {lookupResult.institutionId}</div>
                     <div><strong>Operational Status:</strong> {lookupResult.status}</div>
-                    <div><strong>Remaining Trial Days:</strong> {lookupResult.daysLeft ?? 90} days</div>
+                    <div>
+                      <strong>Subscription Status:</strong>{' '}
+                      {lookupResult.isLifetime ? 'LIFETIME LICENSE ACTIVE' : `${lookupResult.daysLeft ?? 30} days remaining (${lookupResult.subscriptionPlan || 'TRIAL_1M'})`}
+                    </div>
                     {lookupResult.rejectionReason && (
                       <div style={{ color: '#FCA5A5' }}><strong>Rejection Note:</strong> {lookupResult.rejectionReason}</div>
                     )}
                   </div>
-                  {['APPROVED', 'ACTIVE_TRIAL'].includes(lookupResult.onboardingStatus) && (
+                  {['APPROVED', 'ACTIVE_TRIAL', 'ACTIVE_PAID'].includes(lookupResult.onboardingStatus) && (
                     <Link to="/login/company-owner" className="btn btn-primary" style={{ marginTop: 14 }}>
-                      <CheckCircle2 size={16} /> Proceed to Institution Owner Login
+                      <CheckCircle2 size={16} /> Proceed to Company Owner Sign In
                     </Link>
                   )}
                 </div>
               )}
             </div>
           )}
+
+          <div style={{ marginTop: 14, textAlign: 'center', fontSize: '0.82rem', color: '#F1F5F9' }}>
+            Already registered and approved?{' '}
+            <Link to="/login" style={{ color: '#F4E07B', fontWeight: 700, textDecoration: 'underline' }}>
+              Sign in to any of the 30 GBS Role Portals
+            </Link>
+          </div>
         </div>
       </div>
     </div>

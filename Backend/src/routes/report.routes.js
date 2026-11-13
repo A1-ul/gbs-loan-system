@@ -8,6 +8,9 @@ const { reportSchemas } = require('../validators');
 const router = express.Router();
 
 router.get('/', authenticate, staffAndAbove, reportController.getReportsOverview);
+router.get('/snapshots', authenticate, staffAndAbove, reportController.listSnapshots);
+router.get('/snapshots/:id/export', authenticate, staffAndAbove, reportController.exportSnapshot);
+router.post('/wrap-period', authenticate, staffAndAbove, reportController.wrapPeriodReport);
 router.post('/generate', authenticate, staffAndAbove, validate(reportSchemas.generate), reportController.generate);
 router.get('/loan', authenticate, staffAndAbove, reportController.loanReport);
 router.get('/payment', authenticate, staffAndAbove, reportController.paymentReport);

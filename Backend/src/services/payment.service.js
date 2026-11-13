@@ -1,14 +1,19 @@
 const { prisma } = require('../config/database');
 const momoIntegration = require('../integrations/momo.service');
+const { toCents, fromCents } = require('./loanEngine.service');
 const config = require('../config');
 const logger = require('../utils/logger');
 const { NotFoundError, AppError, ValidationError } = require('../utils/errors');
 const { getRecordProvenance } = require('../config/environments');
 
 async function applyPaymentToLoanAndSchedule(tx, loan, amount) {
-  const newPaid = Number(loan.amountPaid) + amount;
-  const newOutstanding = Math.max(0, Number(loan.totalAmount) - newPaid);
-  const newStatus = newOutstanding === 0 ? 'PAID' : (loan.status === 'DISBURSED' ? 'ONGOING' : loan.status);
+  const amountCents = toCents(amount);
+  const totalAmountCents = toCents(loan.totalAmount);
+  const newPaidCents = toCents(loan.amountPaid) + amountCents;
+  const newOutstandingCents = Math.max(0, totalAmountCents - newPaidCents);
+  const newPaid = fromCents(newPaidCents);
+  const newOutstanding = fromCents(newOutstandingCents);
+  const newStatus = newOutstandingCents === 0 ? 'PAID' : (loan.status === 'DISBURSED' ? 'ONGOING' : loan.status);
 
   await tx.loan.update({
     where: { id: loan.id },
@@ -16,34 +21,36 @@ async function applyPaymentToLoanAndSchedule(tx, loan, amount) {
       amountPaid: newPaid,
       outstandingAmount: newOutstanding,
       status: newStatus,
-      closedAt: newOutstanding === 0 ? new Date() : loan.closedAt,
+      closedAt: newOutstandingCents === 0 ? new Date() : loan.closedAt,
     },
   });
 
-  // Apply payment FIFO across unpaid installments
-  let remaining = amount;
+  // Apply payment FIFO across unpaid installments using exact integer-pesewa precision
+  let remainingCents = amountCents;
   const unpaidSchedules = await tx.repaymentSchedule.findMany({
     where: { loanId: loan.id, isPaid: false },
     orderBy: { installmentNo: 'asc' },
   });
 
   for (const inst of unpaidSchedules) {
-    if (remaining <= 0) break;
-    const dueLeft = Number(inst.totalDue) - Number(inst.amountPaid);
-    const applyAmt = Math.min(remaining, dueLeft);
-    const updatedAmtPaid = Number(inst.amountPaid) + applyAmt;
-    const fullyPaid = updatedAmtPaid >= Number(inst.totalDue) - 0.01;
+    if (remainingCents <= 0) break;
+    const totalDueCents = toCents(inst.totalDue);
+    const alreadyPaidCents = toCents(inst.amountPaid);
+    const dueLeftCents = Math.max(0, totalDueCents - alreadyPaidCents);
+    const applyCents = Math.min(remainingCents, dueLeftCents);
+    const updatedAmtPaidCents = alreadyPaidCents + applyCents;
+    const fullyPaid = updatedAmtPaidCents >= totalDueCents;
 
     await tx.repaymentSchedule.update({
       where: { id: inst.id },
       data: {
-        amountPaid: updatedAmtPaid,
+        amountPaid: fromCents(updatedAmtPaidCents),
         isPaid: fullyPaid,
         paidAt: fullyPaid ? new Date() : null,
       },
     });
 
-    remaining -= applyAmt;
+    remainingCents -= applyCents;
   }
 }
 
@@ -281,16 +288,23 @@ async function getMonthlyTrends(tenantId = null) {
   for (const p of payments) {
     const dt = p.paidAt || p.createdAt;
     const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
-    if (!map[key]) map[key] = { month: key, totalAmount: 0, momo: 0, cash: 0, bankTransfer: 0, count: 0 };
-    const amt = Number(p.amount);
-    map[key].totalAmount += amt;
-    if (p.method === 'MOMO') map[key].momo += amt;
-    else if (p.method === 'CASH') map[key].cash += amt;
-    else map[key].bankTransfer += amt;
+    if (!map[key]) map[key] = { month: key, totalCents: 0, momoCents: 0, cashCents: 0, bankCents: 0, count: 0 };
+    const amtCents = toCents(p.amount);
+    map[key].totalCents += amtCents;
+    if (p.method === 'MOMO') map[key].momoCents += amtCents;
+    else if (p.method === 'CASH') map[key].cashCents += amtCents;
+    else map[key].bankCents += amtCents;
     map[key].count++;
   }
 
-  return Object.values(map);
+  return Object.values(map).map((row) => ({
+    month: row.month,
+    totalAmount: fromCents(row.totalCents),
+    momo: fromCents(row.momoCents),
+    cash: fromCents(row.cashCents),
+    bankTransfer: fromCents(row.bankCents),
+    count: row.count,
+  }));
 }
 
 module.exports = {

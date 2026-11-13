@@ -1,8 +1,25 @@
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const { prisma } = require('../../config/database');
 const logger = require('../../utils/logger');
-const { AppError, NotFoundError, ConflictError, ValidationError } = require('../../utils/errors');
+const { AppError, NotFoundError, ConflictError, ValidationError, AuthorizationError } = require('../../utils/errors');
 const { getRecordProvenance } = require('../../config/environments');
+const { resolveSubscriptionPlan, TENANT_SELECTABLE_PLANS, SUBSCRIPTION_PLANS } = require('./subscriptionPlans');
+
+function buildOnboardingFacialHash(rawImage) {
+  if (!rawImage || typeof rawImage !== 'string') return null;
+  const base64 = rawImage.includes(',') ? rawImage.split(',')[1] : rawImage;
+  const buf = Buffer.from(String(base64 || ''), 'base64');
+  if (buf.length === 0) return null;
+  const bins = new Array(16).fill(0);
+  for (let i = 0; i < buf.length; i++) bins[i % 16] += buf[i] / 255;
+  const norm = Math.sqrt(bins.reduce((s, v) => s + v * v, 0)) || 1;
+  const vector = bins.map((v) => Number((v / norm).toFixed(4)));
+  return JSON.stringify({
+    vector,
+    hash: crypto.createHash('sha256').update(JSON.stringify(vector)).digest('hex'),
+  });
+}
 
 class TenantService {
   /**
@@ -18,6 +35,7 @@ class TenantService {
       region = 'Greater Accra',
       city = 'Accra',
       address,
+      gpsAddress = null,
       latitude = 5.6037,
       longitude = -0.1870,
       registrationNumber,
@@ -28,6 +46,9 @@ class TenantService {
       representativePhone,
       representativeRole = 'COMPANY_OWNER',
       password,
+      logoUrl = null,
+      adminFaceImage = null,
+      faceImageBase64 = null,
       planTier = 'ENTERPRISE',
     } = data;
 
@@ -74,8 +95,13 @@ class TenantService {
           representativeEmail: emailLower,
           representativePhone: phoneNorm,
           representativeRole,
+          logoUrl: logoUrl || null,
+          companyNameUpdated: false,
+          subscriptionPlan: 'TRIAL_1M',
+          subscriptionMonths: 1,
+          isLifetime: false,
           termsAccepted: true,
-          daysLeft: 90,
+          daysLeft: 30,
           ...getRecordProvenance(),
         },
       });
@@ -88,7 +114,7 @@ class TenantService {
           type: 'HEADQUARTERS',
           region,
           city,
-          address: address || `${city}, ${country}`,
+          address: [gpsAddress, address || `${city}, ${country}`].filter(Boolean).join(' • '),
           latitude: parseFloat(latitude) || 5.6037,
           longitude: parseFloat(longitude) || -0.1870,
           geofenceRadius: 500,
@@ -105,7 +131,7 @@ class TenantService {
           branchName: `${organizationName.trim()} HQ`,
           region,
           city,
-          address: address || `${city}, ${country}`,
+          address: [gpsAddress, address || `${city}, ${country}`].filter(Boolean).join(' • '),
           latitude: parseFloat(latitude) || 5.6037,
           longitude: parseFloat(longitude) || -0.1870,
           isHQ: true,
@@ -114,6 +140,7 @@ class TenantService {
       });
 
       const parts = (representativeName || 'Tenant Director').trim().split(/\s+/);
+      const facialHash = buildOnboardingFacialHash(adminFaceImage || faceImageBase64);
       const adminUser = await tx.user.create({
         data: {
           tenantId: tenant.id,
@@ -126,9 +153,27 @@ class TenantService {
           firstName: parts[0] || 'Tenant',
           lastName: parts.slice(1).join(' ') || 'Director',
           address: address || `${city}, ${region}`,
+          gpsAddress: gpsAddress || null,
+          gpsLatitude: parseFloat(latitude) || 5.6037,
+          gpsLongitude: parseFloat(longitude) || -0.1870,
+          facialEnrolled: Boolean(facialHash),
+          facialDescriptorHash: facialHash,
           ...getRecordProvenance(),
         },
       });
+
+      if (facialHash) {
+        await tx.auditLog.create({
+          data: {
+            tenantId: tenant.id,
+            userId: adminUser.id,
+            action: 'FACIAL_VERIFIED',
+            entityType: 'user',
+            entityId: adminUser.id,
+            metadata: { event: 'ONBOARDING_ADMIN_FACE_CAPTURED' },
+          },
+        }).catch(() => {});
+      }
 
       await tx.securityAlert.create({
         data: {
@@ -154,7 +199,7 @@ class TenantService {
       representativeEmail: created.tenant.representativeEmail,
       status: created.tenant.status,
       onboardingStatus: created.tenant.onboardingStatus,
-      message: 'Onboarding application submitted cleanly. Your tenant requires Lead Developer approval before login access is activated.',
+      message: 'Onboarding application submitted cleanly. Once Lead Developer Authority approves your institution, your 1-Month Free Trial (30 days) begins immediately and you may create staff accounts.',
     };
   }
 
@@ -201,8 +246,11 @@ class TenantService {
         id: true,
         code: true,
         name: true,
+        logoUrl: true,
         city: true,
         region: true,
+        subscriptionPlan: true,
+        isLifetime: true,
       },
       orderBy: { name: 'asc' },
     });
@@ -238,13 +286,13 @@ class TenantService {
       orderBy: { createdAt: 'desc' },
     });
 
-    // Compute live days left & auto-evaluate 90-day cycle
+    // Compute live days left & auto-evaluate subscription cycle
     const enriched = await Promise.all(
       tenants.map(async (t) => {
-        let daysLeft = t.daysLeft;
+        let daysLeft = t.isLifetime ? 36500 : t.daysLeft;
         let status = t.status;
 
-        if (t.subExpiry) {
+        if (!t.isLifetime && t.subExpiry) {
           const diffMs = new Date(t.subExpiry).getTime() - now.getTime();
           daysLeft = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
 
@@ -253,7 +301,7 @@ class TenantService {
             await prisma.tenant.update({
               where: { id: t.id },
               data: { status, daysLeft: 0 },
-            }).catch(() => {});
+            }).catch(() => { });
           }
         }
 
@@ -262,6 +310,8 @@ class TenantService {
           code: t.code,
           institutionId: t.institutionId,
           name: t.name,
+          logoUrl: t.logoUrl || null,
+          companyNameUpdated: Boolean(t.companyNameUpdated),
           domain: t.domain,
           institutionType: t.institutionType,
           location: t.location || `${t.city || 'Accra'}, ${t.region || 'Ghana'}`,
@@ -270,6 +320,9 @@ class TenantService {
           latitude: t.latitude,
           longitude: t.longitude,
           plan: t.planTier,
+          subscriptionPlan: t.subscriptionPlan || 'TRIAL_1M',
+          subscriptionMonths: t.subscriptionMonths,
+          isLifetime: Boolean(t.isLifetime),
           contactEmail: t.contactEmail,
           contactPhone: t.contactPhone,
           representativeName: t.representativeName,
@@ -314,26 +367,33 @@ class TenantService {
   }
 
   /**
-   * Create a new tenant with a default 90-day subscription cycle
+   * Create a new tenant with a default 30-day 1-month trial cycle (or specified plan)
    */
   async createTenant(data) {
     const code = data.code || `TNT-${Math.floor(100 + Math.random() * 900)}`;
     const startDate = data.subStart ? new Date(data.subStart) : new Date();
-    const cycleDays = parseInt(data.cycleDays, 10) || 90;
-    const expiryDate = data.subExpiry
-      ? new Date(data.subExpiry)
-      : new Date(startDate.getTime() + cycleDays * 24 * 60 * 60 * 1000);
+    const resolvedPlan = resolveSubscriptionPlan(data.planCode || data.cycleDays, 30);
+    const expiryDate = resolvedPlan.isLifetime
+      ? null
+      : data.subExpiry
+        ? new Date(data.subExpiry)
+        : new Date(startDate.getTime() + resolvedPlan.days * 24 * 60 * 60 * 1000);
 
-    const diffMs = expiryDate.getTime() - Date.now();
-    const daysLeft = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+    const diffMs = expiryDate ? expiryDate.getTime() - Date.now() : 0;
+    const daysLeft = resolvedPlan.isLifetime ? 36500 : Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
 
     const tenant = await prisma.tenant.create({
       data: {
         code,
         name: data.name || 'New Financial Tenant',
         domain: data.domain || null,
+        logoUrl: data.logoUrl || null,
+        companyNameUpdated: Boolean(data.companyNameUpdated),
         status: data.status || 'ACTIVE',
-        planTier: data.plan || data.planTier || 'Enterprise',
+        planTier: data.plan || data.planTier || resolvedPlan.tier || 'Enterprise',
+        subscriptionPlan: resolvedPlan.code,
+        subscriptionMonths: resolvedPlan.months,
+        isLifetime: resolvedPlan.isLifetime,
         location: data.location || 'Accra, Ghana',
         contactEmail: data.contactEmail || null,
         contactPhone: data.contactPhone || null,
@@ -350,10 +410,10 @@ class TenantService {
     await prisma.tenantSubscription.create({
       data: {
         tenantId: tenant.id,
-        planName: tenant.planTier,
+        planName: resolvedPlan.label || tenant.planTier,
         status: tenant.status,
         startDate,
-        endDate: expiryDate,
+        endDate: expiryDate || new Date(startDate.getTime() + 36500 * 24 * 60 * 60 * 1000),
         gracePeriodDays: 7,
         autoRenew: true,
       },
@@ -428,20 +488,25 @@ class TenantService {
   }
 
   /**
-   * Unlock / Renew Tenant Subscription (+90 Days)
+   * Unlock / Renew Tenant Subscription (+30 Days / Selected Plan)
    */
-  async renewTenantSubscription(id, extensionDays = 90) {
+  async renewTenantSubscription(id, extensionDaysOrPlan = 30) {
     const tenant = await this.getTenantById(id);
     const now = new Date();
-    const newExpiry = new Date(now.getTime() + extensionDays * 24 * 60 * 60 * 1000);
+    const plan = resolveSubscriptionPlan(extensionDaysOrPlan, 30);
+    const newExpiry = plan.subExpiry;
 
     const updated = await prisma.tenant.update({
       where: { id: tenant.id },
       data: {
         status: 'ACTIVE',
+        onboardingStatus: plan.code === 'TRIAL_1M' ? 'ACTIVE_TRIAL' : 'ACTIVE_PAID',
+        subscriptionPlan: plan.code,
+        subscriptionMonths: plan.months,
+        isLifetime: plan.isLifetime,
         subStart: now,
         subExpiry: newExpiry,
-        daysLeft: extensionDays,
+        daysLeft: plan.days,
         alertSent: false,
       },
     });
@@ -450,21 +515,195 @@ class TenantService {
       where: { tenantId: tenant.id },
       update: {
         status: 'ACTIVE',
-        endDate: newExpiry,
+        planName: plan.label,
+        endDate: newExpiry || new Date(now.getTime() + 36500 * 24 * 60 * 60 * 1000),
         lastPaymentAt: now,
       },
       create: {
         tenantId: tenant.id,
-        planName: tenant.planTier,
+        planName: plan.label,
         status: 'ACTIVE',
         startDate: now,
-        endDate: newExpiry,
+        endDate: newExpiry || new Date(now.getTime() + 36500 * 24 * 60 * 60 * 1000),
         lastPaymentAt: now,
       },
     });
 
-    logger.info(`Tenant subscription renewed: ${tenant.name} for ${extensionDays} days until ${newExpiry.toISOString()}`);
+    logger.info(`Tenant subscription renewed: ${tenant.name} (${plan.label})`);
     return updated;
+  }
+
+  getSubscriptionCatalog() {
+    return {
+      trial: SUBSCRIPTION_PLANS.TRIAL_1M,
+      plans: TENANT_SELECTABLE_PLANS,
+    };
+  }
+
+  async getMyTenantProfile(tenantId) {
+    if (!tenantId) return null;
+    const tenant = await this.getTenantById(tenantId);
+    return {
+      id: tenant.id,
+      code: tenant.code,
+      institutionId: tenant.institutionId,
+      name: tenant.name,
+      logoUrl: tenant.logoUrl || null,
+      companyNameUpdated: Boolean(tenant.companyNameUpdated),
+      institutionType: tenant.institutionType,
+      region: tenant.region,
+      city: tenant.city,
+      location: tenant.location,
+      contactEmail: tenant.contactEmail,
+      contactPhone: tenant.contactPhone,
+      subscriptionPlan: tenant.subscriptionPlan || 'TRIAL_1M',
+      subscriptionMonths: tenant.subscriptionMonths,
+      isLifetime: Boolean(tenant.isLifetime),
+      subStart: tenant.subStart,
+      subExpiry: tenant.subExpiry,
+      daysLeft: tenant.daysLeft,
+      status: tenant.status,
+      onboardingStatus: tenant.onboardingStatus,
+    };
+  }
+
+  async updateBranding(tenantId, user, data = {}, uploadedFile = null) {
+    if (!tenantId) throw new ValidationError('Active institutional tenant context is required.');
+    const role = String(user?.role || '').toUpperCase();
+    const allowed = ['SUPER_ADMIN', 'COMPANY_OWNER', 'BRANCH_MANAGER', 'OPERATIONS_MANAGER', 'MANAGER', 'EXECUTIVE_MANAGEMENT'];
+    if (!allowed.includes(role)) {
+      throw new AuthorizationError('Only Company Owner or Branch Manager may update company branding and logo.');
+    }
+
+    const existing = await this.getTenantById(tenantId);
+    const trimmedName = data.name ? String(data.name).trim() : existing.name;
+    if (!trimmedName || trimmedName.length < 2) {
+      throw new ValidationError('Company name must be at least 2 characters.');
+    }
+
+    let resolvedLogoUrl = existing.logoUrl;
+    if (uploadedFile) {
+      if (uploadedFile.buffer && uploadedFile.mimetype?.startsWith('image/')) {
+        resolvedLogoUrl = `data:${uploadedFile.mimetype};base64,${uploadedFile.buffer.toString('base64')}`;
+      } else if (uploadedFile.path) {
+        const fs = require('fs');
+        const mime = uploadedFile.mimetype || 'image/png';
+        if (mime.startsWith('image/') && fs.existsSync(uploadedFile.path)) {
+          const buf = fs.readFileSync(uploadedFile.path);
+          if (buf.length <= 1500000) {
+            resolvedLogoUrl = `data:${mime};base64,${buf.toString('base64')}`;
+          }
+        }
+        if (!resolvedLogoUrl && uploadedFile.filename) {
+          resolvedLogoUrl = `/uploads/${uploadedFile.filename}`;
+        }
+      }
+    } else if (data.logoUrl !== undefined) {
+      const candidate = String(data.logoUrl || '').trim();
+      if (!candidate) {
+        resolvedLogoUrl = null;
+      } else if (candidate.startsWith('data:image/') || /^https?:\/\//i.test(candidate) || candidate.startsWith('/uploads/')) {
+        resolvedLogoUrl = candidate;
+      } else {
+        throw new ValidationError('Logo must be a valid image upload, https URL, or base64 image data URI.');
+      }
+    }
+
+    const updated = await prisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        name: trimmedName,
+        logoUrl: resolvedLogoUrl,
+        companyNameUpdated: Boolean(data.name ? true : existing.companyNameUpdated),
+        ...(data.location ? { location: String(data.location).trim() } : {}),
+        ...(data.city ? { city: String(data.city).trim() } : {}),
+        ...(data.region ? { region: String(data.region).trim() } : {}),
+        ...(data.contactEmail ? { contactEmail: String(data.contactEmail).trim() } : {}),
+        ...(data.contactPhone ? { contactPhone: String(data.contactPhone).trim() } : {}),
+      },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        tenantId,
+        userId: user.id,
+        action: 'COMPANY_BRANDING_UPDATED',
+        entityType: 'tenant',
+        entityId: tenantId,
+        oldValues: { name: existing.name, logoUrl: existing.logoUrl ? '[image]' : null },
+        newValues: { name: updated.name, logoUpdated: Boolean(updated.logoUrl), companyNameUpdated: updated.companyNameUpdated },
+      },
+    }).catch(() => { });
+
+    return this.getMyTenantProfile(tenantId);
+  }
+
+  async chooseSubscriptionPlan(tenantId, user, { planCode } = {}) {
+    if (!tenantId) throw new ValidationError('Tenant context required');
+    const role = String(user?.role || '').toUpperCase();
+    const allowed = ['SUPER_ADMIN', 'COMPANY_OWNER', 'BRANCH_MANAGER', 'FINANCE_MANAGER', 'EXECUTIVE_MANAGEMENT'];
+    if (!allowed.includes(role)) {
+      throw new AuthorizationError('Only Company Owner or Executive/Branch Manager can choose the institutional subscription plan.');
+    }
+
+    const allowedCodes = new Set(['PLAN_3M', 'PLAN_6M', 'PLAN_9M', 'PLAN_12M', 'LIFETIME', '3M', '6M', '9M', '12M']);
+    const normalized = String(planCode || '').trim().toUpperCase();
+    if (!allowedCodes.has(normalized)) {
+      throw new ValidationError('Select a valid post-trial subscription plan: 3 Months (PLAN_3M), 6 Months (PLAN_6M), 9 Months (PLAN_9M), 12 Months (PLAN_12M), or Lifetime (LIFETIME).');
+    }
+
+    const plan = resolveSubscriptionPlan(normalized, 90);
+    const now = new Date();
+    const updated = await prisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        status: 'ACTIVE',
+        onboardingStatus: 'ACTIVE_PAID',
+        planTier: plan.tier,
+        subscriptionPlan: plan.code,
+        subscriptionMonths: plan.months,
+        isLifetime: plan.isLifetime,
+        subStart: now,
+        subExpiry: plan.subExpiry,
+        daysLeft: plan.days,
+        alertSent: false,
+      },
+    });
+
+    await prisma.tenantSubscription.upsert({
+      where: { tenantId },
+      update: {
+        status: 'ACTIVE',
+        planName: plan.label,
+        startDate: now,
+        endDate: plan.subExpiry || new Date(now.getTime() + 36500 * 24 * 60 * 60 * 1000),
+        lastPaymentAt: now,
+      },
+      create: {
+        tenantId,
+        planName: plan.label,
+        status: 'ACTIVE',
+        startDate: now,
+        endDate: plan.subExpiry || new Date(now.getTime() + 36500 * 24 * 60 * 60 * 1000),
+        lastPaymentAt: now,
+      },
+    });
+
+    await prisma.tenantMessage.create({
+      data: {
+        tenantId,
+        senderType: 'SYSTEM',
+        senderName: 'GBS Billing & Licensing',
+        subject: `Subscription Activated: ${plan.label}`,
+        body: `Your institution ${updated.name} activated ${plan.label}. ${plan.isLifetime ? 'Lifetime access enabled with no expiration.' : `Active until ${plan.subExpiry.toISOString().split('T')[0]}.`}`,
+        priority: 'NORMAL',
+      },
+    }).catch(() => { });
+
+    return {
+      plan,
+      tenant: await this.getMyTenantProfile(tenantId),
+    };
   }
 
   /**

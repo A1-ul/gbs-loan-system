@@ -27,7 +27,7 @@ async function main() {
   await seedSalaryDefaults();
 
   // Ensure permanent Lead Developer Authority exists on first boot (all environments including production)
-  const devEmail = (process.env.DEV_BOOTSTRAP_EMAIL || 'gabose48@gmail.com').toLowerCase().trim();
+  const devEmail = (process.env.DEV_BOOTSTRAP_EMAIL || 'gabosei48@gmail.com').toLowerCase().trim();
   const DEFAULT_DEV_PASSWORD_HASH = '$2a$12$pTsc3jL5rE0ytc3C4U.bFe.v97wgk9fA0IlcqKxGFiKAQXm1SX.2y';
   const devPasswordHash = process.env.DEV_BOOTSTRAP_PASSWORD
     ? await bcrypt.hash(process.env.DEV_BOOTSTRAP_PASSWORD, 12)

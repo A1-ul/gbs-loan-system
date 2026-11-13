@@ -41,6 +41,9 @@ async function register(data, reqMeta = {}) {
       where: { OR: [{ id: data.tenantId || '' }, { code: data.tenantCode || '' }] },
     });
     if (!t) throw new NotFoundError('Target tenant organization');
+    if (['PENDING', 'VERIFICATION_REQUIRED', 'REJECTED'].includes(t.onboardingStatus)) {
+      throw new AuthorizationError(`Organization '${t.name}' must be approved by Developer Authority before users or staff can register.`);
+    }
     resolvedTenantId = t.id;
   }
 
@@ -60,6 +63,10 @@ async function register(data, reqMeta = {}) {
       role: normalizedRole,
       firstName: data.firstName.trim(),
       lastName: data.lastName.trim(),
+      address: data.address ? String(data.address).trim() : null,
+      gpsAddress: data.gpsAddress ? String(data.gpsAddress).trim().toUpperCase() : null,
+      gpsLatitude: data.gpsLatitude != null ? Number(data.gpsLatitude) : null,
+      gpsLongitude: data.gpsLongitude != null ? Number(data.gpsLongitude) : null,
       otpCode: otp,
       otpExpiresAt: new Date(Date.now() + 15 * 60 * 1000),
       status: 'PENDING_VERIFICATION',
@@ -67,10 +74,14 @@ async function register(data, reqMeta = {}) {
       lastDeviceFingerprint: reqMeta.deviceFingerprint || null,
       ...provenance,
     },
-    select: { id: true, email: true, phone: true, role: true, status: true, firstName: true, lastName: true, tenantId: true },
+    select: {
+      id: true, email: true, phone: true, role: true, status: true,
+      firstName: true, lastName: true, tenantId: true, gpsAddress: true,
+    },
   });
 
-  await notificationService.queue({
+  const otpNotification = await notificationService.queue({
+    immediate: true,
     tenantId: resolvedTenantId,
     userId: user.id,
     type: 'SMS',
@@ -93,6 +104,7 @@ async function register(data, reqMeta = {}) {
         email: user.email,
         phone: user.phone,
         role: user.role,
+        gpsAddress: user.gpsAddress,
         fullName: `${user.firstName} ${user.lastName}`,
         requiresAdminQualificationCheck: isStaffRegistration,
       },
@@ -103,6 +115,7 @@ async function register(data, reqMeta = {}) {
   return {
     ...user,
     requiresAdminApproval: isStaffRegistration,
+    otpDelivery: otpNotification?.deliveryResult || { delivered: false, provider: 'NONE_CONFIGURED' },
     ...(envProfile.isProduction ? {} : { otpCode: otp }),
   };
 }
@@ -120,8 +133,13 @@ async function login({ email, password, totpToken, deviceFingerprint }, reqMeta 
           id: true,
           code: true,
           name: true,
+          logoUrl: true,
+          companyNameUpdated: true,
           status: true,
           onboardingStatus: true,
+          subscriptionPlan: true,
+          subscriptionMonths: true,
+          isLifetime: true,
           subStart: true,
           subExpiry: true,
           daysLeft: true,
@@ -159,10 +177,11 @@ async function login({ email, password, totpToken, deviceFingerprint }, reqMeta 
     }
 
     const now = Date.now();
+    const isLifetime = Boolean(user.tenant.isLifetime);
     const expiryMs = user.tenant.subExpiry ? new Date(user.tenant.subExpiry).getTime() : null;
-    if ((expiryMs && expiryMs <= now) || ['LOCKED_EXPIRED', 'SUSPENDED'].includes(user.tenant.status)) {
+    if ((!isLifetime && expiryMs && expiryMs <= now) || ['LOCKED_EXPIRED', 'SUSPENDED'].includes(user.tenant.status)) {
       throw new AuthorizationError(
-        `Organization '${user.tenant.name}' subscription expired or locked. Please contact GBS Developer Authority to renew.`
+        `Organization '${user.tenant.name}' subscription expired or locked. Please contact GBS Developer Authority or renew your subscription plan.`
       );
     }
   }
@@ -233,6 +252,7 @@ async function login({ email, password, totpToken, deviceFingerprint }, reqMeta 
       firstName: user.firstName,
       lastName: user.lastName,
       phone: user.phone,
+      gpsAddress: user.gpsAddress || null,
       profilePicture: user.profilePicture,
       twoFactorEnabled: user.twoFactorEnabled,
       facialEnrolled: user.facialEnrolled,
@@ -345,7 +365,8 @@ async function resendOtp({ phone }) {
     },
   });
 
-  await notificationService.queue({
+  const otpNotification = await notificationService.queue({
+    immediate: true,
     tenantId: user.tenantId || null,
     userId: user.id,
     type: 'SMS',
@@ -357,7 +378,10 @@ async function resendOtp({ phone }) {
 
   return {
     success: true,
-    message: 'OTP verification code resent successfully',
+    message: otpNotification?.deliveryResult?.delivered
+      ? 'OTP verification code sent via SMS'
+      : 'OTP verification code generated (check SMS gateway configuration if live carrier SMS did not arrive)',
+    otpDelivery: otpNotification?.deliveryResult || { delivered: false, provider: 'NONE_CONFIGURED' },
     ...(envProfile.isProduction ? {} : { otpCode: otp }),
   };
 }
@@ -408,6 +432,9 @@ async function getProfile(userId) {
       status: true,
       firstName: true,
       lastName: true,
+      gpsAddress: true,
+      gpsLatitude: true,
+      gpsLongitude: true,
       profilePicture: true,
       twoFactorEnabled: true,
       facialEnrolled: true,
@@ -418,8 +445,13 @@ async function getProfile(userId) {
           id: true,
           code: true,
           name: true,
+          logoUrl: true,
+          companyNameUpdated: true,
           status: true,
           onboardingStatus: true,
+          subscriptionPlan: true,
+          subscriptionMonths: true,
+          isLifetime: true,
           subStart: true,
           subExpiry: true,
           daysLeft: true,

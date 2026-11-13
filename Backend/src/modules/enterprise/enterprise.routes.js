@@ -6,6 +6,9 @@ const { upload } = require('../../middleware/upload');
 
 const router = express.Router();
 
+// Public QR / Token Verified Mobile CCTV Stream Access (mounted before JWT middleware)
+router.get('/cctv/mobile-access', ctrl.verifyCctvMobileAccess);
+
 router.use(authenticate);
 
 // Loan Products & Collateral
@@ -47,5 +50,17 @@ router.post('/hr/payroll/generate', authorize('SUPER_ADMIN', 'COMPANY_OWNER', 'H
 
 // Live Database Report Exports (CSV, XLSX, PDF)
 router.get('/reports/export/:type', staffAndAbove, ctrl.exportReport);
+
+// Accountant Ledger Auditing & Company Owner Sign-Off
+router.get('/audits', authorize('SUPER_ADMIN', 'COMPANY_OWNER', 'BOARD_EXECUTIVE', 'EXECUTIVE_MANAGEMENT', 'REGIONAL_MANAGER', 'BRANCH_MANAGER', 'FINANCE_MANAGER', 'ACCOUNTANT', 'TREASURY', 'INTERNAL_AUDIT', 'COMPLIANCE'), ctrl.getAudits);
+router.post('/audits/reconcile', authorize('SUPER_ADMIN', 'COMPANY_OWNER', 'BOARD_EXECUTIVE', 'EXECUTIVE_MANAGEMENT', 'FINANCE_MANAGER', 'ACCOUNTANT', 'TREASURY', 'INTERNAL_AUDIT'), ctrl.runAuditReconciliation);
+router.put('/audits/:id/review', authorize('SUPER_ADMIN', 'COMPANY_OWNER', 'BOARD_EXECUTIVE', 'EXECUTIVE_MANAGEMENT'), ctrl.reviewAudit);
+
+// CCTV Branch & Vault Camera Linking (Company Owner Mobile Device)
+router.get('/cctv', managementAndAbove, ctrl.getCctvCameras);
+router.post('/cctv', managementAndAbove, ctrl.registerCctvCamera);
+router.put('/cctv/:id/toggle', managementAndAbove, ctrl.toggleCctvCamera);
+router.post('/cctv/:id/regenerate', managementAndAbove, ctrl.regenerateCctvLink);
+router.delete('/cctv/:id', managementAndAbove, ctrl.deleteCctvCamera);
 
 module.exports = router;

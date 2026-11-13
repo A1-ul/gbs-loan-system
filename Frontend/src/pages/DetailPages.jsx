@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import {
   CheckCircle2, XCircle, Upload, RotateCcw, ShieldCheck, UserX,
@@ -7,6 +7,7 @@ import {
 import api, { sessionStore } from '../services/api';
 import { BackButtonBar } from '../context/NavigationContext';
 import VoiceChallengePanel from '../components/VoiceChallengePanel';
+import FaceScanner from '../components/biometric/FaceScanner';
 import { ROLES_META } from '../constants/rolesMeta';
 
 const formatGHS = (n) =>
@@ -162,13 +163,31 @@ export function LoanDetailPage() {
             </div>
 
             <div className="glass-panel" style={{ padding: 20 }}>
-              <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>Approval &amp; Audit History ({workflow.length})</h3>
+              <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>Approval &amp; Loan Process Audit History ({workflow.length})</h3>
               {workflow.length === 0 ? (
                 <p style={{ fontSize: '0.84rem', color: '#94A3B8' }}>No workflow transition entries logged yet.</p>
               ) : (
                 workflow.map((w, i) => (
-                  <div key={w.id || i} style={{ padding: 10, borderRadius: 8, background: 'rgba(6,12,24,0.8)', marginBottom: 8, fontSize: '0.8rem' }}>
-                    <strong>{w.action}</strong> — {w.notes || w.newStatus} ({new Date(w.createdAt).toLocaleString()})
+                  <div key={w.id || i} style={{ padding: 12, borderRadius: 8, background: 'rgba(6,12,24,0.8)', border: '1px solid rgba(212,175,55,0.2)', marginBottom: 10, fontSize: '0.8rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, marginBottom: 4 }}>
+                      <strong style={{ color: '#F4E07B' }}>
+                        {w.fromStatus ? `${w.fromStatus} → ${w.toStatus}` : (w.toStatus || w.action || 'UPDATED')}
+                      </strong>
+                      <span style={{ color: '#94A3B8', fontSize: '0.73rem' }}>{new Date(w.createdAt).toLocaleString()}</span>
+                    </div>
+                    <div style={{ color: '#CBD5E1', marginBottom: 4 }}>
+                      Actor: <strong>{w.performedByName || w.performedBy || 'Staff User'}</strong>
+                      {w.performedByRole ? ` (${w.performedByRole})` : ''}
+                    </div>
+                    <div style={{ color: '#94A3B8' }}>{w.notes || 'Workflow state saved for compliance audit'}</div>
+                    {w.auditSnapshot && (
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6, fontSize: '0.72rem', color: '#00F2FE' }}>
+                        <span>Principal: {formatGHS(w.auditSnapshot.principalAmount)}</span>
+                        <span>• Total: {formatGHS(w.auditSnapshot.totalAmount)}</span>
+                        <span>• Paid: {formatGHS(w.auditSnapshot.amountPaid)}</span>
+                        <span>• Balance: {formatGHS(w.auditSnapshot.outstandingAmount)}</span>
+                      </div>
+                    )}
                   </div>
                 ))
               )}
@@ -266,8 +285,12 @@ export function MemberDetailPage() {
 
             <div style={{ fontSize: '0.84rem', color: '#CBD5E1', display: 'grid', gap: 6, marginBottom: 16 }}>
               <div><strong>Ghana Card:</strong> {member.ghanaCardNumber || 'Not Provided'}</div>
-              <div><strong>Address:</strong> {member.address || 'Not Provided'}</div>
+              <div><strong>GPS Digital Address:</strong> {member.gpsAddress || member.user?.gpsAddress || 'Not Provided'}</div>
+              <div><strong>Physical Address:</strong> {member.address || 'Not Provided'}</div>
               <div><strong>Occupation:</strong> {member.occupation || 'N/A'}</div>
+              {member.isHidden && (
+                <div><span className="badge badge-danger">HIDDEN RECORD (Searchable by Mobile or GPS Address)</span></div>
+              )}
             </div>
 
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -438,6 +461,14 @@ export function GuarantorDetailPage() {
       />
       {msg && <div className="glass-panel" style={{ padding: 12, marginBottom: 14, color: msg.ok ? '#34D399' : '#FCA5A5' }}>{msg.text}</div>}
       <div className="glass-panel" style={{ padding: 20 }}>
+        {guarantor && (
+          <div style={{ display: 'grid', gap: 6, fontSize: '0.84rem', color: '#CBD5E1', marginBottom: 14, paddingBottom: 12, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+            <div><strong>Phone:</strong> {guarantor.user?.phone || 'N/A'} • <strong>Email:</strong> {guarantor.user?.email || 'N/A'}</div>
+            <div><strong>GPS Digital Address:</strong> {guarantor.gpsAddress || guarantor.user?.gpsAddress || 'Not Provided'}</div>
+            <div><strong>Physical Address:</strong> {guarantor.address || guarantor.user?.address || 'Not Provided'}</div>
+            {guarantor.isHidden && <div><span className="badge badge-danger">HIDDEN GUARANTOR (Locatable by Mobile or GPS Address)</span></div>}
+          </div>
+        )}
         <button type="button" className="btn btn-primary" onClick={signAgreement} style={{ marginBottom: 16 }}>
           Sign Digital Guarantor Agreement
         </button>
@@ -709,6 +740,38 @@ export function DataMigrationPage() {
       />
       {msg && <div className="glass-panel" style={{ padding: 12, marginBottom: 14, color: msg.ok ? '#34D399' : '#FCA5A5' }}>{msg.text}</div>}
 
+      {/* Step-by-Step Institutional Data Migration Guide for Admins & Branch Managers */}
+      <div className="glass-panel" style={{ padding: 18, marginBottom: 18, borderColor: 'rgba(212,175,55,0.35)' }}>
+        <h3 style={{ margin: '0 0 10px', color: '#D4AF37', fontSize: '1rem' }}>
+          Step-by-Step Guide: Migrating Institutional Data Onto GBS Loan System
+        </h3>
+        <div className="gbs-grid-4" style={{ gap: 10 }}>
+          {[
+            {
+              step: 'Step 1: Prepare Sheet',
+              detail: 'Export your legacy records (.xlsx, .csv, or .json) including First Name, Last Name, Phone (+233...), and GPS Digital Address.',
+            },
+            {
+              step: 'Step 2: Choose Entity',
+              detail: 'Select Borrowers/Members, Active/Historical Loans, or Repayment Ledger below, then upload your spreadsheet.',
+            },
+            {
+              step: 'Step 3: Review Preview',
+              detail: 'Verify mapped columns, phone numbers, monetary amounts, and duplicate-detection preview before committing.',
+            },
+            {
+              step: 'Step 4: Commit / Rollback',
+              detail: 'Click Commit Transactional Import to save to PostgreSQL; use Atomic Rollback on any job if corrections are needed.',
+            },
+          ].map((item) => (
+            <div key={item.step} style={{ padding: 12, borderRadius: 10, background: 'rgba(6,12,24,0.75)', border: '1px solid rgba(0,242,254,0.18)' }}>
+              <div style={{ fontWeight: 700, fontSize: '0.82rem', color: '#00F2FE', marginBottom: 4 }}>{item.step}</div>
+              <div style={{ fontSize: '0.76rem', color: '#CBD5E1', lineHeight: 1.4 }}>{item.detail}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="gbs-grid-2">
         <div className="glass-panel" style={{ padding: 20 }}>
           <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>1. Upload Legacy Workbook</h3>
@@ -770,8 +833,6 @@ export function ProfileSecurityPage() {
   const [totpSetup, setTotpSetup] = useState(null);
   const [totpVerify, setTotpVerify] = useState('');
   const [faceMsg, setFaceMsg] = useState(null);
-  const videoRef = useRef(null);
-  const [camActive, setCamActive] = useState(false);
 
   const setup2FA = async () => {
     const res = await api.post('/auth/2fa/setup');
@@ -783,48 +844,6 @@ export function ProfileSecurityPage() {
     await api.post('/auth/2fa/enable', { totpToken: totpVerify });
     setFaceMsg({ ok: true, text: '2FA TOTP Security Enabled!' });
     setTotpSetup(null);
-  };
-
-  const startCamera = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      if (videoRef.current) videoRef.current.srcObject = stream;
-      setCamActive(true);
-    } catch (err) {
-      setFaceMsg({ ok: false, text: `Camera unavailable (${err.message}). Use facial image upload below.` });
-    }
-  };
-
-  const captureAndSubmitFace = async (endpoint) => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 320;
-    canvas.height = 240;
-    const ctx = canvas.getContext('2d');
-    if (!videoRef.current) return;
-    ctx.drawImage(videoRef.current, 0, 0, 320, 240);
-    const b64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
-    try {
-      const res = await api.post(`/facial-recognition/${endpoint}`, { imageBase64: b64, livenessConfirmed: true });
-      setFaceMsg({ ok: true, text: res.data?.message || 'Facial biometric operation succeeded!' });
-    } catch (err) {
-      setFaceMsg({ ok: false, text: err.response?.data?.message || 'Facial scan failed' });
-    }
-  };
-
-  const handleFaceFileUpload = async (e, endpoint) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      const b64 = String(reader.result || '').split(',')[1];
-      try {
-        const res = await api.post(`/facial-recognition/${endpoint}`, { imageBase64: b64, livenessConfirmed: true });
-        setFaceMsg({ ok: true, text: res.data?.message || 'Facial biometric saved!' });
-      } catch (err) {
-        setFaceMsg({ ok: false, text: err.response?.data?.message || 'Facial upload failed' });
-      }
-    };
-    reader.readAsDataURL(file);
   };
 
   return (
@@ -841,23 +860,13 @@ export function ProfileSecurityPage() {
         <VoiceChallengePanel mode="enroll" expectedNameHint={`${user?.firstName || ''} ${user?.lastName || ''}`.trim()} />
 
         <div className="glass-panel" style={{ padding: 20 }}>
-          <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}><Camera size={16} /> Facial Biometric &amp; 2FA TOTP Security</h3>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-            <button type="button" className="btn btn-secondary" onClick={startCamera}>Start Webcam</button>
-            {camActive && (
-              <>
-                <button type="button" className="btn btn-primary" onClick={() => captureAndSubmitFace('enroll')}>Enroll Face Scan</button>
-                <button type="button" className="btn btn-secondary" onClick={() => captureAndSubmitFace('verify')}>Verify Face Scan</button>
-              </>
-            )}
-            <label className="btn btn-secondary" style={{ cursor: 'pointer' }}>
-              Upload Selfie Enroll
-              <input type="file" accept="image/*" onChange={(e) => handleFaceFileUpload(e, 'enroll')} style={{ display: 'none' }} />
-            </label>
-          </div>
-          {camActive && <video ref={videoRef} autoPlay playsInline style={{ width: '100%', borderRadius: 10, border: '1px solid rgba(0,242,254,0.35)', marginBottom: 12 }} />}
+          <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}><Camera size={16} /> Facial Biometric Scanner &amp; 2FA TOTP Security</h3>
+          <FaceScanner
+            mode="both"
+            onSuccess={(data) => setFaceMsg({ ok: true, text: data?.message || 'Facial biometric scanner verification completed!' })}
+          />
 
-          <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid rgba(212,175,55,0.2)' }}>
+          <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid rgba(212,175,55,0.2)' }}>
             <button type="button" className="btn btn-secondary" onClick={setup2FA}><KeyRound size={15} /> Setup Authenticator 2FA</button>
             {totpSetup && (
               <form onSubmit={enable2FA} style={{ marginTop: 12 }}>

@@ -2,7 +2,14 @@ const { prisma } = require('../config/database');
 const { verifyAccessToken } = require('../utils/jwt');
 const { AuthenticationError, AppError } = require('../utils/errors');
 
-const SAFE_LOCKED_PATHS = ['/auth/logout', '/tenants/my-status', '/notifications'];
+const SAFE_LOCKED_PATHS = [
+  '/auth/logout',
+  '/tenants/my-status',
+  '/tenants/my/countdown',
+  '/tenants/my/subscription',
+  '/tenants/subscription-plans',
+  '/notifications',
+];
 
 async function authenticate(req, res, next) {
   try {
@@ -57,8 +64,13 @@ async function authenticate(req, res, next) {
             id: true,
             code: true,
             name: true,
+            logoUrl: true,
+            companyNameUpdated: true,
             status: true,
             onboardingStatus: true,
+            subscriptionPlan: true,
+            subscriptionMonths: true,
+            isLifetime: true,
             subExpiry: true,
             daysLeft: true,
           },
@@ -90,8 +102,9 @@ async function authenticate(req, res, next) {
       }
 
       const now = Date.now();
+      const isLifetime = Boolean(user.tenant.isLifetime);
       const expiryMs = user.tenant.subExpiry ? new Date(user.tenant.subExpiry).getTime() : null;
-      const isExpired = expiryMs !== null && expiryMs <= now;
+      const isExpired = !isLifetime && expiryMs !== null && expiryMs <= now;
       if (
         isExpired ||
         ['LOCKED_EXPIRED', 'SUSPENDED', 'REJECTED'].includes(user.tenant.status) ||

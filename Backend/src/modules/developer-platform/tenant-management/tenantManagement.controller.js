@@ -65,9 +65,10 @@ const lockTenant = async (req, res, next) => {
 
 const unlockTenant = async (req, res, next) => {
   try {
+    const planOrDays = req.body?.planCode || parseInt(req.body?.extensionDays, 10) || 30;
     const result = await service.unlockTenant(
       req.params.id,
-      parseInt(req.body?.extensionDays, 10) || 90,
+      planOrDays,
       req.body?.note || 'Developer authorized unlock',
       req.developer?.id || null
     );
@@ -88,9 +89,10 @@ const bulkLockTenants = async (req, res, next) => {
 
 const bulkUnlockTenants = async (req, res, next) => {
   try {
+    const planOrDays = req.body?.planCode || parseInt(req.body?.extensionDays, 10) || 30;
     const result = await service.bulkUnlockTenants(
       req.body?.tenantIds,
-      parseInt(req.body?.extensionDays, 10) || 90,
+      planOrDays,
       req.body?.note,
       req.developer?.id || null
     );
@@ -111,9 +113,10 @@ const deleteTenant = async (req, res, next) => {
 
 const renewTenant = async (req, res, next) => {
   try {
+    const planOrDays = req.body?.planCode || parseInt(req.body?.extensionDays, 10) || 30;
     const result = await service.renewTenant(
       req.params.id,
-      parseInt(req.body?.extensionDays, 10) || 90,
+      planOrDays,
       req.body?.note,
       req.developer?.id || null
     );

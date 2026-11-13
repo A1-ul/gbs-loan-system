@@ -2,12 +2,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Terminal, Cpu, Lock, Unlock, Database, RefreshCw, Activity, Building2,
-  MapPin, ShieldAlert, Send, CheckCircle2, XCircle, Clock, LogOut, Wrench, Trash2
+  MapPin, ShieldAlert, Send, CheckCircle2, XCircle, Clock, LogOut, Wrench, Trash2, BookOpen
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 import api, { devApi, sessionStore, API_ORIGIN } from '../services/api';
 import { DEVELOPER_PORTAL_META } from '../constants/rolesMeta';
 import LiveLocationTrackerMap from './LiveLocationTrackerMap';
+import OperatingGuideModal from './OperatingGuideModal';
 
 /**
  * Hidden Developer Control Center (Step 5 Master Blueprint + Multi-Tenant SaaS Landlord)
@@ -32,6 +33,8 @@ export default function DeveloperControlCenter({ onLogout }) {
   const [rejectReasons, setRejectReasons] = useState({});
   const [selectedTenantIds, setSelectedTenantIds] = useState([]);
   const [confirmDeleteId, setConfirmDeleteId] = useState('');
+  const [planChoices, setPlanChoices] = useState({});
+  const [guideOpen, setGuideOpen] = useState(false);
   const [envInfo, setEnvInfo] = useState({ environment: 'production', dataMode: 'PRODUCTION_LIVE' });
   const [toast, setToast] = useState(null);
   const [busyAction, setBusyAction] = useState('');
@@ -125,8 +128,8 @@ export default function DeveloperControlCenter({ onLogout }) {
   const handleApproveTenant = async (id, name) => {
     setBusyAction(`approve-${id}`);
     try {
-      await devApi.post(`/developer/tenants/${id}/approve`, { trialDays: 90 });
-      notify(`Institution "${name}" APPROVED! 90-day trial countdown activated.`);
+      await devApi.post(`/developer/tenants/${id}/approve`, { trialDays: 30, planCode: 'TRIAL_1M' });
+      notify(`Institution "${name}" APPROVED! 1-Month (30-Day) Free Trial countdown activated.`);
       await fetchAll();
     } catch (err) {
       notify(err.response?.data?.message || 'Approval failed', true);
@@ -149,11 +152,14 @@ export default function DeveloperControlCenter({ onLogout }) {
     }
   };
 
-  const handleRenewTenant = async (id, days = 90) => {
+  const handleRenewTenant = async (id, planCodeOrDays = 'PLAN_3M') => {
     setBusyAction(`renew-${id}`);
+    const payload = typeof planCodeOrDays === 'string'
+      ? { planCode: planCodeOrDays, note: `Assigned ${planCodeOrDays} subscription` }
+      : { extensionDays: planCodeOrDays, note: `Extended +${planCodeOrDays} days` };
     try {
-      await devApi.post(`/developer/tenants/${id}/renew`, { extensionDays: days, note: `Extended +${days} days` });
-      notify(`Subscription renewed (+${days} days) and unlocked.`);
+      await devApi.post(`/developer/tenants/${id}/renew`, payload);
+      notify(`Subscription updated (${planCodeOrDays}) and tenant unlocked.`);
       await fetchAll();
     } catch (err) {
       notify(err.response?.data?.message || 'Renewal failed', true);
@@ -175,7 +181,7 @@ export default function DeveloperControlCenter({ onLogout }) {
     }
   };
 
-  const handleUnlockTenant = async (id, days = 90) => {
+  const handleUnlockTenant = async (id, days = 30) => {
     setBusyAction(`unlock-${id}`);
     try {
       await devApi.post(`/developer/tenants/${id}/unlock`, { extensionDays: days, note: 'Unlocked by Developer Control Authority' });
@@ -212,8 +218,8 @@ export default function DeveloperControlCenter({ onLogout }) {
     try {
       const res = await devApi.post('/developer/tenants/bulk-unlock', {
         tenantIds: selectedTenantIds,
-        extensionDays: 90,
-        note: 'Multi-tenant unlock (+90d) by Developer Authority',
+        extensionDays: 30,
+        note: 'Multi-tenant unlock (+30d / 1-month) by Developer Authority',
       });
       notify(res.data?.message || `Unlocked ${selectedTenantIds.length} tenant(s).`);
       setSelectedTenantIds([]);
@@ -374,6 +380,9 @@ export default function DeveloperControlCenter({ onLogout }) {
           <span className={`badge ${isGlobalLocked ? 'badge-danger' : 'badge-success'}`}>
             {isGlobalLocked ? 'GLOBAL SYSTEM LOCKED' : 'PLATFORM ONLINE'}
           </span>
+          <button type="button" className="btn btn-secondary" onClick={() => setGuideOpen(true)} style={{ padding: '7px 12px' }}>
+            <BookOpen size={14} /> Developer Guide
+          </button>
           <button type="button" className="btn btn-secondary" onClick={fetchAll} style={{ padding: '7px 12px' }}>
             <RefreshCw size={14} /> Refresh Telemetry
           </button>
@@ -531,7 +540,7 @@ export default function DeveloperControlCenter({ onLogout }) {
                           className="btn btn-primary"
                           style={{ padding: '8px 14px' }}
                         >
-                          <CheckCircle2 size={15} /> Approve (Start 90d Trial)
+                          <CheckCircle2 size={15} /> Approve (Start 1-Month Trial)
                         </button>
                         <button
                           type="button"
@@ -552,7 +561,7 @@ export default function DeveloperControlCenter({ onLogout }) {
             <div className="glass-panel" style={{ padding: 20 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
                 <h3 style={{ margin: 0, color: '#D4AF37' }}>
-                  All Registered Institutions &amp; 90-Day Countdown Ledger ({tenants.length})
+                  All Registered Institutions &amp; 1-Month Trial / Subscription Ledger ({tenants.length})
                 </h3>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                   <span style={{ fontSize: '0.78rem', color: '#94A3B8' }}>
@@ -565,7 +574,7 @@ export default function DeveloperControlCenter({ onLogout }) {
                     className="btn btn-primary"
                     style={{ padding: '6px 12px', fontSize: '0.76rem' }}
                   >
-                    <Unlock size={13} /> Unlock Selected (+90d)
+                    <Unlock size={13} /> Unlock Selected (+30d / 1m)
                   </button>
                   <button
                     type="button"
@@ -627,21 +636,34 @@ export default function DeveloperControlCenter({ onLogout }) {
                           </span>
                         </td>
                         <td>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontWeight: 700, color: (t.daysLeft || 0) <= 10 ? '#F87171' : '#34D399' }}>
-                            <Clock size={14} /> {t.daysLeft ?? 0}d
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontWeight: 700, color: t.isLifetime ? '#F4E07B' : (t.daysLeft || 0) <= 10 ? '#F87171' : '#34D399' }}>
+                            <Clock size={14} /> {t.isLifetime ? 'LIFETIME' : `${t.daysLeft ?? 0}d (${t.subscriptionPlan || 'TRIAL_1M'})`}
                           </span>
                         </td>
-                        <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                           {!['APPROVED', 'ACTIVE_TRIAL', 'ACTIVE_PAID'].includes(t.onboardingStatus) && (
                             <button type="button" className="btn btn-primary" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => handleApproveTenant(t.id, t.name)}>
-                              Approve
+                              Approve (1m Trial)
                             </button>
                           )}
-                          <button type="button" className="btn btn-secondary" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => handleRenewTenant(t.id, 90)}>
-                            +90 Days
+                          <select
+                            className="gbs-select"
+                            style={{ width: 118, padding: '4px 6px', fontSize: '0.73rem' }}
+                            value={planChoices[t.id] || 'PLAN_3M'}
+                            onChange={(e) => setPlanChoices((prev) => ({ ...prev, [t.id]: e.target.value }))}
+                          >
+                            <option value="TRIAL_1M">1 Mo Trial</option>
+                            <option value="PLAN_3M">3 Months</option>
+                            <option value="PLAN_6M">6 Months</option>
+                            <option value="PLAN_9M">9 Months</option>
+                            <option value="PLAN_12M">12 Months</option>
+                            <option value="LIFETIME">Lifetime</option>
+                          </select>
+                          <button type="button" className="btn btn-secondary" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => handleRenewTenant(t.id, planChoices[t.id] || 'PLAN_3M')}>
+                            Apply Plan
                           </button>
                           {isTenantLocked ? (
-                            <button type="button" className="btn btn-primary" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => handleUnlockTenant(t.id, 90)}>
+                            <button type="button" className="btn btn-primary" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => handleUnlockTenant(t.id, 30)}>
                               <Unlock size={12} /> Unlock
                             </button>
                           ) : (
@@ -883,6 +905,7 @@ export default function DeveloperControlCenter({ onLogout }) {
           </div>
         )}
       </main>
+      <OperatingGuideModal isOpen={guideOpen} onClose={() => setGuideOpen(false)} isDeveloper />
     </div>
   );
 }

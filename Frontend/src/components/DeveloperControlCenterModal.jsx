@@ -154,27 +154,24 @@ export default function DeveloperControlCenterModal({ isOpen, onClose }) {
         <div className="flex border-b border-gray-800 bg-gray-950 px-6 gap-2 pt-3">
           <button
             onClick={() => setActiveTab('map-view')}
-            className={`px-4 py-2 text-xs font-bold rounded-t-lg transition flex items-center gap-2 ${
-              activeTab === 'map-view' ? 'bg-amber-500 text-gray-950' : 'text-gray-400 hover:text-white bg-gray-900'
-            }`}
+            className={`px-4 py-2 text-xs font-bold rounded-t-lg transition flex items-center gap-2 ${activeTab === 'map-view' ? 'bg-amber-500 text-gray-950' : 'text-gray-400 hover:text-white bg-gray-900'
+              }`}
           >
             <MapPin className="w-4 h-4" />
             🗺️ Geographic Tenant Map View
           </button>
           <button
             onClick={() => setActiveTab('tenants')}
-            className={`px-4 py-2 text-xs font-bold rounded-t-lg transition flex items-center gap-2 ${
-              activeTab === 'tenants' ? 'bg-amber-500 text-gray-950' : 'text-gray-400 hover:text-white bg-gray-900'
-            }`}
+            className={`px-4 py-2 text-xs font-bold rounded-t-lg transition flex items-center gap-2 ${activeTab === 'tenants' ? 'bg-amber-500 text-gray-950' : 'text-gray-400 hover:text-white bg-gray-900'
+              }`}
           >
             <Shield className="w-4 h-4" />
             🏢 3-Month Subscription & Tenant Controls ({tenants.length})
           </button>
           <button
             onClick={() => setActiveTab('telemetry')}
-            className={`px-4 py-2 text-xs font-bold rounded-t-lg transition flex items-center gap-2 ${
-              activeTab === 'telemetry' ? 'bg-amber-500 text-gray-950' : 'text-gray-400 hover:text-white bg-gray-900'
-            }`}
+            className={`px-4 py-2 text-xs font-bold rounded-t-lg transition flex items-center gap-2 ${activeTab === 'telemetry' ? 'bg-amber-500 text-gray-950' : 'text-gray-400 hover:text-white bg-gray-900'
+              }`}
           >
             <Activity className="w-4 h-4" />
             ⚡ Real-Time System Telemetry Stream
@@ -206,7 +203,7 @@ export default function DeveloperControlCenterModal({ isOpen, onClose }) {
               {/* Geographic Simulated Map Display */}
               <div className="relative h-72 bg-gray-950 rounded-2xl overflow-hidden border border-gray-800 flex items-center justify-center p-4">
                 <div className="absolute inset-0 bg-[radial-gradient(#d4af37_1px,transparent_1px)] [background-size:24px_24px] opacity-20"></div>
-                
+
                 {/* Ghana Outline Grid Overlay */}
                 <div className="absolute top-3 left-4 text-xs font-mono text-gray-400">
                   📍 Region Coverage: Greater Accra, Ashanti, Western, Bono, Northern
@@ -230,11 +227,10 @@ export default function DeveloperControlCenterModal({ isOpen, onClose }) {
                       className="absolute flex flex-col items-center group cursor-pointer transition transform hover:scale-110"
                     >
                       <div
-                        className={`p-2.5 rounded-full shadow-lg border-2 ${
-                          t.status === 'ACTIVE'
+                        className={`p-2.5 rounded-full shadow-lg border-2 ${t.status === 'ACTIVE'
                             ? 'bg-amber-500 text-gray-950 border-amber-300'
                             : 'bg-rose-600 text-white border-rose-400 animate-pulse'
-                        }`}
+                          }`}
                       >
                         <MapPin className="w-4 h-4" />
                       </div>
@@ -262,9 +258,8 @@ export default function DeveloperControlCenterModal({ isOpen, onClose }) {
                       <p className="text-[11px] text-gray-500 font-mono">Reg: {t.subStart} | Expiry: {t.subExpiry}</p>
                     </div>
                     <div className="text-right space-y-1">
-                      <span className={`text-xs px-2.5 py-1 rounded-full font-bold inline-block ${
-                        t.status === 'ACTIVE' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' : 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
-                      }`}>
+                      <span className={`text-xs px-2.5 py-1 rounded-full font-bold inline-block ${t.status === 'ACTIVE' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' : 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
+                        }`}>
                         {t.status === 'ACTIVE' ? `ACTIVE (${t.daysLeft} Days)` : 'LOCKED / EXPIRED'}
                       </span>
                       {t.daysLeft <= 15 && t.daysLeft > 0 && (
@@ -346,9 +341,8 @@ export default function DeveloperControlCenterModal({ isOpen, onClose }) {
                           {t.branchesCount || (t.branches ? t.branches.length : 1)} Branch(es)
                         </td>
                         <td className="p-3">
-                          <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${
-                            t.status === 'ACTIVE' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
-                          }`}>
+                          <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${t.status === 'ACTIVE' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
+                            }`}>
                             {t.status}
                           </span>
                         </td>

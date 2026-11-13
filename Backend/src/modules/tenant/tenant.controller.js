@@ -42,11 +42,58 @@ class TenantController {
       if (!tenantId) {
         return res.status(200).json({
           success: true,
-          data: { status: 'ACTIVE', isLocked: false, countdown: { days: 90, hours: 0, minutes: 0, seconds: 0 } },
+          data: { status: 'ACTIVE', isLocked: false, countdown: { days: 30, hours: 0, minutes: 0, seconds: 0 } },
         });
       }
       const data = await countdownEngine.getTenantCountdown(tenantId);
       return res.status(200).json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async getSubscriptionCatalog(req, res, next) {
+    try {
+      const catalog = tenantService.getSubscriptionCatalog();
+      return res.status(200).json({ success: true, data: catalog });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async getMyProfile(req, res, next) {
+    try {
+      const tenantId = req.tenantId || req.user?.tenantId;
+      const profile = await tenantService.getMyTenantProfile(tenantId);
+      return res.status(200).json({ success: true, data: profile });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async updateMyBranding(req, res, next) {
+    try {
+      const tenantId = req.tenantId || req.user?.tenantId;
+      const profile = await tenantService.updateBranding(tenantId, req.user, req.body, req.file || null);
+      return res.status(200).json({
+        success: true,
+        message: `Company identity updated to "${profile.name}". Changes are live across your company dashboards.`,
+        data: profile,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async selectMySubscriptionPlan(req, res, next) {
+    try {
+      const tenantId = req.tenantId || req.user?.tenantId;
+      const result = await tenantService.chooseSubscriptionPlan(tenantId, req.user, req.body);
+      return res.status(200).json({
+        success: true,
+        message: `Subscription plan updated to ${result.plan.label}.`,
+        data: result,
+      });
     } catch (err) {
       next(err);
     }

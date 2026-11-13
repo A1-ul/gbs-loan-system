@@ -10,6 +10,10 @@ const authSchemas = {
     role: Joi.string().optional().default('MEMBER_PORTAL'),
     tenantId: Joi.string().optional().allow('', null),
     tenantCode: Joi.string().optional().allow('', null),
+    gpsAddress: Joi.string().optional().allow('', null),
+    gpsLatitude: Joi.number().min(-90).max(90).optional().allow(null),
+    gpsLongitude: Joi.number().min(-180).max(180).optional().allow(null),
+    address: Joi.string().optional().allow('', null),
     deviceFingerprint: Joi.string().optional().allow('', null),
   }),
   login: Joi.object({
@@ -50,14 +54,22 @@ const memberSchemas = {
     employer: Joi.string().optional().allow('', null),
     monthlyIncome: Joi.number().positive().optional().allow(null),
     address: Joi.string().optional().allow('', null),
+    gpsAddress: Joi.string().optional().allow('', null),
     gpsLatitude: Joi.number().optional().allow(null),
     gpsLongitude: Joi.number().optional().allow(null),
+    isHidden: Joi.boolean().optional(),
+    emergencyContact: Joi.string().optional().allow('', null),
+    emergencyPhone: Joi.string().optional().allow('', null),
   }),
   update: Joi.object({
     occupation: Joi.string().optional(),
     employer: Joi.string().optional(),
     monthlyIncome: Joi.number().positive().optional(),
     address: Joi.string().optional(),
+    gpsAddress: Joi.string().optional().allow('', null),
+    gpsLatitude: Joi.number().optional().allow(null),
+    gpsLongitude: Joi.number().optional().allow(null),
+    isHidden: Joi.boolean().optional(),
     emergencyContact: Joi.string().optional(),
     emergencyPhone: Joi.string().optional(),
   }),
@@ -114,6 +126,7 @@ const gpsSchemas = {
     longitude: Joi.number().min(-180).max(180).required(),
     accuracy: Joi.number().min(0).optional(),
     speed: Joi.number().min(0).optional(),
+    gpsAddress: Joi.string().optional().allow('', null),
     status: Joi.string().valid('ONLINE', 'OFFLINE', 'ON_ROUTE', 'AT_LOCATION', 'IDLE').optional(),
   }),
   batchSync: Joi.object({
@@ -146,16 +159,22 @@ const salarySchemas = {
 
 const meetingSchemas = {
   create: Joi.object({
-    topic: Joi.string().required(),
-    startTime: Joi.date().iso().required(),
-    duration: Joi.number().integer().min(15).max(480).required(),
-    password: Joi.string().optional(),
-  }),
+    topic: Joi.string().optional().allow('', null),
+    title: Joi.string().optional().allow('', null),
+    startTime: Joi.date().iso().optional(),
+    scheduledAt: Joi.date().iso().optional(),
+    duration: Joi.number().integer().min(10).max(480).default(60),
+    password: Joi.string().optional().allow('', null),
+    audienceType: Joi.string().valid('ALL_STAFF', 'EXECUTIVES_ONLY', 'SELECTED_PARTICIPANTS', 'BOARD_AND_MANAGERS').optional().default('ALL_STAFF'),
+    participantUserIds: Joi.array().items(Joi.string()).optional().default([]),
+    participants: Joi.string().optional().allow('', null),
+    agenda: Joi.string().optional().allow('', null),
+  }).or('topic', 'title'),
 };
 
 const reportSchemas = {
   generate: Joi.object({
-    reportType: Joi.string().valid('loan', 'payment', 'collection', 'staff', 'guarantor', 'outstanding').required(),
+    reportType: Joi.string().valid('loan', 'payment', 'collection', 'staff', 'guarantor', 'outstanding', 'weekly', 'monthly', 'yearly').required(),
     startDate: Joi.date().required(),
     endDate: Joi.date().required(),
     format: Joi.string().valid('json', 'csv', 'pdf').default('json'),

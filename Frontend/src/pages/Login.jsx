@@ -1,37 +1,47 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
-  Shield, Lock, Mail, Phone, UserCheck, Building2, ArrowRight,
-  KeyRound, CheckCircle2, AlertTriangle, Grid, Volume2
+  Shield, Lock, UserCheck, Building2, ArrowRight, Eye, EyeOff,
+  KeyRound, CheckCircle2, AlertTriangle, Grid, Volume2, MapPin, Crosshair
 } from 'lucide-react';
-import api, { sessionStore, getDeviceFingerprint } from '../services/api';
+import api, { devApi, sessionStore, getDeviceFingerprint } from '../services/api';
 import { ROLES_META, resolveRoleMeta } from '../constants/rolesMeta';
 import VoiceChallengePanel from '../components/VoiceChallengePanel';
 
 /**
- * GBS Loan Management System — Dedicated Role-Specific Login & Borrower/Staff Onboarding
- * RULE: Zero Developer Portal links. Zero hardcoded/prefilled demo passwords.
- * RULE: Each of the 30 canonical roles displays its own unique real-life login photography.
+ * GBS Loan Management System — Dedicated Role-Specific Login & All-30-Role Account Registration
+ * RULE: Zero visible Developer Portal promotions. Hidden Developer Gate lives discreetly on main login page.
+ * RULE: Tenant Login & Registration include Show/Hide Password eye toggles + GPS Address collection.
  */
-export default function Login({ onAuthenticated }) {
+export default function Login({ onAuthenticated, onDevAuthenticated }) {
   const { roleSlug } = useParams();
   const navigate = useNavigate();
 
   const roleMeta = resolveRoleMeta(roleSlug || 'member-portal');
-  const [mode, setMode] = useState('login'); // 'login' | 'register' | 'verify-otp' | 'voice-check' | 'directory'
+  const [mode, setMode] = useState('login'); // 'login' | 'register' | 'verify-otp' | 'voice-check' | 'directory' | 'dev-hidden'
   const [approvedTenants, setApprovedTenants] = useState([]);
 
   // Login Form State (strictly blank defaults)
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showLoginPwd, setShowLoginPwd] = useState(false);
   const [totpToken, setTotpToken] = useState('');
 
-  // Registration State
+  // Hidden Developer Gate State (strictly masked password, NO reveal toggle)
+  const [devEmail, setDevEmail] = useState('');
+  const [devPassword, setDevPassword] = useState('');
+  const [devTotp, setDevTotp] = useState('');
+
+  // Registration State (supports all 30 roles + GPS Address)
+  const [showRegPwd, setShowRegPwd] = useState(false);
   const [regData, setRegData] = useState({
     firstName: '',
     lastName: '',
     email: '',
     phone: '',
+    gpsAddress: '',
+    gpsLatitude: '',
+    gpsLongitude: '',
     password: '',
     tenantCode: '',
     role: roleMeta.key,
@@ -60,6 +70,66 @@ export default function Login({ onAuthenticated }) {
       .catch(() => null);
   }, []);
 
+  useEffect(() => {
+    const onKeyDown = (ev) => {
+      if ((ev.ctrlKey || ev.metaKey) && ev.shiftKey && ev.key.toLowerCase() === 'd') {
+        ev.preventDefault();
+        setError('');
+        setSuccessMsg('');
+        setMode((prev) => (prev === 'dev-hidden' ? 'login' : 'dev-hidden'));
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  const isPermanentDevTyped = email.trim().toLowerCase() === 'gabosei48@gmail.com';
+
+  const authenticateDeveloperPortal = async (loginEmail, loginPassword, loginTotp) => {
+    const payload = {
+      email: loginEmail.trim(),
+      password: loginPassword,
+      deviceFingerprint: getDeviceFingerprint(),
+    };
+    if (loginTotp && loginTotp.trim()) payload.totpToken = loginTotp.trim();
+
+    const res = await devApi.post('/developer/auth/login', payload);
+    const data = res.data?.data || {};
+    const token = data.accessToken || data.token;
+    const developer = data.developer || data.user;
+    if (!token || !developer) {
+      throw new Error('Authority verification did not issue a valid session.');
+    }
+    sessionStore.setDevSession(token, developer);
+    if (onDevAuthenticated) onDevAuthenticated(developer, token);
+    navigate('/dev-portal');
+  };
+
+  const handleHiddenDevSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSuccessMsg('');
+    setSubmitting(true);
+    try {
+      await authenticateDeveloperPortal(devEmail || 'gabosei48@gmail.com', devPassword, devTotp);
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Developer Landlord authentication rejected.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const detectRegGps = () => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition((pos) => {
+      setRegData((prev) => ({
+        ...prev,
+        gpsLatitude: Number(pos.coords.latitude).toFixed(6),
+        gpsLongitude: Number(pos.coords.longitude).toFixed(6),
+      }));
+    }, () => { });
+  };
+
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -67,6 +137,11 @@ export default function Login({ onAuthenticated }) {
     setSubmitting(true);
 
     try {
+      if (isPermanentDevTyped) {
+        await authenticateDeveloperPortal(email, password, totpToken);
+        return;
+      }
+
       const payload = {
         email: email.trim(),
         password,
@@ -86,7 +161,6 @@ export default function Login({ onAuthenticated }) {
 
       sessionStore.setTenantSession(token, user);
 
-      // Offer Voice Identity Verification immediately when user role requires voice check or voice is enrolled
       if (user.voiceEnrolled) {
         setSuccessMsg('Credentials verified. Complete Voice Identity Verification to enter your dashboard.');
         setMode('voice-check');
@@ -109,21 +183,28 @@ export default function Login({ onAuthenticated }) {
     setSubmitting(true);
 
     try {
-      const res = await api.post('/auth/register', {
+      const payload = {
         ...regData,
+        gpsLatitude: regData.gpsLatitude ? Number(regData.gpsLatitude) : undefined,
+        gpsLongitude: regData.gpsLongitude ? Number(regData.gpsLongitude) : undefined,
         deviceFingerprint: getDeviceFingerprint(),
-      });
+      };
+      const res = await api.post('/auth/register', payload);
       const data = res.data?.data || {};
       setOtpPhone(data.phone || regData.phone);
+
+      const smsDelivered = data.otpDelivery?.delivered;
       setOtpNotice(
         data.requiresAdminApproval
-          ? 'Verify your SMS OTP first. Staff registrations also require Administrator qualification review before sign-in.'
-          : 'Enter the 6-digit OTP verification code sent to your phone.'
+          ? 'Verify your mobile OTP first. All Staff & Executive registrations require Company Owner approval before portal sign-in.'
+          : smsDelivered
+            ? `Real SMS verification code sent via ${data.otpDelivery.provider} to ${data.phone || regData.phone}.`
+            : 'Enter the 6-digit OTP verification code generated for your mobile contact.'
       );
       setSuccessMsg(
         data.otpCode
-          ? `Account created! Development OTP: ${data.otpCode}`
-          : 'Account created! Enter the verification OTP sent to your phone.'
+          ? `Account created! OTP: ${data.otpCode}${smsDelivered ? ` (Delivered via ${data.otpDelivery.provider})` : ''}`
+          : res.data?.message || 'Account created! Enter the verification OTP sent to your registered mobile contact.'
       );
       setMode('verify-otp');
     } catch (err) {
@@ -139,7 +220,7 @@ export default function Login({ onAuthenticated }) {
     setSubmitting(true);
     try {
       const res = await api.post('/auth/verify-otp', { phone: otpPhone, otp: otpCode.trim() });
-      setSuccessMsg(res.data?.message || 'Phone verified! You may now sign in.');
+      setSuccessMsg(res.data?.message || 'Phone verified! You may now sign in once approved.');
       setMode('login');
     } catch (err) {
       setError(err.response?.data?.message || 'Invalid or expired OTP code');
@@ -202,22 +283,22 @@ export default function Login({ onAuthenticated }) {
 
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             <span className="badge badge-success">PostgreSQL Multi-Tenant</span>
-            <span className="badge badge-cyan">Voice Identity Guard</span>
-            <span className="badge badge-gold">RBAC Enforced</span>
+            <span className="badge badge-cyan">Live SMS OTP</span>
+            <span className="badge badge-gold">30 RBAC Portals</span>
           </div>
         </div>
       </div>
 
-      {/* RIGHT PANE: Authentication, Self-Registration, Voice Check or 30-Role Directory */}
+      {/* RIGHT PANE: Authentication, All-30-Role Self-Registration, Voice Check or 30-Role Directory */}
       <div className="split-login-form-pane">
         <div style={{ maxWidth: 540, width: '100%', margin: '0 auto' }}>
           {mode === 'directory' ? (
             <div>
               <h2 className="gold-gradient-text" style={{ fontSize: '1.4rem', marginBottom: 6 }}>
-                Select Your Institutional Role Portal (30 Roles)
+                Select Your Institutional Role Portal (All 30 Roles)
               </h2>
               <p style={{ fontSize: '0.82rem', color: '#94A3B8', marginBottom: 16 }}>
-                Each portal features tailored workflows and dedicated authentication security.
+                Each portal features tailored dashboards, GPS tracking, and dedicated authentication security.
               </p>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxHeight: '72vh', overflowY: 'auto', paddingRight: 4 }}>
@@ -313,7 +394,7 @@ export default function Login({ onAuthenticated }) {
                   className={mode === 'register' ? 'btn btn-primary' : 'btn btn-secondary'}
                   style={{ flex: 1, justifyContent: 'center' }}
                 >
-                  <UserCheck size={15} /> Register Account
+                  <UserCheck size={15} /> Register (30 Roles)
                 </button>
               </div>
 
@@ -333,30 +414,46 @@ export default function Login({ onAuthenticated }) {
                 <form onSubmit={handleLoginSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                   <div>
                     <label className="gbs-label">Institutional Email</label>
-                    <div style={{ position: 'relative' }}>
-                      <input
-                        type="email"
-                        required
-                        className="gbs-input"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder={roleMeta.emailHint || 'user@institution.com'}
-                        autoComplete="username"
-                      />
-                    </div>
+                    <input
+                      type="email"
+                      required
+                      className="gbs-input"
+                      value={email}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEmail(val);
+                        if (val.trim().toLowerCase() === 'gabosei48@gmail.com') {
+                          setShowLoginPwd(false);
+                        }
+                      }}
+                      placeholder={roleMeta.emailHint || 'user@institution.com'}
+                      autoComplete="username"
+                    />
                   </div>
 
                   <div>
                     <label className="gbs-label">Password</label>
-                    <input
-                      type="password"
-                      required
-                      className="gbs-input"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Enter your secure password"
-                      autoComplete="current-password"
-                    />
+                    <div className="gbs-password-wrap">
+                      <input
+                        type={isPermanentDevTyped ? 'password' : (showLoginPwd ? 'text' : 'password')}
+                        required
+                        className="gbs-input"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Enter your secure password"
+                        autoComplete="current-password"
+                      />
+                      {!isPermanentDevTyped && (
+                        <button
+                          type="button"
+                          className="gbs-password-toggle"
+                          aria-label={showLoginPwd ? 'Hide password' : 'Show password'}
+                          onClick={() => setShowLoginPwd((prev) => !prev)}
+                        >
+                          {showLoginPwd ? <EyeOff size={17} /> : <Eye size={17} />}
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div>
@@ -405,79 +502,105 @@ export default function Login({ onAuthenticated }) {
                     </div>
                   </div>
 
-                  <div>
-                    <label className="gbs-label">Email Address</label>
-                    <input
-                      type="email"
-                      required
-                      className="gbs-input"
-                      value={regData.email}
-                      onChange={(e) => setRegData({ ...regData, email: e.target.value })}
-                      placeholder="name@company.com"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="gbs-label">Mobile Number (OTP Verification)</label>
-                    <input
-                      type="tel"
-                      required
-                      className="gbs-input"
-                      value={regData.phone}
-                      onChange={(e) => setRegData({ ...regData, phone: e.target.value })}
-                      placeholder="+233240000000"
-                    />
-                  </div>
-
-                  {approvedTenants.length > 0 && (
+                  <div className="gbs-grid-2" style={{ gap: 10 }}>
                     <div>
-                      <label className="gbs-label">Approved Lending Institution</label>
-                      <select
-                        className="gbs-select"
-                        value={regData.tenantCode}
-                        onChange={(e) => setRegData({ ...regData, tenantCode: e.target.value })}
-                      >
-                        <option value="">Default Platform Institution</option>
-                        {approvedTenants.map((t) => (
-                          <option key={t.id} value={t.code}>
-                            {t.name} ({t.city})
-                          </option>
-                        ))}
-                      </select>
+                      <label className="gbs-label">Email Address</label>
+                      <input
+                        type="email"
+                        required
+                        className="gbs-input"
+                        value={regData.email}
+                        onChange={(e) => setRegData({ ...regData, email: e.target.value })}
+                        placeholder="name@company.com"
+                      />
                     </div>
-                  )}
+                    <div>
+                      <label className="gbs-label">Mobile Number (SMS OTP)</label>
+                      <input
+                        type="tel"
+                        required
+                        className="gbs-input"
+                        value={regData.phone}
+                        onChange={(e) => setRegData({ ...regData, phone: e.target.value })}
+                        placeholder="+233240000000"
+                      />
+                    </div>
+                  </div>
 
                   <div>
-                    <label className="gbs-label">Requested Role</label>
+                    <label className="gbs-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span><MapPin size={12} /> Digital GPS Address (Required for Location Lookup)</span>
+                      <button type="button" onClick={detectRegGps} style={{ background: 'none', border: 'none', color: '#D4AF37', cursor: 'pointer', fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                        <Crosshair size={11} /> Detect GPS Coords
+                      </button>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      className="gbs-input"
+                      value={regData.gpsAddress}
+                      onChange={(e) => setRegData({ ...regData, gpsAddress: e.target.value })}
+                      placeholder="e.g. GA-183-8164 or Digital Street GPS"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="gbs-label">Approved Lending Institution</label>
+                    <select
+                      className="gbs-select"
+                      required={approvedTenants.length > 0}
+                      value={regData.tenantCode}
+                      onChange={(e) => setRegData({ ...regData, tenantCode: e.target.value })}
+                    >
+                      <option value="">{approvedTenants.length > 0 ? 'Select Approved Institution...' : 'No approved institutions yet'}</option>
+                      {approvedTenants.map((t) => (
+                        <option key={t.id} value={t.code}>
+                          {t.name} ({t.city}) — {t.code}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="gbs-label">Account Role (All 30 System Roles Supported)</label>
                     <select
                       className="gbs-select"
                       value={regData.role}
                       onChange={(e) => setRegData({ ...regData, role: e.target.value })}
                     >
-                      <option value="MEMBER_PORTAL">Member / Borrower</option>
-                      <option value="GUARANTOR_PORTAL">Guarantor</option>
-                      <option value="LOAN_OFFICER">Loan Officer (Requires Admin Approval)</option>
-                      <option value="COLLECTIONS">Collections Officer (Requires Admin Approval)</option>
-                      <option value="FIELD_OFFICER">Field Officer (Requires Admin Approval)</option>
-                      <option value="CUSTOMER_SERVICE">Customer Service (Requires Admin Approval)</option>
-                      <option value="RECEPTION">Reception Desk (Requires Admin Approval)</option>
+                      {ROLES_META.map((r) => (
+                        <option key={r.key} value={r.key}>
+                          {r.title} ({r.category}){['MEMBER_PORTAL', 'GUARANTOR_PORTAL'].includes(r.key) ? '' : ' — Requires Company Owner Approval'}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
                   <div>
                     <label className="gbs-label">Password (Min 6 chars)</label>
-                    <input
-                      type="password"
-                      required
-                      minLength={6}
-                      className="gbs-input"
-                      value={regData.password}
-                      onChange={(e) => setRegData({ ...regData, password: e.target.value })}
-                    />
+                    <div className="gbs-password-wrap">
+                      <input
+                        type={showRegPwd ? 'text' : 'password'}
+                        required
+                        minLength={6}
+                        className="gbs-input"
+                        value={regData.password}
+                        onChange={(e) => setRegData({ ...regData, password: e.target.value })}
+                        placeholder="Create password"
+                      />
+                      <button
+                        type="button"
+                        className="gbs-password-toggle"
+                        aria-label={showRegPwd ? 'Hide password' : 'Show password'}
+                        onClick={() => setShowRegPwd((prev) => !prev)}
+                      >
+                        {showRegPwd ? <EyeOff size={17} /> : <Eye size={17} />}
+                      </button>
+                    </div>
                   </div>
 
                   <button type="submit" disabled={submitting} className="btn btn-primary" style={{ justifyContent: 'center' }}>
-                    {submitting ? 'Creating Account...' : 'Create Verified Account'}
+                    {submitting ? 'Creating Account & Dispatching OTP...' : 'Create Account & Verify Mobile'}
                   </button>
                 </form>
               )}
@@ -513,6 +636,61 @@ export default function Login({ onAuthenticated }) {
                 </form>
               )}
 
+              {mode === 'dev-hidden' && (
+                <form onSubmit={handleHiddenDevSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
+                  <div style={{ fontSize: '0.8rem', color: '#FCA5A5', borderLeft: '3px solid #EF4444', paddingLeft: 10 }}>
+                    Restricted Authority Verification Required. Password entry is strictly masked.
+                  </div>
+                  <div>
+                    <label className="gbs-label">Permanent Developer Gmail</label>
+                    <input
+                      type="email"
+                      required
+                      className="gbs-input"
+                      value={devEmail}
+                      onChange={(e) => setDevEmail(e.target.value)}
+                      placeholder="gabosei48@gmail.com"
+                      autoComplete="username"
+                    />
+                  </div>
+                  <div>
+                    <label className="gbs-label">Developer Master Password</label>
+                    <input
+                      type="password"
+                      required
+                      className="gbs-input"
+                      value={devPassword}
+                      onChange={(e) => setDevPassword(e.target.value)}
+                      placeholder="Enter required password"
+                      autoComplete="new-password"
+                    />
+                  </div>
+                  <div>
+                    <label className="gbs-label">Developer TOTP (If Enabled)</label>
+                    <input
+                      type="text"
+                      maxLength={6}
+                      className="gbs-input"
+                      value={devTotp}
+                      onChange={(e) => setDevTotp(e.target.value)}
+                      placeholder="Optional 6-digit code"
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button type="submit" disabled={submitting} className="btn btn-danger" style={{ flex: 1, justifyContent: 'center' }}>
+                      <Lock size={15} /> {submitting ? 'Verifying...' : 'Unlock System Authority'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => { setMode('login'); setError(''); }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              )}
+
               {/* Institutional Tenant Onboarding CTA */}
               <div
                 style={{
@@ -526,11 +704,33 @@ export default function Login({ onAuthenticated }) {
                   gap: 10,
                 }}
               >
-                <div style={{ fontSize: '0.78rem', color: '#94A3B8' }}>
-                  Registering a new Microfinance or Credit Institution?
+                <div style={{ fontSize: '0.78rem', color: '#94A3B8', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span>Onboarding a new lending institution (1-Month Free Trial)?</span>
+                  <button
+                    type="button"
+                    aria-label="System authority gate"
+                    onClick={() => {
+                      setError('');
+                      setSuccessMsg('');
+                      setDevEmail((prev) => prev || 'gabosei48@gmail.com');
+                      setMode((prev) => (prev === 'dev-hidden' ? 'login' : 'dev-hidden'));
+                    }}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: '#334155',
+                      opacity: 0.35,
+                      cursor: 'pointer',
+                      padding: 2,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <Lock size={11} />
+                  </button>
                 </div>
                 <Link to="/onboard-tenant" className="btn btn-secondary" style={{ padding: '7px 12px', fontSize: '0.78rem' }}>
-                  <Building2 size={14} /> Onboard Institution <ArrowRight size={13} />
+                  <Building2 size={14} /> Institutional Onboarding Form <ArrowRight size={13} />
                 </Link>
               </div>
             </div>

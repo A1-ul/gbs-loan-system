@@ -9,11 +9,12 @@ const logger = require('../../utils/logger');
 const bcrypt = require('bcryptjs');
 const { AppError, NotFoundError } = require('../../utils/errors');
 const { getRecordProvenance } = require('../../config/environments');
+const { resolveSubscriptionPlan } = require('./subscriptionPlans');
 
 class TenantProvisionerService {
   /**
    * Provision a complete enterprise tenant organization with:
-   * 1. Tenant record (90-day trial countdown)
+   * 1. Tenant record (30-day 1-month trial countdown by default)
    * 2. Headquarters branch + GIS Location
    * 3. Initial subscription record
    * 4. Primary Tenant Administrator account (passwordHash!)
@@ -41,7 +42,8 @@ class TenantProvisionerService {
       businessLicenseNumber,
       tinNumber,
       planTier = 'ENTERPRISE',
-      cycleDays = 90,
+      planCode = null,
+      cycleDays = 30,
       currency = 'GHS',
       approvedByDeveloperId = null,
     } = provisionData;
@@ -53,7 +55,8 @@ class TenantProvisionerService {
     const code = tenantCode || `TNT-${Math.floor(100 + Math.random() * 900)}`;
     const institutionId = `GBS-INS-${Math.floor(1000 + Math.random() * 9000)}`;
     const now = new Date();
-    const expiryDate = new Date(now.getTime() + cycleDays * 24 * 60 * 60 * 1000);
+    const resolvedPlan = resolveSubscriptionPlan(planCode || cycleDays, 30);
+    const expiryDate = resolvedPlan.subExpiry;
 
     logger.info(`[TenantProvisioner] Starting provisioning for: ${organizationName} (${code})`);
 
@@ -86,9 +89,12 @@ class TenantProvisionerService {
           approvedByDeveloperId,
           approvedAt: approvedByDeveloperId ? now : null,
           currency,
+          subscriptionPlan: resolvedPlan.code,
+          subscriptionMonths: resolvedPlan.months,
+          isLifetime: resolvedPlan.isLifetime,
           subStart: now,
           subExpiry: expiryDate,
-          daysLeft: cycleDays,
+          daysLeft: resolvedPlan.days,
           alertSent: false,
           settings: {
             provisionedAt: now.toISOString(),
@@ -216,12 +222,12 @@ class TenantProvisionerService {
 
   /**
    * Developer approves a PENDING tenant onboarding application:
-   * - Starts 90-day trial countdown
+   * - Starts 1-month (30-day) free trial countdown (or selected plan)
    * - Activates tenant admin user(s)
    * - Seeds default loan products if absent
    * - Logs immutable DeveloperAuditLog & welcome TenantMessage
    */
-  async approvePendingTenant(tenantId, developerId, { trialDays = 90, notes = 'Institution verified & approved by Lead Developer' } = {}) {
+  async approvePendingTenant(tenantId, developerId, { trialDays = 30, planCode = 'TRIAL_1M', notes = 'Institution verified & approved by Lead Developer' } = {}) {
     const tenant = await prisma.tenant.findFirst({
       where: { OR: [{ id: tenantId }, { code: tenantId }] },
       include: { branches: true, loanProducts: true },
@@ -229,20 +235,24 @@ class TenantProvisionerService {
     if (!tenant) throw new NotFoundError(`Tenant '${tenantId}'`);
 
     const now = new Date();
-    const expiryDate = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
+    const resolvedPlan = resolveSubscriptionPlan(planCode || trialDays, 30);
+    const expiryDate = resolvedPlan.subExpiry;
 
     const updated = await prisma.$transaction(async (tx) => {
       const t = await tx.tenant.update({
         where: { id: tenant.id },
         data: {
           status: 'ACTIVE',
-          onboardingStatus: 'ACTIVE_TRIAL',
+          onboardingStatus: resolvedPlan.code === 'TRIAL_1M' ? 'ACTIVE_TRIAL' : 'ACTIVE_PAID',
+          subscriptionPlan: resolvedPlan.code,
+          subscriptionMonths: resolvedPlan.months,
+          isLifetime: resolvedPlan.isLifetime,
           approvedByDeveloperId: developerId || null,
           approvedAt: now,
           rejectionReason: null,
           subStart: now,
           subExpiry: expiryDate,
-          daysLeft: trialDays,
+          daysLeft: resolvedPlan.days,
           alertSent: false,
         },
       });
@@ -291,8 +301,8 @@ class TenantProvisionerService {
           tenantId: tenant.id,
           senderType: 'DEVELOPER',
           senderName: 'GBS Developer Control Authority',
-          subject: `Welcome ${tenant.name} — ${trialDays}-Day License Activated`,
-          body: `${notes}. Your organization ID is ${tenant.code}. Subscription countdown ends ${expiryDate.toISOString().split('T')[0]}.`,
+          subject: `Welcome ${tenant.name} — ${resolvedPlan.label} Activated`,
+          body: `${notes}. Your organization ID is ${tenant.code}. ${resolvedPlan.isLifetime ? 'Lifetime access active.' : `1-Month free trial / subscription active until ${expiryDate.toISOString().split('T')[0]}.`} Please update your company name & logo inside Company Settings and create/approve your staff before they sign in.`,
           priority: 'HIGH',
         },
       });
@@ -302,7 +312,7 @@ class TenantProvisionerService {
           developerUserId: developerId || null,
           action: 'TENANT_APPROVED',
           targetComponent: `tenant:${tenant.code}`,
-          details: { tenantId: tenant.id, name: tenant.name, trialDays, notes },
+          details: { tenantId: tenant.id, name: tenant.name, planCode: resolvedPlan.code, trialDays: resolvedPlan.days, notes },
           status: 'SUCCESS',
         },
       });

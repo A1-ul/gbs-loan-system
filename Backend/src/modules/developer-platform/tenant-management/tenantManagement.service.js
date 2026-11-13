@@ -33,18 +33,25 @@ class TenantManagementService {
 
     const now = Date.now();
     return tenants.map((t) => {
-      const daysLeft = t.subExpiry
-        ? Math.max(0, Math.ceil((new Date(t.subExpiry).getTime() - now) / (1000 * 60 * 60 * 24)))
-        : t.daysLeft;
+      const daysLeft = t.isLifetime
+        ? 36500
+        : t.subExpiry
+          ? Math.max(0, Math.ceil((new Date(t.subExpiry).getTime() - now) / (1000 * 60 * 60 * 24)))
+          : t.daysLeft;
       return {
         id: t.id,
         code: t.code,
         institutionId: t.institutionId,
         name: t.name,
+        logoUrl: t.logoUrl || null,
+        companyNameUpdated: Boolean(t.companyNameUpdated),
         institutionType: t.institutionType,
         status: t.status,
         onboardingStatus: t.onboardingStatus,
         planTier: t.planTier,
+        subscriptionPlan: t.subscriptionPlan || 'TRIAL_1M',
+        subscriptionMonths: t.subscriptionMonths,
+        isLifetime: Boolean(t.isLifetime),
         currency: t.currency,
         region: t.region,
         city: t.city,
@@ -117,9 +124,9 @@ class TenantManagementService {
     return res;
   }
 
-  async unlockTenant(tenantId, extensionDays = 90, note = 'Developer authorized unlock', developerId = null) {
-    const res = await trialExpiration.unlockTenant(tenantId, extensionDays, note);
-    await recordDeveloperTenantAudit(developerId, 'TENANT_UNLOCKED', { tenantId, extensionDays, note });
+  async unlockTenant(tenantId, extensionDaysOrPlan = 30, note = 'Developer authorized unlock', developerId = null) {
+    const res = await trialExpiration.unlockTenant(tenantId, extensionDaysOrPlan, note);
+    await recordDeveloperTenantAudit(developerId, 'TENANT_UNLOCKED', { tenantId, planOrDays: extensionDaysOrPlan, note });
     return res;
   }
 
@@ -147,7 +154,7 @@ class TenantManagementService {
     };
   }
 
-  async bulkUnlockTenants(tenantIds = [], extensionDays = 90, note = 'Bulk Developer Unlock', developerId = null) {
+  async bulkUnlockTenants(tenantIds = [], extensionDays = 30, note = 'Bulk Developer Unlock', developerId = null) {
     const uniqueIds = [...new Set((Array.isArray(tenantIds) ? tenantIds : []).filter(Boolean))];
     if (uniqueIds.length === 0) throw new BadRequestError('Select at least one tenant to unlock');
 
@@ -231,6 +238,11 @@ class TenantManagementService {
       } else {
         await tx.auditLog.deleteMany({ where: { tenantId: tenant.id } });
       }
+      await tx.staffAttendance.deleteMany({ where: { tenantId: tenant.id } });
+      await tx.cctvCamera.deleteMany({ where: { tenantId: tenant.id } });
+      await tx.accountingAuditRecord.deleteMany({ where: { tenantId: tenant.id } });
+      await tx.staffBroadcastMessage.deleteMany({ where: { tenantId: tenant.id } });
+
       await tx.user.deleteMany({ where: { tenantId: tenant.id } });
 
       await tx.zoomMeeting.deleteMany({ where: { tenantId: tenant.id } });
@@ -266,8 +278,8 @@ class TenantManagementService {
     };
   }
 
-  async renewTenant(tenantId, extensionDays = 90, note, developerId = null) {
-    return this.unlockTenant(tenantId, extensionDays, note, developerId);
+  async renewTenant(tenantId, extensionDaysOrPlan = 30, note, developerId = null) {
+    return this.unlockTenant(tenantId, extensionDaysOrPlan, note, developerId);
   }
 }
 

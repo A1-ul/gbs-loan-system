@@ -6,6 +6,7 @@ const { staffAndAbove } = require('../middleware/rbac');
 const router = express.Router();
 
 router.get('/', authenticate, staffAndAbove, guarantorController.getAll);
+router.post('/', authenticate, staffAndAbove, guarantorController.create);
 router.get('/:id', authenticate, guarantorController.getById);
 router.get('/:id/loans', authenticate, guarantorController.getLoansByGuarantor);
 router.post('/:id/sign-agreement', authenticate, guarantorController.signAgreement);

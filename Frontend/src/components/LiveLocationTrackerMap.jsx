@@ -39,6 +39,7 @@ export default function LiveLocationTrackerMap({
   onLocationPublished,
 }) {
   const [filterType, setFilterType] = useState('ALL');
+  const [entityFilter, setEntityFilter] = useState('ALL');
   const [showGeofences, setShowGeofences] = useState(true);
   const [mapEngine, setMapEngine] = useState('GOOGLE_MAP'); // GOOGLE_MAP | LEAFLET
   const [phoneQuery, setPhoneQuery] = useState(initialPhone || '');
@@ -49,35 +50,43 @@ export default function LiveLocationTrackerMap({
   const [gpsStatusMsg, setGpsStatusMsg] = useState('');
   const [publishingGps, setPublishingGps] = useState(false);
 
-  const runPhoneLookup = async (rawPhone) => {
-    const clean = String(rawPhone || '').trim();
-    if (clean.length < 3) {
-      setLookupError('Enter at least 3 digits of a user mobile number.');
+  const runPhoneLookup = async (rawQuery, overrideEntity = entityFilter) => {
+    const clean = String(rawQuery || '').trim();
+    if (clean.length < 2) {
+      setLookupError('Enter at least 2 characters of a mobile phone number, GPS address, or name.');
       return;
     }
     setLookupLoading(true);
     setLookupError('');
     try {
       const client = mode === 'developer' ? devApi : api;
-      const endpoint = mode === 'developer' ? '/developer/locations/lookup' : '/gps/locate-by-phone';
-      const res = await client.get(endpoint, { params: { phone: clean } });
+      const endpoint = mode === 'developer' ? '/developer/locations/lookup' : '/gps/emergency-locate';
+      const params = mode === 'developer'
+        ? { phone: clean }
+        : {
+          q: clean,
+          includeHidden: 'true',
+          ...(overrideEntity && overrideEntity !== 'ALL' ? { type: overrideEntity } : {}),
+        };
+      const res = await client.get(endpoint, { params });
       const data = res.data?.data || { matches: [], primaryMatch: null };
       setLookupResult(data);
-      if (data.primaryMatch?.coordinates) {
+      const pm = data.primaryMatch;
+      if (pm && (pm.coordinates || pm.googleMapsEmbedUrl)) {
         setFocusedPin({
-          ...data.primaryMatch,
-          lat: data.primaryMatch.coordinates.latitude,
-          lng: data.primaryMatch.coordinates.longitude,
-          label: `${data.primaryMatch.name} (${data.primaryMatch.phone})`,
+          ...pm,
+          lat: pm.coordinates?.latitude ?? 5.6037,
+          lng: pm.coordinates?.longitude ?? -0.187,
+          label: `${pm.name} (${pm.phone || pm.gpsAddress || 'Matched'})`,
         });
         setMapEngine('GOOGLE_MAP');
       } else if (data.totalMatches === 0) {
-        setLookupError(`No registered user, field officer, or customer matches phone "${clean}".`);
+        setLookupError(`No Customer, Guarantor, or Staff record (including hidden profiles) matches "${clean}".`);
       } else {
-        setLookupError(`Matched ${data.primaryMatch?.name || clean}, but no device GPS or branch coordinates have been recorded yet.`);
+        setLookupError(`Matched ${pm?.name || clean}, but no live GPS, GPS address, or branch coordinates have been recorded yet.`);
       }
     } catch (err) {
-      setLookupError(err.response?.data?.message || 'Phone location lookup failed');
+      setLookupError(err.response?.data?.message || 'Emergency GPS / phone location lookup failed');
     } finally {
       setLookupLoading(false);
     }
@@ -177,8 +186,8 @@ export default function LiveLocationTrackerMap({
     };
   }, [focusedPin, visibleMarkers]);
 
-  const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${activePin.lat},${activePin.lng}`;
-  const googleMapsEmbedUrl = `https://maps.google.com/maps?q=${activePin.lat},${activePin.lng}&z=16&output=embed`;
+  const googleMapsUrl = activePin.googleMapsUrl || `https://www.google.com/maps/search/?api=1&query=${activePin.lat},${activePin.lng}`;
+  const googleMapsEmbedUrl = activePin.googleMapsEmbedUrl || `https://maps.google.com/maps?q=${activePin.lat},${activePin.lng}&z=16&output=embed`;
 
   const effectiveGeofences = useMemo(() => {
     if (geofences && geofences.length > 0) return geofences;
@@ -199,10 +208,12 @@ export default function LiveLocationTrackerMap({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
         <div>
           <h3 style={{ margin: 0, fontSize: '1.05rem', color: '#D4AF37', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <MapPin size={18} /> Real-Time Google Maps &amp; Mobile Number GPS Locator
+            <MapPin size={18} /> {mode === 'developer' ? 'Real-Time Google Maps & Mobile Number GPS Locator' : 'Emergency Google Live Map & GPS Address Locator'}
           </h3>
           <p style={{ margin: '4px 0 0', fontSize: '0.78rem', color: '#94A3B8' }}>
-            Pinpoint exact live device GPS or assigned institution location by registered mobile phone number ({visibleMarkers.length} pinned)
+            {mode === 'developer'
+              ? `Pinpoint exact live device GPS or institution coordinates by mobile phone number (${visibleMarkers.length} pinned)`
+              : `Find Customers, Guarantors & Staff (including hidden profiles) on Google Live Map by mobile number or digital GPS address (${visibleMarkers.length} pinned)`}
           </p>
         </div>
 
@@ -237,7 +248,7 @@ export default function LiveLocationTrackerMap({
         </div>
       </div>
 
-      {/* Exact Mobile Number Search Bar */}
+      {/* Exact Mobile Number & Digital GPS Address Emergency Search Bar */}
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -257,13 +268,31 @@ export default function LiveLocationTrackerMap({
       >
         <Phone size={16} color="#00F2FE" />
         <input
-          type="tel"
+          type="text"
           className="gbs-input"
-          style={{ flex: 1, minWidth: 240 }}
-          placeholder="Enter user mobile number (e.g. +233240000001 or 0240000001)"
+          style={{ flex: 1, minWidth: 220 }}
+          placeholder={mode === 'developer'
+            ? 'Enter user mobile number (e.g. +233240000001)'
+            : 'Mobile number, GPS digital address (e.g. GA-183-8164), or hidden name...'}
           value={phoneQuery}
           onChange={(e) => setPhoneQuery(e.target.value)}
         />
+        {mode === 'tenant' && (
+          <select
+            className="gbs-select"
+            style={{ width: 155 }}
+            value={entityFilter}
+            onChange={(e) => {
+              setEntityFilter(e.target.value);
+              if (phoneQuery.trim().length >= 2) runPhoneLookup(phoneQuery, e.target.value);
+            }}
+          >
+            <option value="ALL">All (Inc. Hidden)</option>
+            <option value="CUSTOMER">Customers</option>
+            <option value="GUARANTOR">Guarantors</option>
+            <option value="STAFF">Staff / Collectors</option>
+          </select>
+        )}
         <button type="submit" disabled={lookupLoading} className="btn btn-primary" style={{ padding: '9px 16px' }}>
           <Search size={15} /> {lookupLoading ? 'Locating...' : 'Locate on Google Map'}
         </button>
@@ -311,11 +340,14 @@ export default function LiveLocationTrackerMap({
         }}
       >
         <div>
-          <div style={{ fontWeight: 700, color: '#F1F5F9', fontSize: '0.92rem' }}>
-            Pinned Target: {activePin.label}
+          <div style={{ fontWeight: 700, color: '#F1F5F9', fontSize: '0.92rem', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span>Pinned Target: {activePin.label}</span>
+            {activePin.entityType && <span className="badge badge-cyan">{activePin.entityType}</span>}
+            {activePin.isHidden && <span className="badge badge-danger">HIDDEN PROFILE</span>}
           </div>
           <div style={{ fontSize: '0.76rem', color: '#94A3B8', marginTop: 2 }}>
             Coordinates: <strong>{Number(activePin.lat).toFixed(6)}, {Number(activePin.lng).toFixed(6)}</strong>
+            {activePin.gpsAddress ? ` • GPS Address: ${activePin.gpsAddress}` : ''}
             {activePin.phone ? ` • Phone: ${activePin.phone}` : ''}
             {activePin.tenantName ? ` • Institution: ${activePin.tenantName}` : ''}
             {activePin.lastUpdatedAt ? ` • Updated: ${new Date(activePin.lastUpdatedAt).toLocaleString()}` : ''}
@@ -346,11 +378,16 @@ export default function LiveLocationTrackerMap({
             <button
               key={m.id}
               type="button"
-              onClick={() => m.coordinates && handleSelectPin({ ...m, lat: m.coordinates.latitude, lng: m.coordinates.longitude, label: `${m.name} (${m.phone})` })}
+              onClick={() => (m.coordinates || m.googleMapsEmbedUrl) && handleSelectPin({
+                ...m,
+                lat: m.coordinates?.latitude ?? 5.6037,
+                lng: m.coordinates?.longitude ?? -0.187,
+                label: `${m.name} (${m.phone || m.gpsAddress || 'Matched'})`,
+              })}
               className={focusedPin?.id === m.id ? 'btn btn-primary' : 'btn btn-secondary'}
               style={{ padding: '5px 10px', fontSize: '0.75rem' }}
             >
-              {m.name} • {m.phone} ({m.isLiveGps ? 'LIVE GPS' : 'HQ/Branch'})
+              {m.entityType ? `[${m.entityType}] ` : ''}{m.name} • {m.phone}{m.gpsAddress ? ` • ${m.gpsAddress}` : ''}{m.isHidden ? ' • HIDDEN' : ''} ({m.isLiveGps ? 'LIVE GPS' : m.gpsAddress ? 'GPS ADDR' : 'HQ/Branch'})
             </button>
           ))}
         </div>
@@ -476,9 +513,9 @@ export default function LiveLocationTrackerMap({
               <div>
                 <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#F1F5F9', display: 'flex', alignItems: 'center', gap: 6 }}>
                   {m.type === 'TENANT_HQ' ? <Building2 size={14} color={style.color} /> :
-                   m.type === 'COLLECTOR' || m.type === 'USER_DEVICE' ? <Navigation size={14} color={style.color} /> :
-                   m.type === 'CUSTOMER_VISIT' ? <UserCheck size={14} color={style.color} /> :
-                   <ShieldAlert size={14} color={style.color} />}
+                    m.type === 'COLLECTOR' || m.type === 'USER_DEVICE' ? <Navigation size={14} color={style.color} /> :
+                      m.type === 'CUSTOMER_VISIT' ? <UserCheck size={14} color={style.color} /> :
+                        <ShieldAlert size={14} color={style.color} />}
                   <span>{m.label}</span>
                 </div>
                 <div style={{ fontSize: '0.73rem', color: '#94A3B8', marginTop: 2 }}>

@@ -73,4 +73,27 @@ async function locateByPhone(req, res, next) {
   } catch (err) { next(err); }
 }
 
-module.exports = { updateLocation, batchSync, getTrackingData, grantConsent, revokeConsent, shareMyLocation, locateByPhone };
+async function emergencyLocate(req, res, next) {
+  try {
+    const query = req.query.q || req.query.query || req.query.phone || req.query.gpsAddress || '';
+    const roleFilter = req.query.type ? String(req.query.type).toUpperCase() : null;
+    const includeHidden = req.query.includeHidden !== 'false';
+    const tenantId = req.tenantId || req.user?.tenantId || null;
+    const result = await gpsService.emergencyLocate({
+      query,
+      tenantId,
+      roleFilter,
+      includeHidden,
+      allowCrossTenant: false,
+    });
+    return success(
+      res,
+      result,
+      result.totalMatches > 0
+        ? `Emergency locator found ${result.totalMatches} matching record(s)`
+        : 'No Customer, Guarantor, or Staff record matched that phone or GPS address'
+    );
+  } catch (err) { next(err); }
+}
+
+module.exports = { updateLocation, batchSync, getTrackingData, grantConsent, revokeConsent, shareMyLocation, locateByPhone, emergencyLocate };

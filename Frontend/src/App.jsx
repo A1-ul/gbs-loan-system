@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Link, useNavigate } from 'react-router-dom';
-import { ShieldCheck, LogOut, Lock, AlertTriangle } from 'lucide-react';
+import { ShieldCheck, LogOut, AlertTriangle, Menu, X, BookOpen } from 'lucide-react';
 import api, { sessionStore } from './services/api';
 import { NavigationProvider } from './context/NavigationContext';
 import { resolveRoleMeta } from './constants/rolesMeta';
 import UserCountDropdownWidget from './components/UserCountDropdownWidget';
+import OperatingGuideModal from './components/OperatingGuideModal';
+import { CctvMobileWatchPage } from './components/CctvMobilePanel';
 import Login from './pages/Login';
 import TenantOnboarding from './pages/TenantOnboarding';
 import DeveloperLogin from './pages/DeveloperLogin';
@@ -26,6 +28,31 @@ function TenantShell({ user, onLogout, lockBanner }) {
   const navigate = useNavigate();
   const roleMeta = resolveRoleMeta(user?.role);
   const [dataMode, setDataMode] = useState(null);
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [branding, setBranding] = useState({
+    tenantName: user?.tenantName || 'GBS LOAN SYSTEM',
+    tenantLogoUrl: user?.tenantLogoUrl || null,
+  });
+
+  useEffect(() => {
+    setBranding({
+      tenantName: user?.tenantName || 'GBS LOAN SYSTEM',
+      tenantLogoUrl: user?.tenantLogoUrl || null,
+    });
+  }, [user?.tenantName, user?.tenantLogoUrl]);
+
+  useEffect(() => {
+    const onBrandingUpdated = (e) => {
+      const updated = e.detail || {};
+      setBranding((prev) => ({
+        tenantName: updated.name || updated.tenantName || prev.tenantName,
+        tenantLogoUrl: updated.logoUrl !== undefined ? updated.logoUrl : prev.tenantLogoUrl,
+      }));
+    };
+    window.addEventListener('gbs:tenant-branding-updated', onBrandingUpdated);
+    return () => window.removeEventListener('gbs:tenant-branding-updated', onBrandingUpdated);
+  }, []);
 
   useEffect(() => {
     api.get('/health').then((res) => {
@@ -36,29 +63,54 @@ function TenantShell({ user, onLogout, lockBanner }) {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-dark)' }}>
-      {/* Tenant Operational Top Header — ZERO Developer links, ZERO global counts, ZERO role-switcher select */}
+      {/* Tenant Operational Top Header — ZERO Developer links, custom institution name + logo */}
       <header className="header-bar">
-        <div className="logo-section" onClick={() => navigate('/dashboard')} style={{ cursor: 'pointer' }}>
-          <div className="logo-icon">GBS</div>
+        <div className="logo-section" onClick={() => navigate('/dashboard')} style={{ cursor: 'pointer', flex: 1, minWidth: 200 }}>
+          {branding.tenantLogoUrl ? (
+            <img
+              src={branding.tenantLogoUrl}
+              alt={branding.tenantName}
+              style={{ width: 42, height: 42, borderRadius: 10, objectFit: 'cover', border: '1px solid #D4AF37', background: '#0F1B31' }}
+            />
+          ) : (
+            <div className="logo-icon">GBS</div>
+          )}
           <div>
-            <div style={{ fontWeight: 800, color: '#F4E07B', fontSize: '0.96rem', letterSpacing: 0.4 }}>
-              {user?.tenantName || 'GBS LOAN SYSTEM'}
+            <div style={{ fontWeight: 800, color: '#F4E07B', fontSize: '0.98rem', letterSpacing: 0.4 }}>
+              {branding.tenantName}
             </div>
             <div style={{ fontSize: '0.72rem', color: '#94A3B8' }}>
-              {roleMeta.title} • {user?.firstName} {user?.lastName}
+              Powered by GBS • {roleMeta.title} • {user?.firstName} {user?.lastName}
             </div>
           </div>
         </div>
 
-        <div className="header-actions">
+        <button
+          type="button"
+          className="mobile-menu-btn"
+          aria-label="Toggle Menu"
+          onClick={() => setMobileMenuOpen((prev) => !prev)}
+        >
+          {mobileMenuOpen ? <X size={18} /> : <Menu size={18} />}
+        </button>
+
+        <div className={`header-actions header-actions-collapsible ${mobileMenuOpen ? 'open' : ''}`}>
           {dataMode && (
             <span className={`badge ${dataMode === 'PRODUCTION_LIVE' ? 'badge-success' : 'badge-warning'}`}>
               {dataMode === 'PRODUCTION_LIVE' ? 'PRODUCTION LIVE' : 'DEMO / DEV MODE'}
             </span>
           )}
           <UserCountDropdownWidget userRole={user?.role} />
+          <button
+            type="button"
+            onClick={() => setGuideOpen(true)}
+            className="btn btn-secondary"
+            style={{ padding: '7px 12px', fontSize: '0.8rem' }}
+          >
+            <BookOpen size={14} /> Operating Guide
+          </button>
           <Link to="/profile" className="btn btn-secondary" style={{ padding: '7px 12px', fontSize: '0.8rem' }}>
-            <ShieldCheck size={14} /> Security &amp; Voice ID
+            <ShieldCheck size={14} /> Security &amp; Face/Voice ID
           </Link>
           <button
             type="button"
@@ -70,6 +122,8 @@ function TenantShell({ user, onLogout, lockBanner }) {
           </button>
         </div>
       </header>
+
+      <OperatingGuideModal isOpen={guideOpen} onClose={() => setGuideOpen(false)} userRole={user?.role} isDeveloper={false} />
 
       {lockBanner && (
         <div style={{ background: 'rgba(239,68,68,0.2)', borderBottom: '1px solid #EF4444', padding: '12px 24px', color: '#FCA5A5', display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -95,8 +149,8 @@ function TenantShell({ user, onLogout, lockBanner }) {
       </main>
 
       <footer className="app-footer">
-        <div>GBS Loan Management System — Smart Loans. Secure Future.</div>
-        <div>Multi-Tenant RBAC • Central Voice Verification • PostgreSQL Ledger</div>
+        <div>{branding.tenantName} — Powered by GBS Loan Management System</div>
+        <div>Multi-Tenant RBAC • Live OTP &amp; Biometrics • PostgreSQL Ledger</div>
       </footer>
     </div>
   );
@@ -158,16 +212,23 @@ export default function App() {
     <BrowserRouter>
       <NavigationProvider>
         <Routes>
-          {/* Public Tenant Auth & Institutional Onboarding Routes */}
+          {/* Default Entry Route: Institutional Onboarding Form First (when unauthenticated) */}
+          <Route
+            path="/"
+            element={user && sessionStore.getTenantToken() ? <Navigate to="/dashboard" replace /> : <TenantOnboarding />}
+          />
+          <Route path="/onboard-tenant" element={<TenantOnboarding />} />
+          <Route path="/cctv-mobile" element={<CctvMobileWatchPage />} />
+
+          {/* Public Tenant Auth & 30-Role Portals */}
           <Route
             path="/login"
-            element={user && sessionStore.getTenantToken() ? <Navigate to="/dashboard" replace /> : <Login onAuthenticated={(u) => { setLockBanner(''); setUser(u); }} />}
+            element={user && sessionStore.getTenantToken() ? <Navigate to="/dashboard" replace /> : <Login onAuthenticated={(u) => { setLockBanner(''); setUser(u); }} onDevAuthenticated={(d) => setDevUser(d)} />}
           />
           <Route
             path="/login/:roleSlug"
-            element={user && sessionStore.getTenantToken() ? <Navigate to="/dashboard" replace /> : <Login onAuthenticated={(u) => { setLockBanner(''); setUser(u); }} />}
+            element={user && sessionStore.getTenantToken() ? <Navigate to="/dashboard" replace /> : <Login onAuthenticated={(u) => { setLockBanner(''); setUser(u); }} onDevAuthenticated={(d) => setDevUser(d)} />}
           />
-          <Route path="/onboard-tenant" element={<TenantOnboarding />} />
 
           {/* Strictly Isolated Hidden Developer Control Center */}
           <Route
@@ -177,12 +238,6 @@ export default function App() {
           <Route
             path="/dev-portal/*"
             element={<ProtectedDeveloperRoute devUser={devUser} onDevLogout={() => setDevUser(null)} />}
-          />
-
-          {/* Default Redirect */}
-          <Route
-            path="/"
-            element={<Navigate to={user && sessionStore.getTenantToken() ? '/dashboard' : '/login'} replace />}
           />
 
           {/* Authenticated Tenant Multi-Role Workspace */}

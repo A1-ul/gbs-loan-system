@@ -59,7 +59,20 @@ describe('GBS Enterprise Production Integration Suite (PostgreSQL Live)', () => 
         await prisma.migrationJob.deleteMany({ where: { id: createdMigrationJobId } }).catch(() => null);
       }
       await prisma.user.deleteMany({ where: { email: `mig.${suffix}@gbsloan.com` } }).catch(() => null);
+      await prisma.user.deleteMany({ where: { email: `hidden.cust.${suffix}@gbsloan.com` } }).catch(() => null);
+      await prisma.user.deleteMany({ where: { email: `hidden.guar.${suffix}@gbsloan.com` } }).catch(() => null);
+      await prisma.user.deleteMany({ where: { email: `staff.qa.${suffix}@gbstestmfi.com` } }).catch(() => null);
       if (createdTenantId) {
+        await prisma.staffAttendance.deleteMany({ where: { tenantId: createdTenantId } }).catch(() => null);
+        await prisma.notification.deleteMany({ where: { tenantId: createdTenantId } }).catch(() => null);
+        await prisma.staffBroadcastMessage.deleteMany({ where: { tenantId: createdTenantId } }).catch(() => null);
+        await prisma.zoomMeeting.deleteMany({ where: { tenantId: createdTenantId } }).catch(() => null);
+        await prisma.reportSnapshot.deleteMany({ where: { tenantId: createdTenantId } }).catch(() => null);
+        await prisma.cctvCamera.deleteMany({ where: { tenantId: createdTenantId } }).catch(() => null);
+        await prisma.accountingAuditRecord.deleteMany({ where: { tenantId: createdTenantId } }).catch(() => null);
+        await prisma.guarantor.deleteMany({ where: { tenantId: createdTenantId } }).catch(() => null);
+        await prisma.member.deleteMany({ where: { tenantId: createdTenantId } }).catch(() => null);
+        await prisma.staff.deleteMany({ where: { tenantId: createdTenantId } }).catch(() => null);
         await prisma.securityAlert.deleteMany({ where: { tenantId: createdTenantId } }).catch(() => null);
         await prisma.tenantLocation.deleteMany({ where: { tenantId: createdTenantId } }).catch(() => null);
         await prisma.auditLog.deleteMany({ where: { tenantId: createdTenantId } }).catch(() => null);
@@ -134,7 +147,7 @@ describe('GBS Enterprise Production Integration Suite (PostgreSQL Live)', () => 
     expect(Array.isArray(devGis.body.data.features)).toBe(true);
   });
 
-  it('enforces Institutional Onboarding -> PENDING block -> Developer Approval -> 90d Lock/Renew', async () => {
+  it('enforces Institutional Onboarding -> PENDING block -> Developer Approval (1m Trial) -> Multi-Tier Plans -> Lock/Renew', async () => {
     const onboardRes = await request(app)
       .post('/api/v1/tenants/onboard')
       .send({
@@ -143,6 +156,7 @@ describe('GBS Enterprise Production Integration Suite (PostgreSQL Live)', () => 
         city: 'Kumasi',
         region: 'Ashanti',
         country: 'Ghana',
+        gpsAddress: 'AK-448-9012',
         representativeName: 'Kwaku Mensah',
         representativeEmail: testOrgEmail,
         representativePhone: `+233249${suffix}`,
@@ -159,21 +173,44 @@ describe('GBS Enterprise Production Integration Suite (PostgreSQL Live)', () => 
       .send({ email: testOrgEmail, password: 'TenantPass@2026!' });
     expect([401, 403]).toContain(blockedPendingLogin.statusCode);
 
-    // Lead Developer approves institution -> activates 90-day trial
+    // Lead Developer approves institution -> activates 1-Month (30-day) Free Trial
     const approveRes = await request(app)
       .post(`/api/v1/developer/tenants/${createdTenantId}/approve`)
       .set('Authorization', `Bearer ${devToken}`)
-      .send({ trialDays: 90 });
+      .send({ trialDays: 30, planCode: 'TRIAL_1M' });
     expect(approveRes.statusCode).toBe(200);
     expect(['APPROVED', 'ACTIVE_TRIAL']).toContain(approveRes.body.data.onboardingStatus);
-    expect(approveRes.body.data.daysLeft).toBeGreaterThanOrEqual(89);
+    expect(approveRes.body.data.daysLeft).toBeGreaterThanOrEqual(29);
+    expect(approveRes.body.data.daysLeft).toBeLessThanOrEqual(31);
 
-    // Approved Tenant Admin logs in cleanly
+    // Approved Tenant Owner logs in cleanly
     const activeLogin = await request(app)
       .post('/api/v1/auth/login')
       .send({ email: testOrgEmail, password: 'TenantPass@2026!' });
     expect(activeLogin.statusCode).toBe(200);
     const tenantToken = activeLogin.body.data.accessToken;
+
+    // Tenant Owner updates company name branding & chooses subscription tier (3m/6m/9m/12m/Lifetime)
+    const brandingRes = await request(app)
+      .put('/api/v1/tenants/my/branding')
+      .set('Authorization', `Bearer ${tenantToken}`)
+      .send({ name: `Ashanti Gold Credit ${suffix}` });
+    expect(brandingRes.statusCode).toBe(200);
+    expect(brandingRes.body.data.companyNameUpdated).toBe(true);
+
+    const sub3m = await request(app)
+      .post('/api/v1/tenants/my/subscription')
+      .set('Authorization', `Bearer ${tenantToken}`)
+      .send({ planCode: 'PLAN_3M' });
+    expect(sub3m.statusCode).toBe(200);
+    expect(sub3m.body.data.tenant.subscriptionPlan).toBe('PLAN_3M');
+
+    const subLifetime = await request(app)
+      .post('/api/v1/tenants/my/subscription')
+      .set('Authorization', `Bearer ${tenantToken}`)
+      .send({ planCode: 'LIFETIME' });
+    expect(subLifetime.statusCode).toBe(200);
+    expect(subLifetime.body.data.tenant.isLifetime).toBe(true);
 
     // Developer locks tenant -> subsequent API blocked with 402
     const lockRes = await request(app)
@@ -496,5 +533,193 @@ describe('GBS Enterprise Production Integration Suite (PostgreSQL Live)', () => 
         .set('Authorization', `Bearer ${mgrToken}`);
       expect(mgrLoans.statusCode).toBe(200);
     }
+  });
+
+  it('executes Enterprise v3 Staff Approval Gate, Clock In/Out, Owner Broadcast, Accountant Audit, CCTV Mobile, Wrapped Reports & Hidden Emergency Locate', async () => {
+    // Sign in as the approved & unlocked test institution Owner
+    const ownerLogin = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: testOrgEmail, password: 'TenantPass@2026!' });
+    expect(ownerLogin.statusCode).toBe(200);
+    const ownerToken = ownerLogin.body.data.accessToken;
+
+    // 1. Provision Staff requiring explicit Owner Approval -> Blocked before approval -> Activated after approve
+    const staffEmail = `staff.qa.${suffix}@gbstestmfi.com`;
+    const provRes = await request(app)
+      .post('/api/v1/staff/provision')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        firstName: 'Kofi',
+        lastName: 'Mensah',
+        email: staffEmail,
+        phone: `+233551${suffix}`,
+        password: 'StaffPass@2026!',
+        role: 'LOAN_OFFICER',
+        gpsAddress: 'GA-777-2201',
+        autoApprove: false,
+      });
+    expect(provRes.statusCode).toBe(201);
+    const provisionedUserId = provRes.body.data.userId;
+    expect(provisionedUserId).toBeTruthy();
+
+    const blockedStaffLogin = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: staffEmail, password: 'StaffPass@2026!' });
+    expect(blockedStaffLogin.statusCode).toBe(403);
+
+    const approveStaffRes = await request(app)
+      .post(`/api/v1/staff/${provisionedUserId}/approve`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ approve: true });
+    expect(approveStaffRes.statusCode).toBe(200);
+
+    const staffLogin = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: staffEmail, password: 'StaffPass@2026!' });
+    expect(staffLogin.statusCode).toBe(200);
+    const staffToken = staffLogin.body.data.accessToken;
+
+    // 2. Staff Attendance Clock In / Status / Clock Out / Manager Log
+    const clockInRes = await request(app)
+      .post('/api/v1/staff/attendance/clock-in')
+      .set('Authorization', `Bearer ${staffToken}`)
+      .send({ gpsAddress: 'GA-777-2201', latitude: 5.605, longitude: -0.188 });
+    expect(clockInRes.statusCode).toBe(200);
+    expect(['CLOCKED_IN', 'LATE']).toContain(clockInRes.body.data.status);
+
+    const myAttStatus = await request(app)
+      .get('/api/v1/staff/attendance/my-status')
+      .set('Authorization', `Bearer ${staffToken}`);
+    expect(myAttStatus.statusCode).toBe(200);
+    expect(myAttStatus.body.data.clockedIn).toBe(true);
+
+    const clockOutRes = await request(app)
+      .post('/api/v1/staff/attendance/clock-out')
+      .set('Authorization', `Bearer ${staffToken}`)
+      .send({ gpsAddress: 'GA-777-2201', latitude: 5.605, longitude: -0.188 });
+    expect(clockOutRes.statusCode).toBe(200);
+    expect(clockOutRes.body.data.status).toBe('CLOCKED_OUT');
+
+    // 3. Company Owner Staff Broadcast + Staff Inbox + Collection Alerts
+    const bcastRes = await request(app)
+      .post('/api/v1/notifications/broadcast')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ sendToAll: true, title: 'Morning Standup', message: 'Ensure all active borrowers pay on time.', priority: 'HIGH' });
+    expect(bcastRes.statusCode).toBe(201);
+
+    const inboxRes = await request(app)
+      .get('/api/v1/notifications/broadcasts')
+      .set('Authorization', `Bearer ${staffToken}`);
+    expect(inboxRes.statusCode).toBe(200);
+    expect(inboxRes.body.data.some((b) => b.subject === 'Morning Standup' || b.title === 'Morning Standup')).toBe(true);
+
+    const alertsRes = await request(app)
+      .get('/api/v1/notifications/repayment-alerts')
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(alertsRes.statusCode).toBe(200);
+    expect(alertsRes.body.data).toHaveProperty('totalBorrowers');
+
+    // 4. Online Meeting Scheduling by Owner -> EXECUTIVES_ONLY / ALL_STAFF
+    const meetRes = await request(app)
+      .post('/api/v1/meetings')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ topic: `Owner Board Review ${suffix}`, audienceType: 'EXECUTIVES_ONLY', duration: 45 });
+    expect(meetRes.statusCode).toBe(201);
+    expect(meetRes.body.data.targetScope).toBe('EXECUTIVES_ONLY');
+
+    // 5. Accountant Ledger Audit & Company Owner Sign-Off
+    const auditRun = await request(app)
+      .post('/api/v1/enterprise/audits/reconcile')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ periodLabel: `QA-${suffix}`, notes: 'Automated ledger verification' });
+    expect(auditRun.statusCode).toBe(201);
+    const createdAuditId = auditRun.body.data.id;
+
+    const ownerSignOff = await request(app)
+      .put(`/api/v1/enterprise/audits/${createdAuditId}/review`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ decision: 'APPROVED', ownerNotes: 'Verified and approved' });
+    expect(ownerSignOff.statusCode).toBe(200);
+    expect(ownerSignOff.body.data.status).toBe('APPROVED');
+
+    // 6. CCTV Camera Mobile Linking + Public Smartphone Access
+    const cctvRes = await request(app)
+      .post('/api/v1/enterprise/cctv')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ name: `Vault Cam ${suffix}`, locationLabel: 'Kumasi Vault', streamUrl: 'https://demo.stream.local/vault.m3u8' });
+    expect(cctvRes.statusCode).toBe(201);
+    expect(cctvRes.body.data.qrCodeDataUrl).toContain('data:image/');
+    const mobileUrl = new URL(cctvRes.body.data.mobileLinkUrl, 'http://localhost');
+    const mobileAccessRes = await request(app)
+      .get('/api/v1/enterprise/cctv/mobile-access')
+      .query({
+        cameraId: mobileUrl.searchParams.get('cameraId'),
+        code: mobileUrl.searchParams.get('code'),
+        token: mobileUrl.searchParams.get('token'),
+      });
+    expect(mobileAccessRes.statusCode).toBe(200);
+    expect(mobileAccessRes.body.data.name).toBe(`Vault Cam ${suffix}`);
+
+    // 7. Weekly/Monthly/Yearly Wrapped Report + CSV Download
+    const wrapRes = await request(app)
+      .post('/api/v1/reports/wrap-period')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ period: 'WEEKLY' });
+    expect(wrapRes.statusCode).toBe(201);
+    const snapId = wrapRes.body.data.id;
+    expect(snapId).toBeTruthy();
+    const csvExport = await request(app)
+      .get(`/api/v1/reports/snapshots/${snapId}/export`)
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(csvExport.statusCode).toBe(200);
+    expect(csvExport.headers['content-type']).toContain('text/csv');
+
+    // 8. Loan Workflow Audit Trail Snapshot verification
+    const wfRes = await request(app)
+      .get(`/api/v1/loans/${createdLoanId}/workflow`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(wfRes.statusCode).toBe(200);
+    expect(wfRes.body.data.length).toBeGreaterThanOrEqual(1);
+    expect(wfRes.body.data[0].performedByName).toBeTruthy();
+
+    // 9. Hidden Customer & Guarantor GPS Digital Address + Emergency Locator
+    const hiddenGps = `AK-${suffix}-88`;
+    const hiddenMemberRes = await request(app)
+      .post('/api/v1/members')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        firstName: 'Hidden',
+        lastName: 'Borrower',
+        email: `hidden.cust.${suffix}@gbsloan.com`,
+        phone: `+233508${suffix}`,
+        gpsAddress: hiddenGps,
+        isHidden: true,
+      });
+    expect(hiddenMemberRes.statusCode).toBe(201);
+
+    const hiddenGuarRes = await request(app)
+      .post('/api/v1/guarantors')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        firstName: 'Hidden',
+        lastName: 'Guarantor',
+        email: `hidden.guar.${suffix}@gbsloan.com`,
+        phone: `+233509${suffix}`,
+        gpsAddress: `AK-${suffix}-99`,
+        isHidden: true,
+      });
+    expect(hiddenGuarRes.statusCode).toBe(201);
+
+    const hiddenEmergencyLocate = await request(app)
+      .get('/api/v1/gps/emergency-locate')
+      .query({ q: hiddenGps, includeHidden: 'true' })
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(hiddenEmergencyLocate.statusCode).toBe(200);
+    expect(hiddenEmergencyLocate.body.data.primaryMatch).toBeDefined();
+    expect(hiddenEmergencyLocate.body.data.primaryMatch.gpsAddress).toBe(hiddenGps);
+    expect(hiddenEmergencyLocate.body.data.primaryMatch.isHidden).toBe(true);
+
+    // Clean up adminToken-owned audit record created outside test tenant
+    await prisma.accountingAuditRecord.deleteMany({ where: { id: createdAuditId } }).catch(() => null);
   });
 });

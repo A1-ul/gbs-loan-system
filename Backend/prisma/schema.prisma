@@ -215,8 +215,10 @@ model User {
   lastName              String         @map("last_name")
   profilePicture        String?        @map("profile_picture")
   address               String?
+  gpsAddress            String?        @map("gps_address")
   gpsLatitude           Float?         @map("gps_latitude")
   gpsLongitude          Float?         @map("gps_longitude")
+  isHidden              Boolean        @default(false) @map("is_hidden")
   isEmailVerified       Boolean        @default(false) @map("is_email_verified")
   isPhoneVerified       Boolean        @default(false) @map("is_phone_verified")
   otpVerified           Boolean        @default(false) @map("otp_verified")
@@ -384,6 +386,10 @@ model Member {
   monthlyIncome       Decimal?       @map("monthly_income") @db.Decimal(12, 2)
   emergencyContact    String?        @map("emergency_contact")
   emergencyPhone      String?        @map("emergency_phone")
+  gpsAddress          String?        @map("gps_address")
+  gpsLatitude         Float?         @map("gps_latitude")
+  gpsLongitude        Float?         @map("gps_longitude")
+  isHidden            Boolean        @default(false) @map("is_hidden")
   creditScore         Int            @default(650) @map("credit_score")
   kycStatus           String         @default("PENDING") @map("kyc_status")
   registrationDate    DateTime       @default(now()) @map("registration_date")
@@ -411,6 +417,10 @@ model Guarantor {
   userId               String    @unique @map("user_id")
   ghanaCardNumber      String?   @map("ghana_card_number")
   relationship         String?
+  gpsAddress           String?   @map("gps_address")
+  gpsLatitude          Float?    @map("gps_latitude")
+  gpsLongitude         Float?    @map("gps_longitude")
+  isHidden             Boolean   @default(false) @map("is_hidden")
   agreementSigned      Boolean   @default(false) @map("agreement_signed")
   agreementSignedAt    DateTime? @map("agreement_signed_at")
   penaltyNotifyEnabled Boolean   @default(true) @map("penalty_notify_enabled")
@@ -538,13 +548,16 @@ model LoanGuarantor {
 }
 
 model LoanWorkflowLog {
-  id          String     @id @default(uuid())
-  loanId      String     @map("loan_id")
-  fromStatus  LoanStatus @map("from_status")
-  toStatus    LoanStatus @map("to_status")
-  performedBy String?    @map("performed_by")
-  notes       String?
-  createdAt   DateTime   @default(now()) @map("created_at")
+  id              String     @id @default(uuid())
+  loanId          String     @map("loan_id")
+  fromStatus      LoanStatus @map("from_status")
+  toStatus        LoanStatus @map("to_status")
+  performedBy     String?    @map("performed_by")
+  performedByName String?    @map("performed_by_name")
+  performedByRole String?    @map("performed_by_role")
+  auditSnapshot   Json?      @map("audit_snapshot")
+  notes           String?
+  createdAt       DateTime   @default(now()) @map("created_at")
 
   loan Loan @relation(fields: [loanId], references: [id], onDelete: Cascade)
 
@@ -635,6 +648,9 @@ model Staff {
   position   String?
   hireDate   DateTime @map("hire_date")
   baseSalary Decimal  @map("base_salary") @db.Decimal(12, 2)
+  gpsAddress String?  @map("gps_address")
+  gpsLatitude Float?  @map("gps_latitude")
+  gpsLongitude Float? @map("gps_longitude")
   isActive   Boolean  @default(true) @map("is_active")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
@@ -776,19 +792,22 @@ model Notification {
 // ============================================
 
 model ZoomMeeting {
-  id            String        @id @default(uuid())
-  tenantId      String?       @map("tenant_id")
-  zoomMeetingId String        @unique @map("zoom_meeting_id")
-  topic         String
-  hostId        String        @map("host_id")
-  startTime     DateTime      @map("start_time")
-  duration      Int
-  joinUrl       String        @map("join_url")
-  password      String?
-  status        MeetingStatus @default(SCHEDULED)
-  participants  Json?
-  createdAt     DateTime      @default(now()) @map("created_at")
-  updatedAt     DateTime      @updatedAt @map("updated_at")
+  id               String        @id @default(uuid())
+  tenantId         String?       @map("tenant_id")
+  zoomMeetingId    String        @unique @map("zoom_meeting_id")
+  topic            String
+  hostId           String        @map("host_id")
+  hostName         String?       @map("host_name")
+  targetScope      String?       @default("ALL_STAFF") @map("target_scope")
+  participantRoles Json?         @map("participant_roles")
+  startTime        DateTime      @map("start_time")
+  duration         Int
+  joinUrl          String        @map("join_url")
+  password         String?
+  status           MeetingStatus @default(SCHEDULED)
+  participants     Json?
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
 
   tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
 
@@ -802,6 +821,8 @@ model ReportSnapshot {
   id            String   @id @default(uuid())
   tenantId      String?  @map("tenant_id")
   reportType    String   @map("report_type")
+  periodType    String?  @map("period_type")
+  periodLabel   String?  @map("period_label")
   periodStart   DateTime @map("period_start")
   periodEnd     DateTime @map("period_end")
   data          Json
@@ -1215,6 +1236,7 @@ model Tenant {
   status                String         @default("PENDING") // PENDING, ACTIVE, EXPIRING_SOON, LOCKED_EXPIRED, SUSPENDED, REJECTED
   onboardingStatus      String         @default("PENDING") @map("onboarding_status") // PENDING, VERIFICATION_REQUIRED, APPROVED, PROVISIONING, ACTIVE_TRIAL, TRIAL_EXPIRING, TRIAL_EXPIRED, ACTIVE_PAID, GRACE_PERIOD, SUSPENDED, LOCKED, REJECTED
   planTier              String         @default("Enterprise") @map("plan_tier")
+  subscriptionPlan      String?        @default("TRIAL_1M") @map("subscription_plan")
   contactEmail          String?        @map("contact_email")
   contactPhone          String?        @map("contact_phone")
   country               String?        @default("Ghana")
@@ -1227,6 +1249,7 @@ model Tenant {
   businessLicenseNumber String?        @map("business_license_number")
   tinNumber             String?        @map("tin_number")
   logoUrl               String?        @map("logo_url")
+  companyNameUpdated    Boolean        @default(false) @map("company_name_updated")
   representativeName    String?        @map("representative_name")
   representativeEmail   String?        @map("representative_email")
   representativePhone   String?        @map("representative_phone")
@@ -1239,7 +1262,9 @@ model Tenant {
   timezone              String         @default("Africa/Accra")
   subStart              DateTime       @default(now()) @map("sub_start")
   subExpiry             DateTime?      @map("sub_expiry")
-  daysLeft              Int            @default(90) @map("days_left")
+  daysLeft              Int            @default(30) @map("days_left")
+  subscriptionMonths    Int?           @default(1) @map("subscription_months")
+  isLifetime            Boolean        @default(false) @map("is_lifetime")
   alertSent             Boolean        @default(false) @map("alert_sent")
   settings              Json?
   dataSource            DataSource     @default(PRODUCTION_LIVE) @map("data_source")
@@ -1269,6 +1294,10 @@ model Tenant {
   campaigns       MarketingCampaign[]
   deletionReqs    DeletionApprovalRequest[]
   messages        TenantMessage[]
+  staffAttendances StaffAttendance[]
+  cctvCameras     CctvCamera[]
+  accountingAudits AccountingAuditRecord[]
+  staffBroadcasts StaffBroadcastMessage[]
 
   @@index([status])
   @@index([onboardingStatus])
@@ -1398,4 +1427,108 @@ model AIDiagnosticLog {
 
   @@index([issueType])
   @@map("ai_diagnostic_logs")
+}
+
+// ============================================
+// STAFF ATTENDANCE, OWNER BROADCASTS, CCTV & ACCOUNTING AUDITS
+// ============================================
+
+model StaffAttendance {
+  id                 String    @id @default(uuid())
+  tenantId           String?   @map("tenant_id")
+  userId             String    @map("user_id")
+  staffId            String?   @map("staff_id")
+  workDate           String    @map("work_date")
+  clockInAt          DateTime  @default(now()) @map("clock_in_at")
+  clockOutAt         DateTime? @map("clock_out_at")
+  durationMinutes    Int?      @map("duration_minutes")
+  clockInLatitude    Float?    @map("clock_in_latitude")
+  clockInLongitude   Float?    @map("clock_in_longitude")
+  clockInGpsAddress  String?   @map("clock_in_gps_address")
+  clockOutLatitude   Float?    @map("clock_out_latitude")
+  clockOutLongitude  Float?    @map("clock_out_longitude")
+  clockOutGpsAddress String?   @map("clock_out_gps_address")
+  status             String    @default("CLOCKED_IN")
+  notes              String?
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([userId, workDate])
+  @@map("staff_attendances")
+}
+
+model CctvCamera {
+  id             String   @id @default(uuid())
+  tenantId       String?  @map("tenant_id")
+  branchId       String?  @map("branch_id")
+  name           String
+  cameraLocation String?  @map("camera_location")
+  streamUrl      String   @map("stream_url")
+  mobileLinkUrl  String?  @map("mobile_link_url")
+  pairingCode    String   @map("pairing_code")
+  status         String   @default("ONLINE")
+  addedById      String?  @map("added_by_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("cctv_cameras")
+}
+
+model AccountingAuditRecord {
+  id                      String    @id @default(uuid())
+  tenantId                String?   @map("tenant_id")
+  auditorId               String    @map("auditor_id")
+  auditorName             String?   @map("auditor_name")
+  auditPeriod             String    @map("audit_period")
+  totalPrincipalDisbursed Decimal   @default(0) @map("total_principal_disbursed") @db.Decimal(14, 2)
+  totalInterestExpected   Decimal   @default(0) @map("total_interest_expected") @db.Decimal(14, 2)
+  totalRepaid             Decimal   @default(0) @map("total_repaid") @db.Decimal(14, 2)
+  totalOutstanding        Decimal   @default(0) @map("total_outstanding") @db.Decimal(14, 2)
+  totalPenalties          Decimal   @default(0) @map("total_penalties") @db.Decimal(14, 2)
+  cashInHand              Decimal   @default(0) @map("cash_in_hand") @db.Decimal(14, 2)
+  momoFloat               Decimal   @default(0) @map("momo_float") @db.Decimal(14, 2)
+  bankBalance             Decimal   @default(0) @map("bank_balance") @db.Decimal(14, 2)
+  expectedLedgerTotal     Decimal   @default(0) @map("expected_ledger_total") @db.Decimal(14, 2)
+  actualLedgerTotal       Decimal   @default(0) @map("actual_ledger_total") @db.Decimal(14, 2)
+  variance                Decimal   @default(0) @db.Decimal(14, 2)
+  discrepanciesFound      Int       @default(0) @map("discrepancies_found")
+  status                  String    @default("SUBMITTED")
+  findings                String?
+  submittedToOwner        Boolean   @default(true) @map("submitted_to_owner")
+  ownerReviewedAt         DateTime? @map("owner_reviewed_at")
+  ownerNotes              String?   @map("owner_notes")
+  createdAt               DateTime  @default(now()) @map("created_at")
+  updatedAt               DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("accounting_audit_records")
+}
+
+model StaffBroadcastMessage {
+  id               String   @id @default(uuid())
+  tenantId         String?  @map("tenant_id")
+  senderUserId     String   @map("sender_user_id")
+  senderName       String   @map("sender_name")
+  senderRole       String   @map("sender_role")
+  targetScope      String   @default("ALL_STAFF") @map("target_scope")
+  recipientUserIds Json?    @map("recipient_user_ids")
+  subject          String
+  body             String
+  priority         String   @default("NORMAL")
+  readByUserIds    Json?    @map("read_by_user_ids")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("staff_broadcast_messages")
 }

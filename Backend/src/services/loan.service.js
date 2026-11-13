@@ -5,6 +5,36 @@ const logger = require('../utils/logger');
 const { NotFoundError, ValidationError, AppError } = require('../utils/errors');
 const { getRecordProvenance } = require('../config/environments');
 
+async function getActorAuditMeta(tx, actorId) {
+  if (!actorId) return { name: 'System Automated Process', role: 'SYSTEM' };
+  const actor = await tx.user.findUnique({
+    where: { id: actorId },
+    select: { firstName: true, lastName: true, role: true, email: true },
+  }).catch(() => null);
+  if (!actor) return { name: actorId, role: 'STAFF' };
+  return {
+    name: `${actor.firstName || ''} ${actor.lastName || ''}`.trim() || actor.email || actorId,
+    role: actor.role || 'STAFF',
+  };
+}
+
+function buildAuditSnapshot(loanRecord, actionLabel, extra = {}) {
+  return {
+    action: actionLabel,
+    recordedAt: new Date().toISOString(),
+    loanNumber: loanRecord.loanNumber,
+    status: loanRecord.status,
+    principalAmount: Number(loanRecord.principalAmount || 0),
+    interestRate: Number(loanRecord.interestRate || 0),
+    termMonths: loanRecord.termMonths,
+    totalAmount: Number(loanRecord.totalAmount || 0),
+    amountPaid: Number(loanRecord.amountPaid || 0),
+    outstandingAmount: Number(loanRecord.outstandingAmount || 0),
+    purpose: loanRecord.purpose || null,
+    ...extra,
+  };
+}
+
 async function apply(userId, data, tenantId = null) {
   let member = null;
   if (data.memberId) {
@@ -79,15 +109,35 @@ async function apply(userId, data, tenantId = null) {
       }
     }
 
+    const actorMeta = await getActorAuditMeta(tx, userId);
+    const snapshot = buildAuditSnapshot(created, 'LOAN_APPLICATION_SUBMITTED', {
+      borrowerName: `${member.user?.firstName || ''} ${member.user?.lastName || ''}`.trim(),
+      memberNumber: member.memberNumber,
+    });
+
     await tx.loanWorkflowLog.create({
       data: {
         loanId: created.id,
         fromStatus: 'PENDING',
         toStatus: 'PENDING',
         performedBy: userId,
+        performedByName: actorMeta.name,
+        performedByRole: actorMeta.role,
+        auditSnapshot: snapshot,
         notes: `Loan application submitted for GHS ${calc.principal.toLocaleString()} (${calc.termMonths} months)`,
       },
     });
+
+    await tx.auditLog.create({
+      data: {
+        tenantId: created.tenantId || null,
+        userId,
+        action: 'CREATE',
+        entityType: 'Loan',
+        entityId: created.id,
+        newValues: snapshot,
+      },
+    }).catch(() => {});
 
     return created;
   });
@@ -196,6 +246,7 @@ async function review(id, reviewerId, { action, notes, rejectionReason }) {
 
   const nextStatus = action === 'reject' ? 'REJECTED' : 'UNDER_REVIEW';
   return prisma.$transaction(async (tx) => {
+    const actorMeta = await getActorAuditMeta(tx, reviewerId);
     const updated = await tx.loan.update({
       where: { id: loan.id },
       data: {
@@ -207,15 +258,31 @@ async function review(id, reviewerId, { action, notes, rejectionReason }) {
       },
     });
 
+    const snapshot = buildAuditSnapshot(updated, `LOAN_${nextStatus}`, { previousStatus: loan.status, notes });
     await tx.loanWorkflowLog.create({
       data: {
         loanId: loan.id,
         fromStatus: loan.status,
         toStatus: nextStatus,
         performedBy: reviewerId,
+        performedByName: actorMeta.name,
+        performedByRole: actorMeta.role,
+        auditSnapshot: snapshot,
         notes: notes || `Reviewed: ${action}`,
       },
     });
+
+    await tx.auditLog.create({
+      data: {
+        tenantId: loan.tenantId || null,
+        userId: reviewerId,
+        action: action === 'reject' ? 'REJECT' : 'UPDATE',
+        entityType: 'Loan',
+        entityId: loan.id,
+        oldValues: { status: loan.status },
+        newValues: snapshot,
+      },
+    }).catch(() => {});
 
     return updated;
   });
@@ -228,6 +295,7 @@ async function approve(id, approvedById) {
   }
 
   const updated = await prisma.$transaction(async (tx) => {
+    const actorMeta = await getActorAuditMeta(tx, approvedById);
     const res = await tx.loan.update({
       where: { id: loan.id },
       data: {
@@ -238,15 +306,32 @@ async function approve(id, approvedById) {
       include: { member: { include: { user: true } } },
     });
 
+    const snapshot = buildAuditSnapshot(res, 'LOAN_APPROVED', { previousStatus: loan.status });
     await tx.loanWorkflowLog.create({
       data: {
         loanId: loan.id,
         fromStatus: loan.status,
         toStatus: 'APPROVED',
         performedBy: approvedById,
+        performedByName: actorMeta.name,
+        performedByRole: actorMeta.role,
+        auditSnapshot: snapshot,
         notes: 'Loan formally approved for disbursement',
       },
     });
+
+    await tx.auditLog.create({
+      data: {
+        tenantId: loan.tenantId || null,
+        userId: approvedById,
+        action: 'APPROVE',
+        entityType: 'Loan',
+        entityId: loan.id,
+        oldValues: { status: loan.status },
+        newValues: snapshot,
+      },
+    }).catch(() => {});
+
     return res;
   });
 
@@ -297,6 +382,7 @@ async function disburse(id, disbursedById, { notes } = {}) {
       });
     }
 
+    const actorMeta = await getActorAuditMeta(tx, disbursedById);
     const res = await tx.loan.update({
       where: { id: loan.id },
       data: {
@@ -309,15 +395,35 @@ async function disburse(id, disbursedById, { notes } = {}) {
       include: { member: { include: { user: true } }, schedule: true },
     });
 
+    const snapshot = buildAuditSnapshot(res, 'LOAN_DISBURSED', {
+      previousStatus: loan.status,
+      installmentsGenerated: scheduleItems.length,
+    });
     await tx.loanWorkflowLog.create({
       data: {
         loanId: loan.id,
         fromStatus: loan.status,
         toStatus: 'ONGOING',
         performedBy: disbursedById,
+        performedByName: actorMeta.name,
+        performedByRole: actorMeta.role,
+        auditSnapshot: snapshot,
         notes: notes || 'Loan funds disbursed and repayment schedule activated',
       },
     });
+
+    await tx.auditLog.create({
+      data: {
+        tenantId: loan.tenantId || null,
+        userId: disbursedById,
+        action: 'DISBURSE',
+        entityType: 'Loan',
+        entityId: loan.id,
+        oldValues: { status: loan.status },
+        newValues: snapshot,
+      },
+    }).catch(() => {});
+
     return res;
   });
 
@@ -344,19 +450,35 @@ async function close(id, closedById) {
   }
 
   return prisma.$transaction(async (tx) => {
+    const actorMeta = await getActorAuditMeta(tx, closedById);
     const res = await tx.loan.update({
       where: { id: loan.id },
       data: { status: 'CLOSED', closedAt: new Date() },
     });
+    const snapshot = buildAuditSnapshot(res, 'LOAN_CLOSED', { previousStatus: loan.status });
     await tx.loanWorkflowLog.create({
       data: {
         loanId: loan.id,
         fromStatus: loan.status,
         toStatus: 'CLOSED',
         performedBy: closedById,
+        performedByName: actorMeta.name,
+        performedByRole: actorMeta.role,
+        auditSnapshot: snapshot,
         notes: 'Loan account formally closed',
       },
     });
+    await tx.auditLog.create({
+      data: {
+        tenantId: loan.tenantId || null,
+        userId: closedById,
+        action: 'UPDATE',
+        entityType: 'Loan',
+        entityId: loan.id,
+        oldValues: { status: loan.status },
+        newValues: snapshot,
+      },
+    }).catch(() => {});
     return res;
   });
 }

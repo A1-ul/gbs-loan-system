@@ -49,11 +49,29 @@ async function create(data) {
           role: 'MEMBER_PORTAL',
           status: 'ACTIVE',
           tenantId,
+          address: data.address || null,
+          gpsAddress: data.gpsAddress || null,
+          gpsLatitude: data.gpsLatitude != null ? Number(data.gpsLatitude) : null,
+          gpsLongitude: data.gpsLongitude != null ? Number(data.gpsLongitude) : null,
+          isHidden: Boolean(data.isHidden),
           ...getRecordProvenance(),
         },
       });
       userId = newUser.id;
     }
+  }
+
+  if (userId && (data.gpsAddress || data.address || data.gpsLatitude != null)) {
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...(data.address ? { address: data.address } : {}),
+        ...(data.gpsAddress ? { gpsAddress: data.gpsAddress } : {}),
+        ...(data.gpsLatitude != null ? { gpsLatitude: Number(data.gpsLatitude) } : {}),
+        ...(data.gpsLongitude != null ? { gpsLongitude: Number(data.gpsLongitude) } : {}),
+        ...(data.isHidden !== undefined ? { isHidden: Boolean(data.isHidden) } : {}),
+      },
+    }).catch(() => {});
   }
 
   // 2. Check if this user is already a member
@@ -95,6 +113,10 @@ async function create(data) {
       monthlyIncome: data.monthlyIncome ? parseFloat(data.monthlyIncome) : null,
       emergencyContact: data.emergencyContact || 'Family Member',
       emergencyPhone: data.emergencyPhone || null,
+      gpsAddress: data.gpsAddress || null,
+      gpsLatitude: data.gpsLatitude != null ? Number(data.gpsLatitude) : null,
+      gpsLongitude: data.gpsLongitude != null ? Number(data.gpsLongitude) : null,
+      isHidden: Boolean(data.isHidden),
       ...getRecordProvenance(),
     },
     include: {
@@ -105,6 +127,11 @@ async function create(data) {
           lastName: true,
           email: true,
           phone: true,
+          address: true,
+          gpsAddress: true,
+          gpsLatitude: true,
+          gpsLongitude: true,
+          isHidden: true,
           role: true,
           status: true,
         },
@@ -120,12 +147,18 @@ async function create(data) {
 /**
  * Fetch all members with pagination, search, active loans count, and payment counts
  */
-async function getAll({ page = 1, limit = 50, search, status, tenantId } = {}) {
+async function getAll({ page = 1, limit = 50, search, status, tenantId, includeHidden = false } = {}) {
   const skip = (page - 1) * limit;
   const andConditions = [];
   if (tenantId) andConditions.push({ tenantId });
 
-  if (search && String(search).trim()) {
+  const hasSearch = Boolean(search && String(search).trim());
+  if (!hasSearch && !includeHidden) {
+    andConditions.push({ isHidden: false });
+    andConditions.push({ user: { isHidden: false } });
+  }
+
+  if (hasSearch) {
     const q = String(search).trim();
     const tokens = q.split(/\s+/).filter(Boolean);
     const phoneVariants = buildPhoneSearchVariants(q);
@@ -133,11 +166,14 @@ async function getAll({ page = 1, limit = 50, search, status, tenantId } = {}) {
     const searchOr = [
       { memberNumber: { contains: q, mode: 'insensitive' } },
       { ghanaCardNumber: { contains: q, mode: 'insensitive' } },
+      { gpsAddress: { contains: q, mode: 'insensitive' } },
       { occupation: { contains: q, mode: 'insensitive' } },
       { employer: { contains: q, mode: 'insensitive' } },
       { user: { firstName: { contains: q, mode: 'insensitive' } } },
       { user: { lastName: { contains: q, mode: 'insensitive' } } },
       { user: { email: { contains: q, mode: 'insensitive' } } },
+      { user: { gpsAddress: { contains: q, mode: 'insensitive' } } },
+      { user: { address: { contains: q, mode: 'insensitive' } } },
       ...phoneVariants.map((pv) => ({ user: { phone: { contains: pv, mode: 'insensitive' } } })),
     ];
 
@@ -174,6 +210,11 @@ async function getAll({ page = 1, limit = 50, search, status, tenantId } = {}) {
             lastName: true,
             email: true,
             phone: true,
+            address: true,
+            gpsAddress: true,
+            gpsLatitude: true,
+            gpsLongitude: true,
+            isHidden: true,
             role: true,
             status: true,
           },
@@ -193,6 +234,9 @@ async function getAll({ page = 1, limit = 50, search, status, tenantId } = {}) {
   const data = members.map((m) => {
     const totalPaymentsCount = m.loans.reduce((acc, loan) => acc + (loan.payments ? loan.payments.length : 0), 0);
     const activeLoans = m.loans.filter((l) => ['APPROVED', 'DISBURSED', 'ONGOING'].includes(l.status));
+    const resolvedGpsAddress = m.gpsAddress || m.user.gpsAddress || '';
+    const resolvedLat = m.gpsLatitude ?? m.user.gpsLatitude ?? null;
+    const resolvedLng = m.gpsLongitude ?? m.user.gpsLongitude ?? null;
     return {
       id: m.id,
       memberNumber: m.memberNumber,
@@ -206,7 +250,11 @@ async function getAll({ page = 1, limit = 50, search, status, tenantId } = {}) {
       ghanaCardVerified: m.ghanaCardVerified,
       paymentsCount: totalPaymentsCount,
       activeLoansCount: activeLoans.length,
-      address: m.occupation ? `${m.occupation} at ${m.employer}` : 'Ghana',
+      gpsAddress: resolvedGpsAddress,
+      gpsLatitude: resolvedLat,
+      gpsLongitude: resolvedLng,
+      isHidden: Boolean(m.isHidden || m.user.isHidden),
+      address: m.user.address || resolvedGpsAddress || (m.occupation ? `${m.occupation} at ${m.employer}` : 'Ghana'),
       occupation: m.occupation,
       employer: m.employer,
       monthlyIncome: m.monthlyIncome,
@@ -308,8 +356,8 @@ async function getByUserId(userId) {
 async function update(id, data) {
   const member = await getById(id);
 
-  // If name or phone needs updating on user table
-  if (data.name || data.firstName || data.lastName || data.phone) {
+  // If name, phone, or GPS address needs updating on user table
+  if (data.name || data.firstName || data.lastName || data.phone || data.gpsAddress !== undefined || data.address !== undefined || data.isHidden !== undefined) {
     const nameParts = (data.name || '').trim().split(' ');
     await prisma.user.update({
       where: { id: member.userId },
@@ -317,6 +365,11 @@ async function update(id, data) {
         firstName: nameParts[0] || data.firstName || undefined,
         lastName: nameParts.slice(1).join(' ') || data.lastName || undefined,
         phone: data.phone || undefined,
+        address: data.address !== undefined ? data.address : undefined,
+        gpsAddress: data.gpsAddress !== undefined ? data.gpsAddress : undefined,
+        gpsLatitude: data.gpsLatitude != null ? Number(data.gpsLatitude) : undefined,
+        gpsLongitude: data.gpsLongitude != null ? Number(data.gpsLongitude) : undefined,
+        isHidden: data.isHidden !== undefined ? Boolean(data.isHidden) : undefined,
       },
     });
   }
@@ -329,6 +382,10 @@ async function update(id, data) {
       monthlyIncome: data.monthlyIncome ? parseFloat(data.monthlyIncome) : undefined,
       emergencyContact: data.emergencyContact,
       emergencyPhone: data.emergencyPhone,
+      gpsAddress: data.gpsAddress !== undefined ? data.gpsAddress : undefined,
+      gpsLatitude: data.gpsLatitude != null ? Number(data.gpsLatitude) : undefined,
+      gpsLongitude: data.gpsLongitude != null ? Number(data.gpsLongitude) : undefined,
+      isHidden: data.isHidden !== undefined ? Boolean(data.isHidden) : undefined,
       ghanaCardNumber: data.ghanaCardNumber ? data.ghanaCardNumber.trim().toUpperCase() : undefined,
     },
     include: { user: true },

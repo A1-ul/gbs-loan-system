@@ -42,7 +42,7 @@ api.interceptors.request.use((config) => {
 });
 
 api.interceptors.response.use(
-  (response) => response.data,
+  (response) => response,
   (error) => {
     const data = error?.response?.data || {};
     const status = error?.response?.status;
@@ -61,6 +61,7 @@ api.interceptors.response.use(
       code: data.code,
       message: data.message || error.message || 'API Request failed',
       data: data.data || null,
+      response: error?.response,
     });
   }
 );
@@ -81,7 +82,7 @@ devApi.interceptors.request.use((config) => {
 });
 
 devApi.interceptors.response.use(
-  (response) => response.data,
+  (response) => response,
   (error) => {
     const data = error?.response?.data || {};
     const status = error?.response?.status;
@@ -93,6 +94,7 @@ devApi.interceptors.response.use(
       code: data.code,
       message: data.message || error.message || 'Developer API error',
       data: data.data || null,
+      response: error?.response,
     });
   }
 );

@@ -30,6 +30,35 @@ class CountdownEngineService {
     }
 
     const now = new Date();
+    const isLifetime = Boolean(tenant.isLifetime);
+    if (isLifetime) {
+      return {
+        tenantId: tenant.id,
+        tenantCode: tenant.code,
+        tenantName: tenant.name,
+        logoUrl: tenant.logoUrl || null,
+        companyNameUpdated: Boolean(tenant.companyNameUpdated),
+        planTier: tenant.planTier,
+        subscriptionPlan: tenant.subscriptionPlan || 'LIFETIME',
+        subscriptionMonths: null,
+        isLifetime: true,
+        status: tenant.status === 'SUSPENDED' ? 'SUSPENDED' : 'ACTIVE',
+        startDate: tenant.subStart,
+        expiryDate: null,
+        countdown: {
+          totalSeconds: 0,
+          days: 36500,
+          hours: 0,
+          minutes: 0,
+          seconds: 0,
+          formatted: 'LIFETIME LICENSE',
+        },
+        phase: 'LIFETIME',
+        isLocked: tenant.status === 'SUSPENDED',
+        renewalPermittedBy: 'COMPANY_OWNER_OR_DEVELOPER',
+      };
+    }
+
     const expiry = tenant.subExpiry ? new Date(tenant.subExpiry) : now;
     const diffMs = expiry.getTime() - now.getTime();
 
@@ -63,9 +92,14 @@ class CountdownEngineService {
       tenantId: tenant.id,
       tenantCode: tenant.code,
       tenantName: tenant.name,
+      logoUrl: tenant.logoUrl || null,
+      companyNameUpdated: Boolean(tenant.companyNameUpdated),
       planTier: tenant.planTier,
-      status: isExpired ? 'LOCKED_EXPIRED' : tenant.status,
+      subscriptionPlan: tenant.subscriptionPlan || 'TRIAL_1M',
+      subscriptionMonths: tenant.subscriptionMonths || 1,
+      isLifetime: false,
       startDate: tenant.subStart,
+      status: isExpired ? 'LOCKED_EXPIRED' : tenant.status,
       expiryDate: expiry,
       countdown: {
         totalSeconds,
@@ -77,7 +111,7 @@ class CountdownEngineService {
       },
       phase: countdownPhase,
       isLocked: isExpired || tenant.status === 'LOCKED_EXPIRED' || tenant.status === 'SUSPENDED',
-      renewalPermittedBy: 'DEVELOPER_AUTHORITY_ONLY',
+      renewalPermittedBy: 'COMPANY_OWNER_OR_DEVELOPER',
     };
   }
 
@@ -98,7 +132,7 @@ class CountdownEngineService {
     let expiredCount = 0;
 
     for (const t of tenants) {
-      if (!t.subExpiry) continue;
+      if (t.isLifetime || !t.subExpiry) continue;
       const diffMs = new Date(t.subExpiry).getTime() - now.getTime();
       const daysLeft = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
 

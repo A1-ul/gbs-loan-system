@@ -1,4 +1,6 @@
 const enterpriseService = require('./enterprise.service');
+const accountingAuditService = require('./accountingAudit.service');
+const cctvService = require('../../services/cctv.service');
 const { success, created } = require('../../utils/response');
 
 const getTenantScope = (req) => req.tenantId || req.user?.tenantId || null;
@@ -137,4 +139,72 @@ exports.exportReport = async (req, res, next) => {
     return res.send(file.buffer);
   } catch (err) { next(err); }
 };
+
+exports.getAudits = async (req, res, next) => {
+  try {
+    return success(res, await accountingAuditService.listAudits(getTenantScope(req)));
+  } catch (err) { next(err); }
+};
+
+exports.runAuditReconciliation = async (req, res, next) => {
+  try {
+    const record = await accountingAuditService.runLedgerReconciliation(getTenantScope(req), req.user, req.body || {});
+    return created(res, record, 'Ledger reconciliation completed and submitted to Company Owner');
+  } catch (err) { next(err); }
+};
+
+exports.reviewAudit = async (req, res, next) => {
+  try {
+    const updated = await accountingAuditService.reviewAudit(req.params.id, req.user, req.body || {});
+    return success(res, updated, 'Accounting audit status updated');
+  } catch (err) { next(err); }
+};
+
+exports.getCctvCameras = async (req, res, next) => {
+  try {
+    const originUrl = `${req.protocol}://${req.get('host')}`;
+    return success(res, await cctvService.listCameras(getTenantScope(req), originUrl));
+  } catch (err) { next(err); }
+};
+
+exports.registerCctvCamera = async (req, res, next) => {
+  try {
+    const originUrl = `${req.protocol}://${req.get('host')}`;
+    const cam = await cctvService.registerCamera(getTenantScope(req), req.user, { ...(req.body || {}), originUrl });
+    return created(res, cam, 'CCTV camera linked to Company Owner mobile feed');
+  } catch (err) { next(err); }
+};
+
+exports.toggleCctvCamera = async (req, res, next) => {
+  try {
+    const updated = await cctvService.toggleCameraStatus(req.params.id, getTenantScope(req), req.body?.isActive);
+    return success(res, updated, 'CCTV camera status updated');
+  } catch (err) { next(err); }
+};
+
+exports.regenerateCctvLink = async (req, res, next) => {
+  try {
+    const originUrl = `${req.protocol}://${req.get('host')}`;
+    const updated = await cctvService.regenerateMobileLink(req.params.id, getTenantScope(req), originUrl);
+    return success(res, updated, 'Mobile pairing code & QR regenerated');
+  } catch (err) { next(err); }
+};
+
+exports.deleteCctvCamera = async (req, res, next) => {
+  try {
+    return success(res, await cctvService.deleteCamera(req.params.id, getTenantScope(req)), 'CCTV camera removed');
+  } catch (err) { next(err); }
+};
+
+exports.verifyCctvMobileAccess = async (req, res, next) => {
+  try {
+    const cam = await cctvService.verifyMobileAccess({
+      cameraId: req.query.camera,
+      code: req.query.code,
+      token: req.query.token,
+    });
+    return success(res, cam, 'CCTV mobile stream access authorized');
+  } catch (err) { next(err); }
+};
+
 

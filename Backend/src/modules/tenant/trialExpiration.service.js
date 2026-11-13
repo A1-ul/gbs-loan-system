@@ -7,6 +7,7 @@
 const { prisma } = require('../../config/database');
 const logger = require('../../utils/logger');
 const { AppError, NotFoundError } = require('../../utils/errors');
+const { resolveSubscriptionPlan } = require('./subscriptionPlans');
 
 class TrialExpirationService {
   /**
@@ -20,6 +21,8 @@ class TrialExpirationService {
         code: true,
         name: true,
         status: true,
+        isLifetime: true,
+        subscriptionPlan: true,
         subExpiry: true,
         daysLeft: true,
       },
@@ -28,7 +31,7 @@ class TrialExpirationService {
     if (!tenant) return { isLocked: true, reason: 'TENANT_NOT_FOUND' };
 
     const now = new Date();
-    const isExpired = tenant.subExpiry ? new Date(tenant.subExpiry).getTime() <= now.getTime() : false;
+    const isExpired = !tenant.isLifetime && tenant.subExpiry ? new Date(tenant.subExpiry).getTime() <= now.getTime() : false;
     const isManuallyLocked = tenant.status === 'LOCKED_EXPIRED' || tenant.status === 'SUSPENDED';
 
     return {
@@ -36,50 +39,58 @@ class TrialExpirationService {
       tenantCode: tenant.code,
       tenantName: tenant.name,
       isLocked: isExpired || isManuallyLocked,
+      isLifetime: Boolean(tenant.isLifetime),
+      subscriptionPlan: tenant.subscriptionPlan || 'TRIAL_1M',
       status: tenant.status,
-      daysLeft: tenant.daysLeft,
+      daysLeft: tenant.isLifetime ? 36500 : tenant.daysLeft,
       reason: isExpired ? 'SUBSCRIPTION_CYCLE_EXPIRED' : isManuallyLocked ? 'MANUAL_DEVELOPER_LOCK' : null,
       expiryDate: tenant.subExpiry,
     };
   }
 
   /**
-   * Developer action: Unlock tenant and extend subscription by specified days
+   * Developer action: Unlock tenant and extend subscription by plan code or days
    */
-  async unlockTenant(tenantId, extensionDays = 90, developerNote = 'Developer authorized extension') {
+  async unlockTenant(tenantId, extensionDaysOrPlan = 30, developerNote = 'Developer authorized extension') {
     const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) throw new NotFoundError(`Tenant '${tenantId}'`);
 
     const now = new Date();
-    const newExpiry = new Date(now.getTime() + extensionDays * 24 * 60 * 60 * 1000);
+    const plan = resolveSubscriptionPlan(extensionDaysOrPlan, 30);
+    const newExpiry = plan.subExpiry;
 
     const updated = await prisma.tenant.update({
       where: { id: tenant.id },
       data: {
         status: 'ACTIVE',
-        onboardingStatus: tenant.onboardingStatus === 'ACTIVE_PAID' ? 'ACTIVE_PAID' : 'ACTIVE_TRIAL',
+        onboardingStatus: plan.code === 'TRIAL_1M' ? (tenant.onboardingStatus === 'ACTIVE_PAID' ? 'ACTIVE_PAID' : 'ACTIVE_TRIAL') : 'ACTIVE_PAID',
+        subscriptionPlan: plan.code,
+        subscriptionMonths: plan.months,
+        isLifetime: plan.isLifetime,
         subStart: now,
         subExpiry: newExpiry,
-        daysLeft: extensionDays,
+        daysLeft: plan.days,
         alertSent: false,
       },
     });
 
-    // Update active subscription
     await prisma.tenantSubscription.updateMany({
       where: { tenantId: tenant.id },
       data: {
         status: 'ACTIVE',
-        endDate: newExpiry,
+        planName: plan.label,
+        endDate: newExpiry || new Date(now.getTime() + 36500 * 24 * 60 * 60 * 1000),
         lastPaymentAt: now,
       },
     });
 
-    logger.info(`[TrialExpiration] Tenant unlocked: ${tenant.name} for ${extensionDays} days. Note: ${developerNote}`);
+    logger.info(`[TrialExpiration] Tenant unlocked: ${tenant.name} (${plan.label}). Note: ${developerNote}`);
 
     return {
       success: true,
-      message: `Tenant ${tenant.name} unlocked for ${extensionDays} days`,
+      message: plan.isLifetime
+        ? `Tenant ${tenant.name} unlocked with Lifetime License`
+        : `Tenant ${tenant.name} unlocked for ${plan.days} days (${plan.label})`,
       tenant: updated,
       newExpiryDate: newExpiry,
     };

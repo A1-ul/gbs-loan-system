@@ -1,10 +1,25 @@
 const guarantorService = require('../services/guarantor.service');
-const { success, paginated } = require('../utils/response');
+const { success, created, paginated } = require('../utils/response');
+
+async function create(req, res, next) {
+  try {
+    const tenantId = req.tenantId || req.user?.tenantId || req.body?.tenantId || null;
+    const guarantor = await guarantorService.create({ ...req.body, tenantId });
+    return created(res, guarantor, 'Guarantor registered with GPS address');
+  } catch (err) { next(err); }
+}
 
 async function getAll(req, res, next) {
   try {
-    const { page = 1, limit = 20 } = req.query;
-    const result = await guarantorService.getAll({ page: +page, limit: +limit });
+    const { page = 1, limit = 20, search = '', includeHidden } = req.query;
+    const tenantId = req.tenantId || req.user?.tenantId || null;
+    const result = await guarantorService.getAll({
+      page: +page,
+      limit: +limit,
+      search,
+      includeHidden: includeHidden === 'true',
+      tenantId,
+    });
     return paginated(res, result.data, result.pagination);
   } catch (err) { next(err); }
 }
@@ -37,4 +52,4 @@ async function togglePenaltyNotifications(req, res, next) {
   } catch (err) { next(err); }
 }
 
-module.exports = { getAll, getById, getLoansByGuarantor, signAgreement, togglePenaltyNotifications };
+module.exports = { create, getAll, getById, getLoansByGuarantor, signAgreement, togglePenaltyNotifications };

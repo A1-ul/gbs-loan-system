@@ -9,7 +9,7 @@ import { DEVELOPER_PORTAL_META } from '../constants/rolesMeta';
  * Never linked from public tenant pages or navigation bars.
  */
 export default function DeveloperLogin({ onDevAuthenticated }) {
-  const [email, setEmail] = useState('gabose48@gmail.com');
+  const [email, setEmail] = useState('gabosei48@gmail.com');
   const [password, setPassword] = useState('');
   const [totpToken, setTotpToken] = useState('');
   const [loading, setLoading] = useState(false);
@@ -97,7 +97,7 @@ export default function DeveloperLogin({ onDevAuthenticated }) {
                 className="gbs-input"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="gabose48@gmail.com"
+                placeholder="gabosei48@gmail.com"
                 autoComplete="username"
               />
             </div>

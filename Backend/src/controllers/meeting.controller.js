@@ -12,8 +12,8 @@ async function getAll(req, res, next) {
 async function create(req, res, next) {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
-    const meeting = await meetingService.create(req.user.id, req.body, tenantId);
-    return created(res, meeting, 'Meeting scheduled');
+    const meeting = await meetingService.create(req.user, req.body, tenantId);
+    return created(res, meeting, 'Online meeting scheduled and invitations dispatched');
   } catch (err) { next(err); }
 }
 
