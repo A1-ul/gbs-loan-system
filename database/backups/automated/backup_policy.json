@@ -1,0 +1,19 @@
+{
+  "system": "GBS Enterprise Automated Backup Engine",
+  "schedule": {
+    "daily": "0 2 * * *",
+    "weekly": "0 3 * * 0",
+    "monthly": "0 4 1 * *",
+    "yearly": "0 5 1 1 *"
+  },
+  "retentionDays": {
+    "daily": 7,
+    "weekly": 30,
+    "monthly": 365,
+    "yearly": 2555
+  },
+  "compression": "gzip",
+  "encryption": "AES-256-GCM",
+  "storageTargets": ["local", "s3-compatible-vault"],
+  "autoRestoreValidation": true
+}

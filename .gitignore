@@ -1,8 +1,11 @@
 # Dependencies
 node_modules/
-dist/
-coverage/
-.build/
+/dist/
+/Frontend/dist/
+/coverage/
+/Backend/coverage/
+/.build/
+/Backend/.build/
 
 # Environment Variables & Secrets
 .env
@@ -10,17 +13,18 @@ coverage/
 !.env.example
 *.local
 
-# Logs & Runtime Outputs
-logs/
+# Logs & Runtime Outputs (anchored so source modules like developer-platform/logs remain tracked)
+/logs/
+/Backend/logs/
 *.log
 
 # Uploads & Local Snapshots
-uploads/*
-!uploads/.gitkeep
-backups/
-Backend/backups/baseline_pre_rebuild.*
-Backend/uploads/*
-!Backend/uploads/.gitkeep
+/uploads/*
+!/uploads/.gitkeep
+/backups/
+/Backend/backups/
+/Backend/uploads/*
+!/Backend/uploads/.gitkeep
 
 # System & IDE
 .DS_Store
