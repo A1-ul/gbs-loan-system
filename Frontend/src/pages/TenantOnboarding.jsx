@@ -411,11 +411,20 @@ export default function TenantOnboarding() {
             </div>
           )}
 
-          <div style={{ marginTop: 14, textAlign: 'center', fontSize: '0.82rem', color: '#F1F5F9' }}>
-            Already registered and approved?{' '}
-            <Link to="/login" style={{ color: '#F4E07B', fontWeight: 700, textDecoration: 'underline' }}>
-              Sign in to any of the 30 GBS Role Portals
-            </Link>
+          <div style={{ marginTop: 14, textAlign: 'center', fontSize: '0.82rem', color: '#F1F5F9', display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <span>
+              Already registered and approved?{' '}
+              <Link to="/login" style={{ color: '#F4E07B', fontWeight: 700, textDecoration: 'underline' }}>
+                Sign in to any of the 30 GBS Role Portals
+              </Link>
+            </span>
+            <span>•</span>
+            <span>
+              System Developer?{' '}
+              <Link to="/login?dev=1" style={{ color: '#FCA5A5', fontWeight: 700, textDecoration: 'underline' }}>
+                Developer Dashboard Sign In (Approve Institutions)
+              </Link>
+            </span>
           </div>
         </div>
       </div>

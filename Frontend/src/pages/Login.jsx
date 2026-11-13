@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import {
   Shield, Lock, UserCheck, Building2, ArrowRight, Eye, EyeOff,
   KeyRound, CheckCircle2, AlertTriangle, Grid, Volume2, MapPin, Crosshair
@@ -10,15 +10,16 @@ import VoiceChallengePanel from '../components/VoiceChallengePanel';
 
 /**
  * GBS Loan Management System — Dedicated Role-Specific Login & All-30-Role Account Registration
- * RULE: Zero visible Developer Portal promotions. Hidden Developer Gate lives discreetly on main login page.
+ * RULE: Hidden Developer Dashboard opens only from the Main Login Page via strictly masked password entry.
  * RULE: Tenant Login & Registration include Show/Hide Password eye toggles + GPS Address collection.
  */
 export default function Login({ onAuthenticated, onDevAuthenticated }) {
   const { roleSlug } = useParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
   const roleMeta = resolveRoleMeta(roleSlug || 'member-portal');
-  const [mode, setMode] = useState('login'); // 'login' | 'register' | 'verify-otp' | 'voice-check' | 'directory' | 'dev-hidden'
+  const [mode, setMode] = useState(() => (searchParams.get('dev') === '1' ? 'dev-hidden' : 'login')); // 'login' | 'register' | 'verify-otp' | 'voice-check' | 'directory' | 'dev-hidden'
   const [approvedTenants, setApprovedTenants] = useState([]);
 
   // Login Form State (strictly blank defaults)
@@ -28,7 +29,7 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
   const [totpToken, setTotpToken] = useState('');
 
   // Hidden Developer Gate State (strictly masked password, NO reveal toggle)
-  const [devEmail, setDevEmail] = useState('');
+  const [devEmail, setDevEmail] = useState('gabosei48@gmail.com');
   const [devPassword, setDevPassword] = useState('');
   const [devTotp, setDevTotp] = useState('');
 
@@ -379,12 +380,12 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
             </div>
           ) : (
             <div className="glass-panel" style={{ padding: 28 }}>
-              <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
                 <button
                   type="button"
                   onClick={() => { setMode('login'); setError(''); }}
                   className={mode === 'login' ? 'btn btn-primary' : 'btn btn-secondary'}
-                  style={{ flex: 1, justifyContent: 'center' }}
+                  style={{ flex: '1 1 110px', justifyContent: 'center' }}
                 >
                   <Lock size={15} /> Sign In
                 </button>
@@ -392,9 +393,27 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
                   type="button"
                   onClick={() => { setMode('register'); setError(''); }}
                   className={mode === 'register' ? 'btn btn-primary' : 'btn btn-secondary'}
-                  style={{ flex: 1, justifyContent: 'center' }}
+                  style={{ flex: '1 1 130px', justifyContent: 'center' }}
                 >
                   <UserCheck size={15} /> Register (30 Roles)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError('');
+                    setSuccessMsg('');
+                    setDevEmail((prev) => prev || 'gabosei48@gmail.com');
+                    setMode((prev) => (prev === 'dev-hidden' ? 'login' : 'dev-hidden'));
+                  }}
+                  className={mode === 'dev-hidden' ? 'btn btn-primary' : 'btn btn-secondary'}
+                  style={{
+                    flex: '1 1 140px',
+                    justifyContent: 'center',
+                    borderColor: mode === 'dev-hidden' ? '#DC2626' : 'rgba(220,38,38,0.45)',
+                    color: mode === 'dev-hidden' ? '#FFFFFF' : '#FCA5A5',
+                  }}
+                >
+                  <Lock size={15} /> Developer Portal
                 </button>
               </div>
 
@@ -691,47 +710,60 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
                 </form>
               )}
 
-              {/* Institutional Tenant Onboarding CTA */}
+              {/* Institutional Tenant Onboarding & Developer Authority CTA */}
               <div
                 style={{
                   marginTop: 22,
                   paddingTop: 16,
                   borderTop: '1px solid rgba(212,175,55,0.2)',
                   display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                  gap: 10,
+                  flexDirection: 'column',
+                  gap: 12,
                 }}
               >
-                <div style={{ fontSize: '0.78rem', color: '#94A3B8', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span>Onboarding a new lending institution (1-Month Free Trial)?</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                  <span style={{ fontSize: '0.78rem', color: '#94A3B8' }}>
+                    Onboarding a new lending institution (1-Month Free Trial)?
+                  </span>
+                  <Link to="/onboard-tenant" className="btn btn-secondary" style={{ padding: '7px 12px', fontSize: '0.78rem' }}>
+                    <Building2 size={14} /> Institutional Onboarding Form <ArrowRight size={13} />
+                  </Link>
+                </div>
+
+                <div
+                  style={{
+                    paddingTop: 10,
+                    borderTop: '1px dashed rgba(220,38,38,0.28)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: 10,
+                  }}
+                >
+                  <span style={{ fontSize: '0.78rem', color: '#CBD5E1' }}>
+                    System Developer? Approve new institutions &amp; manage tenant locks:
+                  </span>
                   <button
                     type="button"
-                    aria-label="System authority gate"
                     onClick={() => {
                       setError('');
                       setSuccessMsg('');
                       setDevEmail((prev) => prev || 'gabosei48@gmail.com');
                       setMode((prev) => (prev === 'dev-hidden' ? 'login' : 'dev-hidden'));
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
+                    className="btn btn-secondary"
                     style={{
-                      background: 'transparent',
-                      border: 'none',
-                      color: '#334155',
-                      opacity: 0.35,
-                      cursor: 'pointer',
-                      padding: 2,
-                      display: 'inline-flex',
-                      alignItems: 'center',
+                      padding: '7px 12px',
+                      fontSize: '0.78rem',
+                      borderColor: 'rgba(220,38,38,0.55)',
+                      color: '#FCA5A5',
                     }}
                   >
-                    <Lock size={11} />
+                    <Lock size={13} /> {mode === 'dev-hidden' ? 'Back to Role Sign In' : 'Developer Dashboard Sign In'}
                   </button>
                 </div>
-                <Link to="/onboard-tenant" className="btn btn-secondary" style={{ padding: '7px 12px', fontSize: '0.78rem' }}>
-                  <Building2 size={14} /> Institutional Onboarding Form <ArrowRight size={13} />
-                </Link>
               </div>
             </div>
           )}
