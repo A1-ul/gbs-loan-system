@@ -1,10 +1,13 @@
 const Bull = require('bull');
-const { createRedisClient } = require('../config/redis');
+const { createRedisClient, isRedisConfigured } = require('../config/redis');
 const logger = require('../utils/logger');
 
 let migrationQueue = null;
 
 function getMigrationQueue() {
+  if (!isRedisConfigured()) {
+    return null;
+  }
   if (!migrationQueue) {
     try {
       migrationQueue = new Bull('gbs-migrations', {

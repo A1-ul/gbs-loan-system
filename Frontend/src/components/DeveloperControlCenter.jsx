@@ -131,7 +131,7 @@ export default function DeveloperControlCenter({ onLogout }) {
       notify('New institutional onboarding application received!');
     });
 
-    const timer = setInterval(fetchAll, 20000);
+    const timer = setInterval(fetchAll, 60000);
     return () => {
       clearInterval(timer);
       socket.disconnect();

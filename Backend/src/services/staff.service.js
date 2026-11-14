@@ -285,7 +285,7 @@ async function getAll({ page = 1, limit = 50, tenantId = null, search = null, in
     ];
   }
 
-  const [data, total] = await Promise.all([
+  const [rows, total] = await Promise.all([
     prisma.staff.findMany({
       where,
       skip,
@@ -296,15 +296,17 @@ async function getAll({ page = 1, limit = 50, tenantId = null, search = null, in
             id: true, firstName: true, lastName: true, email: true, phone: true,
             role: true, status: true, qualificationVerified: true,
             gpsAddress: true, gpsLatitude: true, gpsLongitude: true, isHidden: true,
+            branch: { select: { id: true, name: true, city: true } },
           },
         },
-        branch: { select: { id: true, name: true } },
         salaryProfile: { include: { qualificationLevel: true, salaryGrade: true, salaryStep: true, serviceBand: true } },
       },
       orderBy: { createdAt: 'desc' },
     }),
     prisma.staff.count({ where }),
   ]);
+
+  const data = rows.map((row) => ({ ...row, branch: row.user?.branch || null }));
 
   return {
     data,
@@ -321,15 +323,15 @@ async function getById(id) {
           id: true, firstName: true, lastName: true, email: true, phone: true,
           role: true, status: true, gpsAddress: true, gpsLatitude: true, gpsLongitude: true,
           qualificationVerified: true, isHidden: true,
+          branch: { select: { id: true, name: true, city: true } },
         },
       },
-      branch: { select: { id: true, name: true, city: true } },
       salaryProfile: { include: { qualificationLevel: true, salaryGrade: true, salaryStep: true, serviceBand: true, incrementHistory: true } },
       salaries: { orderBy: { createdAt: 'desc' } },
     },
   });
   if (!staff) throw new NotFoundError(`Staff record '${id}'`);
-  return staff;
+  return { ...staff, branch: staff.user?.branch || null };
 }
 
 async function update(id, data) {

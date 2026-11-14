@@ -1,21 +1,10 @@
-# GBS Loan Management System — 100% Free-Tier Render.com Blueprint
-# Free Cloudhost Target: https://gbs-loan-system.onrender.com (Render auto-assigns unique suffix if taken)
+# GBS Loan Management System — 100% Free-Tier Render.com Blueprint (Web-Only Quota Safe)
+# Avoids Render's 1-free-Postgres + 1-free-KeyValue workspace limit by:
+#   1. Supplying DATABASE_URL (from existing Render Postgres or free Neon Postgres) via sync: false
+#   2. Running built-in zero-config in-memory cache/queue fallback when REDIS_URL is omitted
 # Company Contact / Operations Notification Email: gabosei48@gmail.com
 
-databases:
-  - name: gbs-loan-db
-    databaseName: gbs_loan_db
-    user: gbs_admin
-    plan: free
-    region: frankfurt
-
 services:
-  - type: keyvalue
-    name: gbs-loan-redis
-    plan: free
-    region: frankfurt
-    ipAllowList: []
-
   - type: web
     name: gbs-loan-system
     runtime: node
@@ -33,14 +22,7 @@ services:
       - key: METRICS_ENABLED
         value: "false"
       - key: DATABASE_URL
-        fromDatabase:
-          name: gbs-loan-db
-          property: connectionString
-      - key: REDIS_URL
-        fromService:
-          type: keyvalue
-          name: gbs-loan-redis
-          property: connectionString
+        sync: false
       - key: JWT_SECRET
         generateValue: true
       - key: JWT_REFRESH_SECRET

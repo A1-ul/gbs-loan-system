@@ -85,13 +85,16 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
   useEffect(() => {
     if (envMode !== 'demo') return;
     setDemoLoading(true);
+    setError('');
     api
       .get('/demo/walkthrough-catalog')
       .then((res) => {
         const steps = res.data?.data?.walkthroughModules || res.data?.data?.walkthroughSteps;
         if (Array.isArray(steps)) setDemoCatalog(steps);
       })
-      .catch(() => null)
+      .catch((err) => {
+        setError(err.response?.data?.message || 'Unable to load interactive demo walkthrough catalog. Please refresh or retry.');
+      })
       .finally(() => setDemoLoading(false));
   }, [envMode]);
 

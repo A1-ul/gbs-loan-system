@@ -214,7 +214,7 @@ function formatBroadcastDto(b) {
 /**
  * Company Owner / Management sends broadcast or targeted message to All Staff or Selected Staff
  */
-async function broadcastToStaff(senderUser, { tenantId = null, recipientUserIds = [], sendToAll = false, title, subject, message, body, priority = 'NORMAL' } = {}) {
+async function broadcastToStaff(senderUser, { tenantId = null, recipientUserIds = [], sendToAll, targetAll = false, title, subject, message, body, priority = 'NORMAL' } = {}) {
   const scopeTenantId = tenantId || senderUser?.tenantId || null;
   if (!scopeTenantId) throw new ValidationError('Institutional tenant context is required for staff messaging.');
 
@@ -232,7 +232,8 @@ async function broadcastToStaff(senderUser, { tenantId = null, recipientUserIds 
     throw new ValidationError('Message title and content are required.');
   }
 
-  if (!sendToAll && (!Array.isArray(recipientUserIds) || recipientUserIds.length === 0)) {
+  const isBroadcastAll = Boolean(sendToAll ?? targetAll);
+  if (!isBroadcastAll && (!Array.isArray(recipientUserIds) || recipientUserIds.length === 0)) {
     throw new ValidationError('Select at least one staff recipient or enable "Send to All Staff".');
   }
 
@@ -240,7 +241,7 @@ async function broadcastToStaff(senderUser, { tenantId = null, recipientUserIds 
     tenantId: scopeTenantId,
     status: 'ACTIVE',
     role: { notIn: ['MEMBER', 'MEMBER_PORTAL', 'GUARANTOR', 'GUARANTOR_PORTAL'] },
-    ...(!sendToAll && Array.isArray(recipientUserIds) && recipientUserIds.length > 0
+    ...(!isBroadcastAll && Array.isArray(recipientUserIds) && recipientUserIds.length > 0
       ? { id: { in: recipientUserIds } }
       : {}),
   };
@@ -252,7 +253,7 @@ async function broadcastToStaff(senderUser, { tenantId = null, recipientUserIds 
 
   const senderName = `${senderUser.firstName || ''} ${senderUser.lastName || ''}`.trim() || senderUser.email;
   const senderRole = String(senderUser.role || 'COMPANY_OWNER');
-  const targetIds = sendToAll ? [] : recipients.map((r) => r.id);
+  const targetIds = isBroadcastAll ? [] : recipients.map((r) => r.id);
 
   const broadcast = await prisma.staffBroadcastMessage.create({
     data: {
@@ -260,7 +261,7 @@ async function broadcastToStaff(senderUser, { tenantId = null, recipientUserIds 
       senderUserId: senderUser.id,
       senderName,
       senderRole,
-      targetScope: sendToAll ? 'ALL_STAFF' : 'SELECTED_STAFF',
+      targetScope: isBroadcastAll ? 'ALL_STAFF' : 'SELECTED_STAFF',
       recipientUserIds: targetIds,
       subject: finalSubject,
       body: finalBody,

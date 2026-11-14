@@ -86,7 +86,7 @@ const loanSchemas = {
     guarantorIds: Joi.array().items(Joi.string().uuid()).optional().default([]),
   }),
   review: Joi.object({
-    action: Joi.string().valid('approve', 'reject').required(),
+    action: Joi.string().valid('approve', 'recommend', 'reject').required(),
     notes: Joi.string().optional(),
     rejectionReason: Joi.string().when('action', { is: 'reject', then: Joi.required() }),
   }),
@@ -105,8 +105,8 @@ const paymentSchemas = {
     notes: Joi.string().optional(),
   }),
   approveCash: Joi.object({
-    paymentId: Joi.string().uuid().required(),
-    approved: Joi.boolean().required(),
+    paymentId: Joi.string().uuid().optional().allow('', null),
+    approved: Joi.boolean().optional().default(true),
     notes: Joi.string().optional(),
   }),
 };

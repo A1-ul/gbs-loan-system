@@ -835,15 +835,24 @@ export function ProfileSecurityPage() {
   const [faceMsg, setFaceMsg] = useState(null);
 
   const setup2FA = async () => {
-    const res = await api.post('/auth/2fa/setup');
-    setTotpSetup(res.data?.data || null);
+    try {
+      const res = await api.post('/auth/2fa/setup');
+      setTotpSetup(res.data?.data || null);
+    } catch (err) {
+      setFaceMsg({ ok: false, text: err.response?.data?.message || 'Failed to initialize 2FA TOTP setup' });
+    }
   };
 
   const enable2FA = async (e) => {
     e.preventDefault();
-    await api.post('/auth/2fa/enable', { totpToken: totpVerify });
-    setFaceMsg({ ok: true, text: '2FA TOTP Security Enabled!' });
-    setTotpSetup(null);
+    try {
+      await api.post('/auth/2fa/enable', { totpToken: totpVerify });
+      setFaceMsg({ ok: true, text: '2FA TOTP Security Enabled!' });
+      setTotpSetup(null);
+      setTotpVerify('');
+    } catch (err) {
+      setFaceMsg({ ok: false, text: err.response?.data?.message || 'Invalid 2FA verification code' });
+    }
   };
 
   return (

@@ -89,7 +89,7 @@ module.exports = {
   },
   rateLimit: {
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) || 900000,
-    maxRequests: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS, 10) || 300,
+    maxRequests: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS, 10) || 5000,
   },
   gps: {
     trackingIntervalMs: parseInt(process.env.GPS_TRACKING_INTERVAL_MS, 10) || 30000,

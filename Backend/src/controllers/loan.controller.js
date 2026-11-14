@@ -3,7 +3,8 @@ const { success, created, paginated } = require('../utils/response');
 
 async function apply(req, res, next) {
   try {
-    const loan = await loanService.apply(req.user.id, req.body);
+    const tenantId = req.tenantId || req.user?.tenantId || null;
+    const loan = await loanService.apply(req.user.id, { ...req.body, tenantId });
     return created(res, loan, 'Loan application submitted');
   } catch (err) {
     next(err);
@@ -12,8 +13,9 @@ async function apply(req, res, next) {
 
 async function getAll(req, res, next) {
   try {
-    const { page = 1, limit = 20, status, memberId } = req.query;
-    const result = await loanService.getAll({ page: +page, limit: +limit, status, memberId });
+    const { page = 1, limit = 20, status, memberId, search } = req.query;
+    const tenantId = req.tenantId || req.user?.tenantId || null;
+    const result = await loanService.getAll({ page: +page, limit: +limit, status, memberId, search, tenantId });
     return paginated(res, result.data, result.pagination);
   } catch (err) {
     next(err);
@@ -94,7 +96,8 @@ async function close(req, res, next) {
 
 async function getStatusDistribution(req, res, next) {
   try {
-    const data = await loanService.getStatusDistribution();
+    const tenantId = req.tenantId || req.user?.tenantId || null;
+    const data = await loanService.getStatusDistribution(tenantId);
     return success(res, data);
   } catch (err) {
     next(err);

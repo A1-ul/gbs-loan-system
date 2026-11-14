@@ -1306,9 +1306,13 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                   <option value="PENDING">PENDING</option>
                   <option value="UNDER_REVIEW">UNDER_REVIEW</option>
                   <option value="APPROVED">APPROVED</option>
-                  <option value="ACTIVE">ACTIVE</option>
+                  <option value="DISBURSED">DISBURSED</option>
+                  <option value="ONGOING">ONGOING</option>
                   <option value="OVERDUE">OVERDUE</option>
+                  <option value="DEFAULTED">DEFAULTED</option>
+                  <option value="PAID">PAID</option>
                   <option value="CLOSED">CLOSED</option>
+                  <option value="REJECTED">REJECTED</option>
                 </select>
               </div>
             </div>
@@ -1329,7 +1333,7 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                       <td><strong>{l.loanNumber}</strong></td>
                       <td>{l.member?.user?.firstName} {l.member?.user?.lastName}</td>
                       <td>{formatGHS(l.principalAmount)}</td>
-                      <td><span className={`badge ${l.status === 'ACTIVE' || l.status === 'APPROVED' ? 'badge-success' : l.status === 'OVERDUE' || l.status === 'REJECTED' ? 'badge-danger' : 'badge-warning'}`}>{l.status}</span></td>
+                      <td><span className={`badge ${['APPROVED', 'DISBURSED', 'ONGOING', 'PAID'].includes(l.status) ? 'badge-success' : ['OVERDUE', 'DEFAULTED', 'REJECTED'].includes(l.status) ? 'badge-danger' : 'badge-warning'}`}>{l.status}</span></td>
                       <td>
                         <button type="button" className="btn btn-secondary" style={{ padding: '4px 9px', fontSize: '0.74rem' }}>
                           Open <ArrowUpRight size={12} />

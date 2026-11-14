@@ -49,7 +49,7 @@ async function getHealthCheck() {
   const db = await checkDatabaseHealth();
   const redis = await checkRedisHealth();
 
-  const healthy = db.connected && redis.connected;
+  const healthy = db.connected && (redis.connected || redis.mode === 'in-memory');
 
   return {
     status: healthy ? 'healthy' : 'degraded',

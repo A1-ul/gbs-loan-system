@@ -577,7 +577,8 @@ class TenantService {
     }
 
     const existing = await this.getTenantById(tenantId);
-    const trimmedName = data.name ? String(data.name).trim() : existing.name;
+    const rawName = data.name || data.companyName;
+    const trimmedName = rawName ? String(rawName).trim() : existing.name;
     if (!trimmedName || trimmedName.length < 2) {
       throw new ValidationError('Company name must be at least 2 characters.');
     }
@@ -615,7 +616,7 @@ class TenantService {
       data: {
         name: trimmedName,
         logoUrl: resolvedLogoUrl,
-        companyNameUpdated: Boolean(data.name ? true : existing.companyNameUpdated),
+        companyNameUpdated: Boolean(rawName ? true : existing.companyNameUpdated),
         ...(data.location ? { location: String(data.location).trim() } : {}),
         ...(data.city ? { city: String(data.city).trim() } : {}),
         ...(data.region ? { region: String(data.region).trim() } : {}),
@@ -628,7 +629,7 @@ class TenantService {
       data: {
         tenantId,
         userId: user.id,
-        action: 'COMPANY_BRANDING_UPDATED',
+        action: 'UPDATE',
         entityType: 'tenant',
         entityId: tenantId,
         oldValues: { name: existing.name, logoUrl: existing.logoUrl ? '[image]' : null },

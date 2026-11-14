@@ -52,7 +52,7 @@ router.post('/hr/payroll/generate', authorize('SUPER_ADMIN', 'COMPANY_OWNER', 'H
 router.get('/reports/export/:type', staffAndAbove, ctrl.exportReport);
 
 // Accountant Ledger Auditing & Company Owner Sign-Off
-router.get('/audits', authorize('SUPER_ADMIN', 'COMPANY_OWNER', 'BOARD_EXECUTIVE', 'EXECUTIVE_MANAGEMENT', 'REGIONAL_MANAGER', 'BRANCH_MANAGER', 'FINANCE_MANAGER', 'ACCOUNTANT', 'TREASURY', 'INTERNAL_AUDIT', 'COMPLIANCE'), ctrl.getAudits);
+router.get('/audits', authorize('SUPER_ADMIN', 'COMPANY_OWNER', 'BOARD_EXECUTIVE', 'EXECUTIVE_MANAGEMENT', 'REGIONAL_MANAGER', 'OPERATIONS_MANAGER', 'BRANCH_MANAGER', 'FINANCE_MANAGER', 'ACCOUNTANT', 'TREASURY', 'LEGAL_DEPARTMENT', 'INTERNAL_AUDIT', 'COMPLIANCE', 'RISK_MANAGEMENT', 'FRAUD_INVESTIGATION', 'SECURITY_OPERATIONS'), ctrl.getAudits);
 router.post('/audits/reconcile', authorize('SUPER_ADMIN', 'COMPANY_OWNER', 'BOARD_EXECUTIVE', 'EXECUTIVE_MANAGEMENT', 'FINANCE_MANAGER', 'ACCOUNTANT', 'TREASURY', 'INTERNAL_AUDIT'), ctrl.runAuditReconciliation);
 router.put('/audits/:id/review', authorize('SUPER_ADMIN', 'COMPANY_OWNER', 'BOARD_EXECUTIVE', 'EXECUTIVE_MANAGEMENT'), ctrl.reviewAudit);
 

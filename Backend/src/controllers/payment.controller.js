@@ -3,7 +3,8 @@ const { success, created, paginated } = require('../utils/response');
 
 async function create(req, res, next) {
   try {
-    const payment = await paymentService.create(req.user.id, req.body);
+    const tenantId = req.tenantId || req.user?.tenantId || null;
+    const payment = await paymentService.create(req.user.id, req.body, tenantId);
     return created(res, payment, 'Payment initiated');
   } catch (err) {
     next(err);
@@ -13,7 +14,8 @@ async function create(req, res, next) {
 async function getAll(req, res, next) {
   try {
     const { page = 1, limit = 20, status, method, loanId } = req.query;
-    const result = await paymentService.getAll({ page: +page, limit: +limit, status, method, loanId });
+    const tenantId = req.tenantId || req.user?.tenantId || null;
+    const result = await paymentService.getAll({ page: +page, limit: +limit, status, method, loanId, tenantId });
     return paginated(res, result.data, result.pagination);
   } catch (err) {
     next(err);
@@ -67,7 +69,8 @@ async function checkMoMoStatus(req, res, next) {
 
 async function getMonthlyTrends(req, res, next) {
   try {
-    const trends = await paymentService.getMonthlyTrends();
+    const tenantId = req.tenantId || req.user?.tenantId || null;
+    const trends = await paymentService.getMonthlyTrends(tenantId);
     return success(res, trends);
   } catch (err) {
     next(err);

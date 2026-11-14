@@ -1,10 +1,13 @@
 const Bull = require('bull');
-const { createRedisClient } = require('../config/redis');
+const { createRedisClient, isRedisConfigured } = require('../config/redis');
 const logger = require('../utils/logger');
 
 let notificationQueue = null;
 
 function getNotificationQueue() {
+  if (!isRedisConfigured()) {
+    return null;
+  }
   if (!notificationQueue) {
     try {
       notificationQueue = new Bull('notifications', {
