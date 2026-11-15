@@ -6,6 +6,9 @@ function buildPooledDatabaseUrl() {
   if (!rawUrl) return undefined;
   try {
     const parsed = new URL(rawUrl);
+    if (parsed.hostname === 'localhost') {
+      parsed.hostname = '127.0.0.1';
+    }
     if (!parsed.searchParams.has('connection_limit')) {
       parsed.searchParams.set('connection_limit', '25');
     }
