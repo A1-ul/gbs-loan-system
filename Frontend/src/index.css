@@ -75,6 +75,41 @@ td {
   font-family: var(--font-body);
 }
 
+h1,
+h2,
+.gbs-3d-header,
+.role-hero-banner h1 {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.2),
+    0 2px 2px rgba(0, 0, 0, 0.72),
+    0 4px 12px rgba(0, 0, 0, 0.8);
+}
+
+.dashboard-page-shell {
+  position: relative;
+  min-height: calc(100vh - 90px);
+}
+
+.dashboard-page-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-size: cover;
+  background-position: center 22%;
+  background-repeat: no-repeat;
+  opacity: 0.28;
+  filter: contrast(1.06) saturate(1.1);
+}
+
+.dashboard-page-content {
+  position: relative;
+  z-index: 1;
+}
+
 code {
   font-family: var(--font-mono);
   font-size: 0.85em;

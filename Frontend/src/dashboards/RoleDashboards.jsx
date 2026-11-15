@@ -309,12 +309,12 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
             longitude: Number(pos.coords.longitude.toFixed(6)),
             accuracy: pos.coords.accuracy ? Number(pos.coords.accuracy.toFixed(1)) : undefined,
             status: 'ONLINE',
-          }).catch(() => {});
+          }).catch(() => { });
         },
-        () => {},
+        () => { },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
       );
-    }).catch(() => {});
+    }).catch(() => { });
     return () => { cancelled = true; };
   }, []);
 
@@ -1001,1187 +1001,804 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
   const currentTabLabel = tabs.find((t) => t.id === activeTab)?.label || activeTab;
 
   return (
-    <div className={isTabPage ? 'tab-page-container' : ''}>
-      {isTabPage ? (
-        <BackButtonBar
-          title={currentTabLabel}
-          subtitle={`${roleMeta.title} • ${tenantProfile?.name || user?.tenantName || 'GBS Lending Institution'}`}
-          breadcrumb={['Overview Dashboard', currentTabLabel]}
-          fallbackPath="/dashboard"
-          actions={
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {USER_COUNT_DROPDOWN_ROLES.has(roleKey) && (
-                <Link to="/admin/users-crosscheck" className="btn btn-secondary" style={{ padding: '7px 12px', fontSize: '0.8rem', textDecoration: 'none' }}>
-                  <ShieldCheck size={14} /> Cross-Check
-                </Link>
-              )}
-              <button type="button" className="btn btn-primary" style={{ padding: '7px 12px', fontSize: '0.8rem' }} onClick={loadDashboardData}>
-                <RefreshCw size={14} /> Sync PostgreSQL
-              </button>
-            </div>
-          }
-        />
-      ) : (
-        /* 1. UNIQUE REAL-LIFE ROLE DASHBOARD PHOTO HERO BANNER (Shown on Overview Page) */
-        <div className="role-hero-banner">
-          <img src={roleMeta.dashboardImage} alt={`${roleMeta.title} Dashboard`} className="role-hero-bg" />
-          <div className="role-hero-overlay">
-            <div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-                <span className="badge badge-gold">{roleMeta.category}</span>
-                <span className="badge badge-success">{tenantProfile?.name || user?.tenantName || 'GBS Lending Institution'}</span>
-                {countdown && (
-                  <span className={`badge ${countdown.isLifetime ? 'badge-gold' : countdown.daysLeft <= 10 ? 'badge-warning' : 'badge-cyan'}`}>
-                    <Clock size={12} style={{ marginRight: 4 }} />
-                    {countdown.isLifetime
-                      ? 'LIFETIME LICENSE'
-                      : `${countdown.daysLeft ?? 30} Days Remaining (${countdown.subscriptionPlan || countdown.planTier || 'TRIAL_1M'})`}
-                  </span>
+    <div className={`dashboard-page-shell ${isTabPage ? 'tab-page-container' : ''}`}>
+      <div
+        className="dashboard-page-backdrop"
+        aria-hidden="true"
+        style={{ backgroundImage: `linear-gradient(180deg, rgba(6, 12, 24, 0.55) 0%, rgba(6, 12, 24, 0.72) 100%), url(${roleMeta.dashboardImage})` }}
+      />
+      <div className="dashboard-page-content">
+        {isTabPage ? (
+          <BackButtonBar
+            title={currentTabLabel}
+            subtitle={`${roleMeta.title} • ${tenantProfile?.name || user?.tenantName || 'GBS Lending Institution'}`}
+            breadcrumb={['Overview Dashboard', currentTabLabel]}
+            fallbackPath="/dashboard"
+            actions={
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {USER_COUNT_DROPDOWN_ROLES.has(roleKey) && (
+                  <Link to="/admin/users-crosscheck" className="btn btn-secondary" style={{ padding: '7px 12px', fontSize: '0.8rem', textDecoration: 'none' }}>
+                    <ShieldCheck size={14} /> Cross-Check
+                  </Link>
                 )}
-                {canViewMembers && (
-                  <span className="badge badge-cyan">
-                    <Users size={12} style={{ marginRight: 4 }} />
-                    Registered Customers: {overview?.totalMembers ?? members.length}
-                  </span>
-                )}
+                <button type="button" className="btn btn-primary" style={{ padding: '7px 12px', fontSize: '0.8rem' }} onClick={loadDashboardData}>
+                  <RefreshCw size={14} /> Sync PostgreSQL
+                </button>
               </div>
-              <h1 style={{ fontSize: 'clamp(1.4rem, 2.5vw, 2rem)', fontWeight: 800, margin: 0, color: '#FFFFFF' }}>
-                {roleMeta.title} Command Dashboard
-              </h1>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
-                <Link to="/profile/security" title="Update profile picture or live camera capture" style={{ display: 'inline-flex', alignItems: 'center', gap: 10, textDecoration: 'none', background: 'rgba(6,12,24,0.68)', padding: '6px 12px', borderRadius: 999, border: '1px solid rgba(212,175,55,0.45)' }}>
-                  {user?.profilePicture ? (
-                    <img src={user.profilePicture} alt={`${user.firstName} ${user.lastName}`} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', border: '1.5px solid #D4AF37' }} />
-                  ) : (
-                    <span style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(212,175,55,0.22)', color: '#F4E07B', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.88rem', border: '1.5px solid #D4AF37' }}>
-                      {(user?.firstName?.[0] || 'U')}{(user?.lastName?.[0] || '')}
+            }
+          />
+        ) : (
+          /* 1. UNIQUE REAL-LIFE ROLE DASHBOARD PHOTO HERO BANNER (Shown on Overview Page) */
+          <div className="role-hero-banner">
+            <img src={roleMeta.dashboardImage} alt={`${roleMeta.title} Dashboard`} className="role-hero-bg" />
+            <div className="role-hero-overlay">
+              <div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                  <span className="badge badge-gold">{roleMeta.category}</span>
+                  <span className="badge badge-success">{tenantProfile?.name || user?.tenantName || 'GBS Lending Institution'}</span>
+                  {countdown && (
+                    <span className={`badge ${countdown.isLifetime ? 'badge-gold' : countdown.daysLeft <= 10 ? 'badge-warning' : 'badge-cyan'}`}>
+                      <Clock size={12} style={{ marginRight: 4 }} />
+                      {countdown.isLifetime
+                        ? 'LIFETIME LICENSE'
+                        : `${countdown.daysLeft ?? 30} Days Remaining (${countdown.subscriptionPlan || countdown.planTier || 'TRIAL_1M'})`}
                     </span>
                   )}
-                  <span style={{ color: '#FFFFFF', fontSize: '0.92rem' }}>
-                    <strong>{user?.firstName} {user?.lastName}</strong>
-                    <span style={{ color: '#94A3B8', marginLeft: 8, fontSize: '0.82rem' }}>{user?.phone || user?.email}</span>
-                    {!user?.profilePicture && <span style={{ color: '#FDE68A', marginLeft: 8, fontSize: '0.78rem' }}>• Upload Photo</span>}
-                  </span>
-                </Link>
-              </div>
-              <p style={{ margin: '6px 0 0', fontSize: '0.92rem', color: '#E2E8F0', maxWidth: 680 }}>
-                {roleMeta.subtitle}
-              </p>
-            </div>
-
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {USER_COUNT_DROPDOWN_ROLES.has(roleKey) && (
-                <Link
-                  to="/admin/users-crosscheck"
-                  className="btn btn-secondary"
-                  style={{ textDecoration: 'none' }}
-                >
-                  <ShieldCheck size={15} /> Qualification Cross-Check
-                </Link>
-              )}
-              {(isManagement || isFinance) && (
-                <Link
-                  to="/migrations"
-                  className="btn btn-secondary"
-                  style={{ textDecoration: 'none' }}
-                >
-                  <Upload size={15} /> Data Migration
-                </Link>
-              )}
-              <button type="button" className="btn btn-primary" onClick={loadDashboardData}>
-                <RefreshCw size={15} /> Sync PostgreSQL
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 1B. COMPANY OWNER BRANDING NOTIFICATION & STAFF CLOCK IN/OUT STRIP */}
-      {isCompanyOwner && tenantProfile && !tenantProfile.companyNameUpdated && (
-        <div
-          className="glass-panel"
-          style={{
-            padding: 14,
-            marginBottom: 16,
-            borderColor: 'rgba(245, 158, 11, 0.6)',
-            background: 'linear-gradient(90deg, rgba(107,29,47,0.35), rgba(212,175,55,0.18))',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: 10,
-          }}
-        >
-          <div style={{ fontSize: '0.85rem', color: '#FDE68A' }}>
-            <strong>Action Required for Company Owner:</strong> Update your registered institution name &amp; upload your company logo so it appears across all company dashboards (your change will never overwrite the GBS platform core name).
-          </div>
-          <Link
-            to="/dashboard/tab/BRANDING_CCTV"
-            className="btn btn-primary"
-            style={{ padding: '7px 14px', textDecoration: 'none' }}
-          >
-            <Building2 size={14} /> Update Company Name &amp; Logo <ArrowUpRight size={13} />
-          </Link>
-        </div>
-      )}
-
-      {!isMemberOnly && !isGuarantorOnly && (
-        <div
-          className="glass-panel"
-          style={{
-            padding: '12px 16px',
-            marginBottom: 16,
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: 10,
-            borderColor: 'rgba(16, 185, 129, 0.35)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <CalendarCheck size={18} color="#10B981" />
-            <div>
-              <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#F1F5F9' }}>
-                Daily Staff Attendance Shift: <span style={{ color: attendanceStatus?.clockedIn ? '#34D399' : '#FBBF24' }}>
-                  {attendanceStatus?.clockedIn
-                    ? `CLOCKED IN (${new Date(attendanceStatus.todayRecord?.clockInAt || Date.now()).toLocaleTimeString()})`
-                    : attendanceStatus?.todayRecord?.clockOutAt
-                      ? `CLOSED SHIFT (${attendanceStatus.todayRecord?.durationMinutes || 0} mins logged)`
-                      : 'NOT CLOCKED IN YET'}
-                </span>
-              </div>
-              <div style={{ fontSize: '0.73rem', color: '#94A3B8' }}>
-                Work reporting and closing timestamps + live GPS location are audited automatically.
-              </div>
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            <input
-              type="text"
-              className="gbs-input"
-              style={{ width: 175, padding: '6px 10px', fontSize: '0.78rem' }}
-              placeholder="GPS Address (optional)"
-              value={attendanceGpsAddress}
-              onChange={(e) => setAttendanceGpsAddress(e.target.value)}
-            />
-            {!attendanceStatus?.clockedIn ? (
-              <button type="button" disabled={attendanceBusy} className="btn btn-primary" style={{ padding: '7px 14px', fontSize: '0.8rem' }} onClick={handleClockIn}>
-                <LogIn size={14} /> {attendanceBusy ? 'Saving...' : 'Clock In (Report to Work)'}
-              </button>
-            ) : (
-              <button type="button" disabled={attendanceBusy} className="btn btn-danger" style={{ padding: '7px 14px', fontSize: '0.8rem' }} onClick={handleClockOut}>
-                <LogOut size={14} /> {attendanceBusy ? 'Saving...' : 'Clock Out (Close Work)'}
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* 2. DEVELOPER AUTHORITY NOTICES FOR THIS TENANT */}
-      {devMessages.length > 0 && (
-        <div className="glass-panel" style={{ padding: 14, marginBottom: 18, borderColor: 'rgba(0, 242, 254, 0.4)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#00F2FE', fontWeight: 700, fontSize: '0.84rem', marginBottom: 6 }}>
-            <Bell size={15} /> Official Notice from GBS Platform Authority:
-          </div>
-          {devMessages.slice(0, 2).map((m) => (
-            <div key={m.id} style={{ fontSize: '0.82rem', color: '#E2E8F0', paddingTop: 4 }}>
-              <strong>{m.title}:</strong> {m.body}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {loadError && (
-        <div
-          className="glass-panel"
-          role="alert"
-          style={{
-            padding: '12px 16px',
-            marginBottom: 18,
-            borderColor: 'rgba(239, 68, 68, 0.55)',
-            background: 'rgba(127, 29, 29, 0.35)',
-            color: '#FECACA',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            gap: 12,
-            flexWrap: 'wrap',
-          }}
-        >
-          <span><strong>Live Data Sync Notice:</strong> {loadError}</span>
-          <button type="button" className="btn btn-primary" style={{ padding: '6px 14px' }} onClick={loadDashboardData}>
-            <RefreshCw size={14} /> Retry Sync
-          </button>
-        </div>
-      )}
-
-      {toast && (
-        <div
-          role="status"
-          aria-live="polite"
-          style={{
-            position: 'sticky',
-            top: 12,
-            zIndex: 45,
-            padding: '12px 16px',
-            marginBottom: 18,
-            borderRadius: 10,
-            background: toast.isErr ? 'rgba(127, 29, 29, 0.94)' : 'rgba(6, 78, 59, 0.94)',
-            border: `1px solid ${toast.isErr ? '#EF4444' : '#10B981'}`,
-            color: toast.isErr ? '#FECACA' : '#A7F3D0',
-            fontWeight: 600,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
-            boxShadow: '0 10px 28px rgba(2, 6, 23, 0.65)',
-            backdropFilter: 'blur(10px)',
-          }}
-        >
-          <span>{toast.msg}</span>
-          <button
-            type="button"
-            onClick={() => setToast(null)}
-            aria-label="Dismiss notification"
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'inherit',
-              cursor: 'pointer',
-              fontWeight: 800,
-              fontSize: '1rem',
-              lineHeight: 1,
-              padding: '2px 6px',
-            }}
-          >
-            ×
-          </button>
-        </div>
-      )}
-
-      {/* 3. WORKSPACE SUB-NAVIGATION TABS (Organized Command Bar with Icons & Live Badge Counts) */}
-      <div className="dashboard-tab-bar" role="navigation" aria-label="Workspace Sections">
-        {tabs.map((t) => {
-          const TabIcon = t.icon || Landmark;
-          const isCurrent = activeTab === t.id;
-          return (
-            <Link
-              key={t.id}
-              to={t.id === 'OVERVIEW' ? '/dashboard' : `/dashboard/tab/${encodeURIComponent(t.id)}`}
-              className={`dashboard-tab-pill ${isCurrent ? 'active' : ''}`}
-              style={{ textDecoration: 'none' }}
-            >
-              <TabIcon size={14} />
-              <span>{t.label}</span>
-              {t.badge !== null && t.badge !== undefined && (
-                <span className="dashboard-tab-badge">{t.badge}</span>
-              )}
-            </Link>
-          );
-        })}
-      </div>
-
-      {!tabs.some((t) => t.id === activeTab) && (
-        <div className="glass-panel" style={{ padding: 22, marginBottom: 18 }}>
-          <p style={{ margin: '0 0 12px', color: '#FDE68A' }}>
-            The workspace tab <strong>{activeTab}</strong> is not available for the {roleMeta.title} portal.
-          </p>
-          <Link to="/dashboard" className="btn btn-primary" style={{ textDecoration: 'none' }}>
-            Return to Overview Dashboard
-          </Link>
-        </div>
-      )}
-
-      {loading && !overview && !roleMetrics ? (
-        <div className="glass-panel" style={{ padding: 40, textAlign: 'center', color: '#94A3B8' }}>
-          Loading live PostgreSQL metrics for {roleMeta.title}...
-        </div>
-      ) : null}
-
-      {/* ===================================================================== */}
-      {/* TAB: OVERVIEW & CHARTS                                                */}
-      {/* ===================================================================== */}
-      {activeTab === 'OVERVIEW' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          <div className="dashboard-grid">
-            <div className="glass-panel metric-card">
-              <div>
-                <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>
-                  {isMemberOnly ? 'MY ACTIVE LOANS' : 'ACTIVE / TOTAL LOANS'}
+                  {canViewMembers && (
+                    <span className="badge badge-cyan">
+                      <Users size={12} style={{ marginRight: 4 }} />
+                      Registered Customers: {overview?.totalMembers ?? members.length}
+                    </span>
+                  )}
                 </div>
-                <div className="metric-value" style={{ color: '#D4AF37' }}>
-                  {overview?.activeLoans ?? loans.length}
+                <h1 style={{ fontSize: 'clamp(1.4rem, 2.5vw, 2rem)', fontWeight: 800, margin: 0, color: '#FFFFFF' }}>
+                  {roleMeta.title} Command Dashboard
+                </h1>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
+                  <Link to="/profile/security" title="Update profile picture or live camera capture" style={{ display: 'inline-flex', alignItems: 'center', gap: 10, textDecoration: 'none', background: 'rgba(6,12,24,0.68)', padding: '6px 12px', borderRadius: 999, border: '1px solid rgba(212,175,55,0.45)' }}>
+                    {user?.profilePicture ? (
+                      <img src={user.profilePicture} alt={`${user.firstName} ${user.lastName}`} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', border: '1.5px solid #D4AF37' }} />
+                    ) : (
+                      <span style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(212,175,55,0.22)', color: '#F4E07B', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.88rem', border: '1.5px solid #D4AF37' }}>
+                        {(user?.firstName?.[0] || 'U')}{(user?.lastName?.[0] || '')}
+                      </span>
+                    )}
+                    <span style={{ color: '#FFFFFF', fontSize: '0.92rem' }}>
+                      <strong>{user?.firstName} {user?.lastName}</strong>
+                      <span style={{ color: '#94A3B8', marginLeft: 8, fontSize: '0.82rem' }}>{user?.phone || user?.email}</span>
+                      {!user?.profilePicture && <span style={{ color: '#FDE68A', marginLeft: 8, fontSize: '0.78rem' }}>• Upload Photo</span>}
+                    </span>
+                  </Link>
                 </div>
+                <p style={{ margin: '6px 0 0', fontSize: '0.92rem', color: '#E2E8F0', maxWidth: 680 }}>
+                  {roleMeta.subtitle}
+                </p>
               </div>
-              <Landmark size={26} color="#D4AF37" />
-            </div>
 
-            <div className="glass-panel metric-card">
-              <div>
-                <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>DISBURSED PRINCIPAL</div>
-                <div className="metric-value" style={{ fontSize: '1.35rem', color: '#10B981' }}>
-                  {formatGHS(overview?.totalDisbursed ?? loans.reduce((s, l) => s + Number(l.principalAmount || 0), 0))}
-                </div>
-              </div>
-              <TrendingUp size={26} color="#10B981" />
-            </div>
-
-            <div className="glass-panel metric-card">
-              <div>
-                <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>
-                  {isMemberOnly ? 'REMAINING BALANCE' : 'TOTAL REPAID / OUTSTANDING'}
-                </div>
-                <div className="metric-value" style={{ fontSize: '1.35rem', color: '#38BDF8' }}>
-                  {formatGHS(overview?.totalRepaid ?? payments.reduce((s, p) => s + Number(p.amount || 0), 0))}
-                </div>
-              </div>
-              <CreditCard size={26} color="#38BDF8" />
-            </div>
-
-            <div className="glass-panel metric-card">
-              <div>
-                <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>
-                  {isRiskLegal ? 'TOTAL REGISTERED CUSTOMERS / CASES' : isHR ? 'TOTAL CUSTOMERS / PAYROLL' : 'TOTAL REGISTERED CUSTOMERS'}
-                </div>
-                <div className="metric-value" style={{ color: '#F4E07B' }}>
-                  {isRiskLegal
-                    ? `${overview?.totalMembers ?? members.length} / ${cases.length}`
-                    : isHR
-                      ? `${overview?.totalMembers ?? members.length} / ${salaries.length}`
-                      : (overview?.totalMembers ?? members.length)}
-                </div>
-              </div>
-              <Users size={26} color="#F4E07B" />
-            </div>
-          </div>
-
-          {/* Role-Tailored Quick-Action Command Hub (All 29 Canonical Roles) */}
-          <div className="glass-panel" style={{ padding: 20, borderColor: 'rgba(212, 175, 55, 0.35)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
-              <div>
-                <h3 style={{ margin: 0, color: '#D4AF37', fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <ShieldCheck size={18} /> {roleMeta.title} — Quick-Action Command Hub
-                </h3>
-                <div style={{ fontSize: '0.78rem', color: '#94A3B8', marginTop: 2 }}>
-                  Tailored operational commands and direct workspace shortcuts for {roleMeta.category} ({roleMeta.focus?.join(' • ') || 'Live Operations'}).
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {(roleMeta.focus || []).map((f) => (
-                  <span key={f} className="badge badge-gold" style={{ fontSize: '0.68rem' }}>{f}</span>
-                ))}
-              </div>
-            </div>
-            <div className="quick-command-grid">
-              {roleQuickCommands.map((cmd) => {
-                const CmdIcon = cmd.icon || Landmark;
-                return (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {USER_COUNT_DROPDOWN_ROLES.has(roleKey) && (
                   <Link
-                    key={cmd.title}
-                    to={cmd.to}
-                    className="quick-command-card"
+                    to="/admin/users-crosscheck"
+                    className="btn btn-secondary"
                     style={{ textDecoration: 'none' }}
                   >
-                    <div className="quick-command-icon">
-                      <CmdIcon size={18} />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 700, fontSize: '0.86rem', color: '#F8FAFC', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
-                        <span>{cmd.title}</span>
-                        <ArrowUpRight size={13} color="#D4AF37" />
-                      </div>
-                      <div style={{ fontSize: '0.75rem', color: '#94A3B8', marginTop: 4, lineHeight: 1.4 }}>
-                        {cmd.desc}
-                      </div>
-                    </div>
+                    <ShieldCheck size={15} /> Qualification Cross-Check
                   </Link>
-                );
-              })}
+                )}
+                {(isManagement || isFinance) && (
+                  <Link
+                    to="/migrations"
+                    className="btn btn-secondary"
+                    style={{ textDecoration: 'none' }}
+                  >
+                    <Upload size={15} /> Data Migration
+                  </Link>
+                )}
+                <button type="button" className="btn btn-primary" onClick={loadDashboardData}>
+                  <RefreshCw size={15} /> Sync PostgreSQL
+                </button>
+              </div>
             </div>
           </div>
+        )}
 
-          {USER_COUNT_DROPDOWN_ROLES.has(roleKey) && (
-            <RegistersCrossCheckPanel
-              userRole={roleKey}
-              totalCustomers={overview?.totalMembers ?? members.length}
-              onUpdated={loadDashboardData}
-            />
-          )}
+        {/* 1B. COMPANY OWNER BRANDING NOTIFICATION & STAFF CLOCK IN/OUT STRIP */}
+        {isCompanyOwner && tenantProfile && !tenantProfile.companyNameUpdated && (
+          <div
+            className="glass-panel"
+            style={{
+              padding: 14,
+              marginBottom: 16,
+              borderColor: 'rgba(245, 158, 11, 0.6)',
+              background: 'linear-gradient(90deg, rgba(107,29,47,0.35), rgba(212,175,55,0.18))',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 10,
+            }}
+          >
+            <div style={{ fontSize: '0.85rem', color: '#FDE68A' }}>
+              <strong>Action Required for Company Owner:</strong> Update your registered institution name &amp; upload your company logo so it appears across all company dashboards (your change will never overwrite the GBS platform core name).
+            </div>
+            <Link
+              to="/dashboard/tab/BRANDING_CCTV"
+              className="btn btn-primary"
+              style={{ padding: '7px 14px', textDecoration: 'none' }}
+            >
+              <Building2 size={14} /> Update Company Name &amp; Logo <ArrowUpRight size={13} />
+            </Link>
+          </div>
+        )}
 
-          {canCreateStaff && (
-            <div className="glass-panel" style={{ padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, borderColor: 'rgba(16, 185, 129, 0.35)' }}>
+        {!isMemberOnly && !isGuarantorOnly && (
+          <div
+            className="glass-panel"
+            style={{
+              padding: '12px 16px',
+              marginBottom: 16,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 10,
+              borderColor: 'rgba(16, 185, 129, 0.35)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <CalendarCheck size={18} color="#10B981" />
               <div>
-                <h3 style={{ margin: 0, color: '#34D399', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <UserPlus size={17} /> Institution &amp; Branch Staff Provisioning ({staffList.length} Active / {pendingStaff.length} Pending Approval)
-                </h3>
-                <div style={{ fontSize: '0.78rem', color: '#CBD5E1', marginTop: 2 }}>
-                  {isCompanyOwner
-                    ? `Create staff across all ${ROLES_META.length} roles and approve branch-submitted staff registrations.`
-                    : 'Branch Managers & HR can create new staff with GPS Digital Address; Company Owner approves final portal access.'}
+                <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#F1F5F9' }}>
+                  Daily Staff Attendance Shift: <span style={{ color: attendanceStatus?.clockedIn ? '#34D399' : '#FBBF24' }}>
+                    {attendanceStatus?.clockedIn
+                      ? `CLOCKED IN (${new Date(attendanceStatus.todayRecord?.clockInAt || Date.now()).toLocaleTimeString()})`
+                      : attendanceStatus?.todayRecord?.clockOutAt
+                        ? `CLOSED SHIFT (${attendanceStatus.todayRecord?.durationMinutes || 0} mins logged)`
+                        : 'NOT CLOCKED IN YET'}
+                  </span>
+                </div>
+                <div style={{ fontSize: '0.73rem', color: '#94A3B8' }}>
+                  Work reporting and closing timestamps + live GPS location are audited automatically.
                 </div>
               </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <input
+                type="text"
+                className="gbs-input"
+                style={{ width: 175, padding: '6px 10px', fontSize: '0.78rem' }}
+                placeholder="GPS Address (optional)"
+                value={attendanceGpsAddress}
+                onChange={(e) => setAttendanceGpsAddress(e.target.value)}
+              />
+              {!attendanceStatus?.clockedIn ? (
+                <button type="button" disabled={attendanceBusy} className="btn btn-primary" style={{ padding: '7px 14px', fontSize: '0.8rem' }} onClick={handleClockIn}>
+                  <LogIn size={14} /> {attendanceBusy ? 'Saving...' : 'Clock In (Report to Work)'}
+                </button>
+              ) : (
+                <button type="button" disabled={attendanceBusy} className="btn btn-danger" style={{ padding: '7px 14px', fontSize: '0.8rem' }} onClick={handleClockOut}>
+                  <LogOut size={14} /> {attendanceBusy ? 'Saving...' : 'Clock Out (Close Work)'}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* 2. DEVELOPER AUTHORITY NOTICES FOR THIS TENANT */}
+        {devMessages.length > 0 && (
+          <div className="glass-panel" style={{ padding: 14, marginBottom: 18, borderColor: 'rgba(0, 242, 254, 0.4)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#00F2FE', fontWeight: 700, fontSize: '0.84rem', marginBottom: 6 }}>
+              <Bell size={15} /> Official Notice from GBS Platform Authority:
+            </div>
+            {devMessages.slice(0, 2).map((m) => (
+              <div key={m.id} style={{ fontSize: '0.82rem', color: '#E2E8F0', paddingTop: 4 }}>
+                <strong>{m.title}:</strong> {m.body}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {loadError && (
+          <div
+            className="glass-panel"
+            role="alert"
+            style={{
+              padding: '12px 16px',
+              marginBottom: 18,
+              borderColor: 'rgba(239, 68, 68, 0.55)',
+              background: 'rgba(127, 29, 29, 0.35)',
+              color: '#FECACA',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 12,
+              flexWrap: 'wrap',
+            }}
+          >
+            <span><strong>Live Data Sync Notice:</strong> {loadError}</span>
+            <button type="button" className="btn btn-primary" style={{ padding: '6px 14px' }} onClick={loadDashboardData}>
+              <RefreshCw size={14} /> Retry Sync
+            </button>
+          </div>
+        )}
+
+        {toast && (
+          <div
+            role="status"
+            aria-live="polite"
+            style={{
+              position: 'sticky',
+              top: 12,
+              zIndex: 45,
+              padding: '12px 16px',
+              marginBottom: 18,
+              borderRadius: 10,
+              background: toast.isErr ? 'rgba(127, 29, 29, 0.94)' : 'rgba(6, 78, 59, 0.94)',
+              border: `1px solid ${toast.isErr ? '#EF4444' : '#10B981'}`,
+              color: toast.isErr ? '#FECACA' : '#A7F3D0',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              boxShadow: '0 10px 28px rgba(2, 6, 23, 0.65)',
+              backdropFilter: 'blur(10px)',
+            }}
+          >
+            <span>{toast.msg}</span>
+            <button
+              type="button"
+              onClick={() => setToast(null)}
+              aria-label="Dismiss notification"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'inherit',
+                cursor: 'pointer',
+                fontWeight: 800,
+                fontSize: '1rem',
+                lineHeight: 1,
+                padding: '2px 6px',
+              }}
+            >
+              ×
+            </button>
+          </div>
+        )}
+
+        {/* 3. WORKSPACE SUB-NAVIGATION TABS (Organized Command Bar with Icons & Live Badge Counts) */}
+        <div className="dashboard-tab-bar" role="navigation" aria-label="Workspace Sections">
+          {tabs.map((t) => {
+            const TabIcon = t.icon || Landmark;
+            const isCurrent = activeTab === t.id;
+            return (
               <Link
-                to="/dashboard/tab/HR_PAYROLL"
-                className="btn btn-primary"
+                key={t.id}
+                to={t.id === 'OVERVIEW' ? '/dashboard' : `/dashboard/tab/${encodeURIComponent(t.id)}`}
+                className={`dashboard-tab-pill ${isCurrent ? 'active' : ''}`}
                 style={{ textDecoration: 'none' }}
               >
-                <UserPlus size={15} /> Create New Staff Account <ArrowUpRight size={13} />
+                <TabIcon size={14} />
+                <span>{t.label}</span>
+                {t.badge !== null && t.badge !== undefined && (
+                  <span className="dashboard-tab-badge">{t.badge}</span>
+                )}
               </Link>
-            </div>
-          )}
+            );
+          })}
+        </div>
 
-          {!isMemberOnly && !isGuarantorOnly && (
-            <div className="glass-panel" style={{ padding: 16 }}>
-              <form
-                onSubmit={(e) => handleSearchMembers(e)}
-                style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}
-              >
-                <Search size={18} color="#00F2FE" />
-                <input
-                  type="search"
-                  className="gbs-input"
-                  style={{ flex: 1, minWidth: 230 }}
-                  placeholder="Find customer (including hidden) by Name, Mobile, GPS Digital Address, Member # or Ghana Card..."
-                  value={memberSearchInput}
-                  onChange={(e) => setMemberSearchInput(e.target.value)}
-                />
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', color: '#CBD5E1', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={includeHiddenMembers}
-                    onChange={(e) => setIncludeHiddenMembers(e.target.checked)}
-                  />
-                  Include Hidden
-                </label>
-                <button type="submit" disabled={memberSearching} className="btn btn-primary" style={{ padding: '9px 16px' }}>
-                  <Search size={14} /> {memberSearching ? 'Searching...' : 'Search Customers'}
-                </button>
-                <Link
-                  to="/dashboard/tab/MEMBERS"
-                  className="btn btn-secondary"
-                  style={{ textDecoration: 'none' }}
-                >
-                  Open Directory ({members.length}) <ArrowUpRight size={13} />
-                </Link>
-              </form>
-              {memberSearchCount !== null && (
-                <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {members.slice(0, 6).map((m) => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      className="btn btn-secondary"
-                      style={{ padding: '5px 10px', fontSize: '0.76rem' }}
-                      onClick={() => navigate(`/members/${m.id}`)}
-                    >
-                      {m.memberNumber} — {m.user?.firstName} {m.user?.lastName} ({m.user?.phone}){m.gpsAddress || m.user?.gpsAddress ? ` • ${m.gpsAddress || m.user?.gpsAddress}` : ''}
-                    </button>
-                  ))}
-                  {members.length === 0 && (
-                    <span style={{ fontSize: '0.8rem', color: '#FBBF24' }}>No customers matched your search query.</span>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+        {!tabs.some((t) => t.id === activeTab) && (
+          <div className="glass-panel" style={{ padding: 22, marginBottom: 18 }}>
+            <p style={{ margin: '0 0 12px', color: '#FDE68A' }}>
+              The workspace tab <strong>{activeTab}</strong> is not available for the {roleMeta.title} portal.
+            </p>
+            <Link to="/dashboard" className="btn btn-primary" style={{ textDecoration: 'none' }}>
+              Return to Overview Dashboard
+            </Link>
+          </div>
+        )}
 
-          {!isMemberOnly && !isGuarantorOnly && (
-            <div className="glass-panel" style={{ padding: 18, borderColor: 'rgba(245, 158, 11, 0.35)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 10 }}>
+        {loading && !overview && !roleMetrics ? (
+          <div className="glass-panel" style={{ padding: 40, textAlign: 'center', color: '#94A3B8' }}>
+            Loading live PostgreSQL metrics for {roleMeta.title}...
+          </div>
+        ) : null}
+
+        {/* ===================================================================== */}
+        {/* TAB: OVERVIEW & CHARTS                                                */}
+        {/* ===================================================================== */}
+        {activeTab === 'OVERVIEW' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div className="dashboard-grid">
+              <div className="glass-panel metric-card">
                 <div>
-                  <h3 style={{ margin: 0, color: '#FBBF24', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <AlertTriangle size={17} /> Borrower Payment Collection Alerts ({repaymentAlerts.totalBorrowers || 0} Installments Due / {repaymentAlerts.overdueCount || 0} Overdue)
+                  <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>
+                    {isMemberOnly ? 'MY ACTIVE LOANS' : 'ACTIVE / TOTAL LOANS'}
+                  </div>
+                  <div className="metric-value" style={{ color: '#D4AF37' }}>
+                    {overview?.activeLoans ?? loans.length}
+                  </div>
+                </div>
+                <Landmark size={26} color="#D4AF37" />
+              </div>
+
+              <div className="glass-panel metric-card">
+                <div>
+                  <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>DISBURSED PRINCIPAL</div>
+                  <div className="metric-value" style={{ fontSize: '1.35rem', color: '#10B981' }}>
+                    {formatGHS(overview?.totalDisbursed ?? loans.reduce((s, l) => s + Number(l.principalAmount || 0), 0))}
+                  </div>
+                </div>
+                <TrendingUp size={26} color="#10B981" />
+              </div>
+
+              <div className="glass-panel metric-card">
+                <div>
+                  <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>
+                    {isMemberOnly ? 'REMAINING BALANCE' : 'TOTAL REPAID / OUTSTANDING'}
+                  </div>
+                  <div className="metric-value" style={{ fontSize: '1.35rem', color: '#38BDF8' }}>
+                    {formatGHS(overview?.totalRepaid ?? payments.reduce((s, p) => s + Number(p.amount || 0), 0))}
+                  </div>
+                </div>
+                <CreditCard size={26} color="#38BDF8" />
+              </div>
+
+              <div className="glass-panel metric-card">
+                <div>
+                  <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>
+                    {isRiskLegal ? 'TOTAL REGISTERED CUSTOMERS / CASES' : isHR ? 'TOTAL CUSTOMERS / PAYROLL' : 'TOTAL REGISTERED CUSTOMERS'}
+                  </div>
+                  <div className="metric-value" style={{ color: '#F4E07B' }}>
+                    {isRiskLegal
+                      ? `${overview?.totalMembers ?? members.length} / ${cases.length}`
+                      : isHR
+                        ? `${overview?.totalMembers ?? members.length} / ${salaries.length}`
+                        : (overview?.totalMembers ?? members.length)}
+                  </div>
+                </div>
+                <Users size={26} color="#F4E07B" />
+              </div>
+            </div>
+
+            {/* Role-Tailored Quick-Action Command Hub (All 29 Canonical Roles) */}
+            <div className="glass-panel" style={{ padding: 20, borderColor: 'rgba(212, 175, 55, 0.35)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
+                <div>
+                  <h3 style={{ margin: 0, color: '#D4AF37', fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <ShieldCheck size={18} /> {roleMeta.title} — Quick-Action Command Hub
+                  </h3>
+                  <div style={{ fontSize: '0.78rem', color: '#94A3B8', marginTop: 2 }}>
+                    Tailored operational commands and direct workspace shortcuts for {roleMeta.category} ({roleMeta.focus?.join(' • ') || 'Live Operations'}).
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {(roleMeta.focus || []).map((f) => (
+                    <span key={f} className="badge badge-gold" style={{ fontSize: '0.68rem' }}>{f}</span>
+                  ))}
+                </div>
+              </div>
+              <div className="quick-command-grid">
+                {roleQuickCommands.map((cmd) => {
+                  const CmdIcon = cmd.icon || Landmark;
+                  return (
+                    <Link
+                      key={cmd.title}
+                      to={cmd.to}
+                      className="quick-command-card"
+                      style={{ textDecoration: 'none' }}
+                    >
+                      <div className="quick-command-icon">
+                        <CmdIcon size={18} />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 700, fontSize: '0.86rem', color: '#F8FAFC', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+                          <span>{cmd.title}</span>
+                          <ArrowUpRight size={13} color="#D4AF37" />
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: '#94A3B8', marginTop: 4, lineHeight: 1.4 }}>
+                          {cmd.desc}
+                        </div>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+
+            {USER_COUNT_DROPDOWN_ROLES.has(roleKey) && (
+              <RegistersCrossCheckPanel
+                userRole={roleKey}
+                totalCustomers={overview?.totalMembers ?? members.length}
+                onUpdated={loadDashboardData}
+              />
+            )}
+
+            {canCreateStaff && (
+              <div className="glass-panel" style={{ padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, borderColor: 'rgba(16, 185, 129, 0.35)' }}>
+                <div>
+                  <h3 style={{ margin: 0, color: '#34D399', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <UserPlus size={17} /> Institution &amp; Branch Staff Provisioning ({staffList.length} Active / {pendingStaff.length} Pending Approval)
                   </h3>
                   <div style={{ fontSize: '0.78rem', color: '#CBD5E1', marginTop: 2 }}>
-                    Total Due Recovery Target: <strong>{formatGHS(repaymentAlerts.totalDueAmountGhs)}</strong> — Staff must follow up to ensure borrowers pay on schedule.
+                    {isCompanyOwner
+                      ? `Create staff across all ${ROLES_META.length} roles and approve branch-submitted staff registrations.`
+                      : 'Branch Managers & HR can create new staff with GPS Digital Address; Company Owner approves final portal access.'}
                   </div>
                 </div>
-                {(isManagement || isCredit || isField || isFinance) && (
-                  <button
-                    type="button"
-                    disabled={dispatchingAlerts}
-                    className="btn btn-primary"
-                    style={{ padding: '7px 14px', fontSize: '0.8rem' }}
-                    onClick={handleDispatchCollectionAlerts}
-                  >
-                    <Bell size={14} /> {dispatchingAlerts ? 'Dispatching...' : 'Notify Collection Staff Now'}
-                  </button>
-                )}
-              </div>
-              {repaymentAlerts.dueLoans?.length > 0 ? (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
-                  {repaymentAlerts.dueLoans.slice(0, 6).map((item) => (
-                    <div key={item.scheduleId} style={{ padding: 10, borderRadius: 8, background: 'rgba(6,12,24,0.8)', border: `1px solid ${item.isOverdue ? 'rgba(239,68,68,0.45)' : 'rgba(212,175,55,0.22)'}`, fontSize: '0.78rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, color: '#F1F5F9' }}>
-                        <span>{item.borrowerName} ({item.loanNumber})</span>
-                        <span style={{ color: item.isOverdue ? '#F87171' : '#FBBF24' }}>{formatGHS(item.amountDueGhs)}</span>
-                      </div>
-                      <div style={{ color: '#94A3B8', marginTop: 2 }}>
-                        Phone: {item.borrowerPhone || 'N/A'}{item.borrowerGpsAddress ? ` • GPS: ${item.borrowerGpsAddress}` : ''}
-                      </div>
-                      <div style={{ fontSize: '0.72rem', color: item.isOverdue ? '#FCA5A5' : '#00F2FE', marginTop: 2 }}>
-                        {item.isOverdue ? 'OVERDUE' : 'DUE SOON'} • {new Date(item.dueDate).toLocaleDateString()}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div style={{ fontSize: '0.8rem', color: '#34D399' }}>All scheduled installments are currently up to date.</div>
-              )}
-            </div>
-          )}
-
-          {!isMemberOnly && !isGuarantorOnly && (
-            <div className="gbs-grid-2">
-              <div className="glass-panel" style={{ padding: 20 }}>
-                <h3 style={{ margin: '0 0 12px', color: '#D4AF37', fontSize: '1rem' }}>
-                  Loan Portfolio Status Distribution (PostgreSQL)
-                </h3>
-                <div style={{ height: 240 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={loanChart}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.12)" />
-                      <XAxis dataKey="status" stroke="#94A3B8" fontSize={11} />
-                      <YAxis stroke="#94A3B8" fontSize={11} />
-                      <Tooltip contentStyle={{ background: '#060c18', border: '1px solid #D4AF37' }} />
-                      <Bar dataKey="count" fill="#D4AF37" radius={[6, 6, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              <div className="glass-panel" style={{ padding: 20 }}>
-                <h3 style={{ margin: '0 0 12px', color: '#00F2FE', fontSize: '1rem' }}>
-                  Monthly Repayment Collections Trend
-                </h3>
-                <div style={{ height: 240 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={paymentChart}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.12)" />
-                      <XAxis dataKey="month" stroke="#94A3B8" fontSize={11} />
-                      <YAxis stroke="#94A3B8" fontSize={11} />
-                      <Tooltip contentStyle={{ background: '#060c18', border: '1px solid #00F2FE' }} />
-                      <Area type="monotone" dataKey="total" stroke="#00F2FE" fill="rgba(0,242,254,0.22)" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Self-Service Summary Cards for Borrower (Member Portal) & Guarantor Portal */}
-          {(isMemberOnly || isGuarantorOnly) && (
-            <div className="gbs-grid-2">
-              <div className="glass-panel" style={{ padding: 20 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                  <h3 style={{ margin: 0, color: '#D4AF37', fontSize: '1rem' }}>
-                    {isMemberOnly ? `My Loan Facilities (${loans.length})` : `Guaranteed Loan Facilities (${loans.length})`}
-                  </h3>
-                  <Link to="/dashboard/tab/LOANS" className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.76rem', textDecoration: 'none' }}>
-                    {isMemberOnly ? 'Apply / View All' : 'Inspect Loans'} <ArrowUpRight size={12} />
-                  </Link>
-                </div>
-                {loans.length === 0 ? (
-                  <p style={{ color: '#94A3B8', fontSize: '0.84rem' }}>
-                    {isMemberOnly ? 'No active loans yet. Click "Apply / View All" to submit a new loan application.' : 'No guaranteed loans linked to your profile yet.'}
-                  </p>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {loans.slice(0, 5).map((l) => (
-                      <div key={l.id} style={{ padding: 12, borderRadius: 10, background: 'rgba(6,12,24,0.8)', border: '1px solid rgba(212,175,55,0.2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                        <div>
-                          <strong style={{ color: '#F8FAFC', fontSize: '0.86rem' }}>{l.loanNumber}</strong>
-                          <div style={{ fontSize: '0.76rem', color: '#94A3B8' }}>
-                            Principal: {formatGHS(l.principalAmount)} • Outstanding: {formatGHS(l.outstandingAmount ?? l.totalOutstanding ?? l.principalAmount)}
-                          </div>
-                        </div>
-                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                          <span className={`badge ${['APPROVED', 'DISBURSED', 'ONGOING', 'PAID'].includes(l.status) ? 'badge-success' : 'badge-warning'}`}>{l.status}</span>
-                          <button type="button" className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '0.74rem' }} onClick={() => navigate(`/loans/${l.id}`)}>
-                            Schedule
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="glass-panel" style={{ padding: 20 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                  <h3 style={{ margin: 0, color: '#00F2FE', fontSize: '1rem' }}>
-                    {isGuarantorOnly ? 'My Surety Agreement Standing' : `Recent Repayments (${payments.length})`}
-                  </h3>
-                  <Link
-                    to={isGuarantorOnly ? '/dashboard/tab/GUARANTORS' : '/dashboard/tab/PAYMENTS'}
-                    className="btn btn-secondary"
-                    style={{ padding: '6px 12px', fontSize: '0.76rem', textDecoration: 'none' }}
-                  >
-                    {isGuarantorOnly ? 'Manage Surety' : 'Pay via MoMo'} <ArrowUpRight size={12} />
-                  </Link>
-                </div>
-                {isGuarantorOnly ? (
-                  guarantors.length === 0 ? (
-                    <p style={{ color: '#94A3B8', fontSize: '0.84rem' }}>Your guarantor profile is active and ready for digital surety signing.</p>
-                  ) : (
-                    guarantors.map((g) => (
-                      <div key={g.id} style={{ padding: 14, borderRadius: 10, background: 'rgba(6,12,24,0.8)', border: '1px solid rgba(0,242,254,0.25)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                          <strong>{g.user?.firstName || user?.firstName} {g.user?.lastName || user?.lastName}</strong>
-                          <span className={`badge ${g.agreementSigned ? 'badge-success' : 'badge-warning'}`}>
-                            {g.agreementSigned ? 'SURETY SIGNED' : 'PENDING SIGNATURE'}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: '0.78rem', color: '#CBD5E1', marginBottom: 10 }}>
-                          GPS Digital Address: <strong style={{ color: '#00F2FE' }}>{g.gpsAddress || g.user?.gpsAddress || user?.gpsAddress || 'Verified'}</strong> • Guaranteed Loans: {(g.loanGuarantors || []).length}
-                        </div>
-                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                          {!g.agreementSigned && (
-                            <button type="button" className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.76rem' }} onClick={() => handleSignGuarantorAgreement(g.id)}>
-                              <CheckCircle2 size={14} /> Sign Digital Surety Agreement
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            className="btn btn-secondary"
-                            style={{ padding: '6px 12px', fontSize: '0.76rem' }}
-                            onClick={() => handleToggleGuarantorPenalty(g.id, !g.penaltyNotifyEnabled)}
-                          >
-                            <Bell size={14} /> {g.penaltyNotifyEnabled ? 'Penalty Alerts: ON' : 'Enable Penalty Alerts'}
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                  )
-                ) : payments.length === 0 ? (
-                  <p style={{ color: '#94A3B8', fontSize: '0.84rem' }}>No repayments recorded yet.</p>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {payments.slice(0, 5).map((p) => {
-                      const dt = formatTxDateParts(p.paidAt || p.createdAt);
-                      const refName = p.payerName || (p.loan?.member ? `${p.loan.member.firstName} ${p.loan.member.lastName}` : null) || p.loan?.loanNumber || 'Loan Repayment';
-                      return (
-                        <div key={p.id} style={{ padding: 10, borderRadius: 8, background: 'rgba(6,12,24,0.8)', border: '1px solid rgba(0,242,254,0.18)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-                          <div>
-                            <strong style={{ fontSize: '0.88rem' }}>{p.transactionRef || p.receiptNumber || p.id.slice(0, 8)} — {refName}</strong>
-                            <div style={{ fontSize: '0.78rem', color: '#CBD5E1' }}>{p.method} • {p.loan?.loanNumber || 'Loan'}</div>
-                            <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>{dt.full}</div>
-                          </div>
-                          <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontWeight: 700, color: '#34D399', fontSize: '0.9rem' }}>{formatGHS(p.amount)}</div>
-                            <span className={`badge ${p.status === 'COMPLETED' ? 'badge-success' : 'badge-warning'}`} style={{ fontSize: '0.68rem' }}>{p.status}</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Role-Specific Backend Telemetry Snapshot */}
-          {roleMetrics && (
-            <div className="glass-panel" style={{ padding: 20 }}>
-              <h3 style={{ margin: '0 0 10px', color: '#D4AF37', fontSize: '1rem' }}>
-                {roleMeta.title} — Specialized Live Telemetry
-              </h3>
-              <div className="gbs-grid-3">
-                {Object.entries(roleMetrics)
-                  .filter(([, v]) => typeof v !== 'object' || v === null)
-                  .slice(0, 9)
-                  .map(([k, v]) => (
-                    <div key={k} style={{ background: 'rgba(6,12,24,0.75)', padding: 12, borderRadius: 8, border: '1px solid rgba(212,175,55,0.18)' }}>
-                      <div style={{ fontSize: '0.7rem', color: '#94A3B8', textTransform: 'uppercase' }}>{k.replace(/([A-Z])/g, ' $1')}</div>
-                      <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#F1F5F9', marginTop: 4 }}>{String(v ?? '0')}</div>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ===================================================================== */}
-      {/* TAB: LOANS & APPROVALS                                                */}
-      {/* ===================================================================== */}
-      {activeTab === 'LOANS' && (
-        <div className="gbs-grid-2">
-          <div className="glass-panel" style={{ padding: 20 }}>
-            <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>
-              <Plus size={16} style={{ verticalAlign: 'middle' }} /> New Loan Application
-            </h3>
-            <form onSubmit={handleApplyLoan} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {isMemberOnly ? (
-                <div style={{ padding: '10px 12px', borderRadius: 8, background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', fontSize: '0.8rem', color: '#34D399' }}>
-                  <strong>Borrower Applicant:</strong> {user?.firstName} {user?.lastName} ({user?.phone || user?.email}) — Self-Service Facility Application
-                </div>
-              ) : (
-                <div>
-                  <label className="gbs-label">Borrower / Member</label>
-                  <select required className="gbs-select" value={newLoan.memberId} onChange={(e) => setNewLoan({ ...newLoan, memberId: e.target.value })}>
-                    <option value="">Select Registered Member...</option>
-                    {members.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.memberNumber} — {m.user?.firstName} {m.user?.lastName}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              <div>
-                <label className="gbs-label">Loan Product</label>
-                <select className="gbs-select" required value={newLoan.loanProductId || loanProducts[0]?.id || ''} onChange={(e) => setNewLoan({ ...newLoan, loanProductId: e.target.value })}>
-                  {loanProducts.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name} ({p.interestRate}% • {p.minTermMonths}-{p.maxTermMonths} mo)</option>
-                  ))}
-                </select>
-              </div>
-              <div className="gbs-grid-2" style={{ gap: 10 }}>
-                <div>
-                  <label className="gbs-label">Principal Amount (GHS)</label>
-                  <input type="number" required min="100" className="gbs-input" value={newLoan.principalAmount} onChange={(e) => setNewLoan({ ...newLoan, principalAmount: e.target.value })} placeholder="5000" />
-                </div>
-                <div>
-                  <label className="gbs-label">Term (Months)</label>
-                  <input type="number" required min="1" max="60" className="gbs-input" value={newLoan.termMonths} onChange={(e) => setNewLoan({ ...newLoan, termMonths: e.target.value })} />
-                </div>
-              </div>
-              {Number(newLoan.principalAmount) > 0 && Number(newLoan.termMonths) > 0 && (() => {
-                const selectedProd = loanProducts.find((p) => p.id === (newLoan.loanProductId || loanProducts[0]?.id)) || loanProducts[0];
-                const ratePct = Number(selectedProd?.interestRate || 15);
-                const principal = Number(newLoan.principalAmount);
-                const term = Math.max(1, Number(newLoan.termMonths));
-                const estTotal = principal + (principal * (ratePct / 100));
-                const estMonthly = estTotal / term;
-                return (
-                  <div style={{ padding: '10px 12px', borderRadius: 8, background: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.3)', fontSize: '0.78rem', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-                    <span>Est. Monthly Installment: <strong style={{ color: '#F4E07B' }}>{formatGHS(estMonthly)}/mo</strong></span>
-                    <span>Total Repayable ({ratePct}%): <strong style={{ color: '#00F2FE' }}>{formatGHS(estTotal)}</strong></span>
-                  </div>
-                );
-              })()}
-              <div>
-                <label className="gbs-label">Loan Purpose</label>
-                <input type="text" required className="gbs-input" value={newLoan.purpose} onChange={(e) => setNewLoan({ ...newLoan, purpose: e.target.value })} placeholder="Working Capital / Retail Expansion" />
-              </div>
-              <button type="submit" className="btn btn-primary" style={{ justifyContent: 'center' }}>
-                Submit Application to Underwriting
-              </button>
-            </form>
-          </div>
-
-          <div className="glass-panel" style={{ padding: 20 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8, flexWrap: 'wrap' }}>
-              <h3 style={{ margin: 0, color: '#00F2FE' }}>Loan Portfolio ({filteredLoans.length})</h3>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input type="text" className="gbs-input" style={{ width: 170, padding: '6px 10px' }} placeholder="Search loan / member..." value={search} onChange={(e) => setSearch(e.target.value)} />
-                <select className="gbs-select" style={{ width: 130, padding: '6px 10px' }} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-                  <option value="">All Status</option>
-                  <option value="PENDING">PENDING</option>
-                  <option value="UNDER_REVIEW">UNDER_REVIEW</option>
-                  <option value="APPROVED">APPROVED</option>
-                  <option value="DISBURSED">DISBURSED</option>
-                  <option value="ONGOING">ONGOING</option>
-                  <option value="OVERDUE">OVERDUE</option>
-                  <option value="DEFAULTED">DEFAULTED</option>
-                  <option value="PAID">PAID</option>
-                  <option value="CLOSED">CLOSED</option>
-                  <option value="REJECTED">REJECTED</option>
-                </select>
-              </div>
-            </div>
-            <div className="data-table-container" style={{ maxHeight: 420 }}>
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Loan #</th>
-                    <th>Borrower</th>
-                    <th>Principal</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredLoans.map((l) => (
-                    <tr key={l.id} onClick={() => navigate(`/loans/${l.id}`)} style={{ cursor: 'pointer' }}>
-                      <td><strong>{l.loanNumber}</strong></td>
-                      <td>{l.member?.user?.firstName || user?.firstName} {l.member?.user?.lastName || user?.lastName}</td>
-                      <td>{formatGHS(l.principalAmount)}</td>
-                      <td><span className={`badge ${['APPROVED', 'DISBURSED', 'ONGOING', 'PAID'].includes(l.status) ? 'badge-success' : ['OVERDUE', 'DEFAULTED', 'REJECTED'].includes(l.status) ? 'badge-danger' : 'badge-warning'}`}>{l.status}</span></td>
-                      <td style={{ display: 'flex', gap: 6 }}>
-                        <button type="button" className="btn btn-secondary" style={{ padding: '4px 9px', fontSize: '0.74rem' }}>
-                          Open <ArrowUpRight size={12} />
-                        </button>
-                        {['DISBURSED', 'ONGOING', 'OVERDUE', 'APPROVED'].includes(l.status) && (
-                          <button
-                            type="button"
-                            className="btn btn-primary"
-                            style={{ padding: '4px 9px', fontSize: '0.74rem' }}
-                            onClick={(ev) => {
-                              ev.stopPropagation();
-                              const outBal = Number(l.outstandingAmount ?? l.totalOutstanding ?? l.principalAmount ?? 0);
-                              setNewPayment((prev) => ({
-                                ...prev,
-                                loanId: l.id,
-                                amount: outBal > 0 ? String(Math.min(outBal, Math.round((outBal / Math.max(1, Number(l.termMonths || 12))) * 100) / 100)) : prev.amount,
-                              }));
-                              navigate('/dashboard/tab/PAYMENTS');
-                            }}
-                          >
-                            Pay
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                  {filteredLoans.length === 0 && (
-                    <tr>
-                      <td colSpan={5} style={{ textAlign: 'center', color: '#94A3B8', padding: 24 }}>
-                        No loan records match the current filter.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ===================================================================== */}
-      {/* TAB: PAYMENTS (MOMO / BANK / CASH)                                    */}
-      {/* ===================================================================== */}
-      {activeTab === 'PAYMENTS' && (
-        <div className="gbs-grid-2">
-          <div className="glass-panel" style={{ padding: 20 }}>
-            <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>Record Loan Repayment</h3>
-            <form onSubmit={handleRecordPayment} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div>
-                <label className="gbs-label">Target Loan</label>
-                <select className="gbs-select" required value={newPayment.loanId} onChange={(e) => setNewPayment({ ...newPayment, loanId: e.target.value })}>
-                  <option value="">Select Active Loan...</option>
-                  {loans.map((l) => (
-                    <option key={l.id} value={l.id}>{l.loanNumber} — {l.member?.user?.firstName || user?.firstName} ({formatGHS(l.outstandingAmount ?? l.totalOutstanding ?? l.principalAmount)})</option>
-                  ))}
-                </select>
-              </div>
-              {newPayment.loanId && (() => {
-                const selLoan = loans.find((x) => x.id === newPayment.loanId);
-                if (!selLoan) return null;
-                const fullOut = Number(selLoan.outstandingAmount ?? selLoan.totalOutstanding ?? selLoan.principalAmount ?? 0);
-                const estInstallment = Math.max(1, Math.round((fullOut / Math.max(1, Number(selLoan.termMonths || 12))) * 100) / 100);
-                return (
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      style={{ padding: '5px 10px', fontSize: '0.74rem' }}
-                      onClick={() => setNewPayment((prev) => ({ ...prev, amount: String(estInstallment) }))}
-                    >
-                      Fill Est. Installment ({formatGHS(estInstallment)})
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      style={{ padding: '5px 10px', fontSize: '0.74rem' }}
-                      onClick={() => setNewPayment((prev) => ({ ...prev, amount: String(fullOut) }))}
-                    >
-                      Fill Full Balance ({formatGHS(fullOut)})
-                    </button>
-                  </div>
-                );
-              })()}
-              <div className="gbs-grid-2" style={{ gap: 10 }}>
-                <div>
-                  <label className="gbs-label">Amount (GHS)</label>
-                  <input type="number" required min="1" step="0.01" className="gbs-input" value={newPayment.amount} onChange={(e) => setNewPayment({ ...newPayment, amount: e.target.value })} placeholder="350" />
-                </div>
-                <div>
-                  <label className="gbs-label">Method</label>
-                  <select className="gbs-select" value={newPayment.method} onChange={(e) => setNewPayment({ ...newPayment, method: e.target.value })}>
-                    <option value="MOMO">Mobile Money (MTN/Telecel)</option>
-                    <option value="BANK_TRANSFER">Direct Bank Transfer</option>
-                    <option value="CASH">Cash Payment (Needs Accounting Approval)</option>
-                  </select>
-                </div>
-              </div>
-              {newPayment.method === 'MOMO' && (
-                <div className="gbs-grid-2" style={{ gap: 10 }}>
-                  <div>
-                    <label className="gbs-label">MoMo Phone</label>
-                    <input type="tel" required className="gbs-input" value={newPayment.momoPhone} onChange={(e) => setNewPayment({ ...newPayment, momoPhone: e.target.value })} placeholder="+233240000000" />
-                  </div>
-                  <div>
-                    <label className="gbs-label">Network</label>
-                    <select className="gbs-select" value={newPayment.momoNetwork} onChange={(e) => setNewPayment({ ...newPayment, momoNetwork: e.target.value })}>
-                      <option value="MTN">MTN MoMo</option>
-                      <option value="TELECEL">Telecel Cash</option>
-                      <option value="AT">AT Money</option>
-                    </select>
-                  </div>
-                </div>
-              )}
-              <button type="submit" className="btn btn-primary" style={{ justifyContent: 'center' }}>Process Payment</button>
-            </form>
-          </div>
-
-          <div className="glass-panel" style={{ padding: 20 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8, flexWrap: 'wrap' }}>
-              <h3 style={{ margin: 0, color: '#00F2FE' }}>Payment &amp; Receipt Ledger ({filteredPayments.length})</h3>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input
-                  type="text"
-                  className="gbs-input"
-                  style={{ width: 155, padding: '6px 10px' }}
-                  placeholder="Search receipt / loan..."
-                  value={paymentSearch}
-                  onChange={(e) => setPaymentSearch(e.target.value)}
-                />
-                <select
-                  className="gbs-select"
-                  style={{ width: 130, padding: '6px 10px' }}
-                  value={paymentMethodFilter}
-                  onChange={(e) => setPaymentMethodFilter(e.target.value)}
+                <Link
+                  to="/dashboard/tab/HR_PAYROLL"
+                  className="btn btn-primary"
+                  style={{ textDecoration: 'none' }}
                 >
-                  <option value="">All Methods</option>
-                  <option value="MOMO">MOMO</option>
-                  <option value="BANK_TRANSFER">BANK_TRANSFER</option>
-                  <option value="CASH">CASH</option>
-                </select>
+                  <UserPlus size={15} /> Create New Staff Account <ArrowUpRight size={13} />
+                </Link>
               </div>
-            </div>
-            <div className="data-table-container" style={{ maxHeight: 420 }}>
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Reference &amp; Name</th>
-                    <th>Day / Date / Month</th>
-                    <th>Method</th>
-                    <th>Amount</th>
-                    <th>Status</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredPayments.map((p) => {
-                    const dt = formatTxDateParts(p.paidAt || p.createdAt);
-                    const refName = p.payerName || (p.loan?.member ? `${p.loan.member.firstName} ${p.loan.member.lastName}` : null) || p.loan?.loanNumber || 'Customer Repayment';
-                    return (
-                      <tr key={p.id} onClick={() => navigate(`/payments/${p.id}`)} style={{ cursor: 'pointer' }}>
-                        <td>
-                          <strong>{p.transactionRef || p.receiptNumber || p.reference || p.id.slice(0, 8)}</strong>
-                          <div style={{ fontSize: '0.78rem', color: '#CBD5E1' }}>{refName}{p.loan?.loanNumber ? ` • ${p.loan.loanNumber}` : ''}</div>
-                        </td>
-                        <td>
-                          <div style={{ fontWeight: 600, color: '#F1F5F9', fontSize: '0.84rem' }}>{dt.day}, {dt.date}</div>
-                          <div style={{ fontSize: '0.76rem', color: '#94A3B8' }}>{dt.month} • {dt.time}</div>
-                        </td>
-                        <td>{p.method}</td>
-                        <td>{formatGHS(p.amount)}</td>
-                        <td><span className={`badge ${p.status === 'COMPLETED' ? 'badge-success' : 'badge-warning'}`}>{p.status}</span></td>
-                        <td style={{ display: 'flex', gap: 6 }}>
-                          <button type="button" className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.78rem' }}>Inspect</button>
-                          {p.method === 'CASH' && p.status !== 'COMPLETED' && (isFinance || isManagement) && (
-                            <button
-                              type="button"
-                              className="btn btn-primary"
-                              style={{ padding: '4px 8px', fontSize: '0.76rem' }}
-                              onClick={(ev) => {
-                                ev.stopPropagation();
-                                handleApproveCashPayment(p.id);
-                              }}
-                            >
-                              Approve Cash
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {filteredPayments.length === 0 && (
-                    <tr>
-                      <td colSpan={6} style={{ textAlign: 'center', color: '#94A3B8', padding: 24 }}>
-                        No repayments match the current filter.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
+            )}
 
-      {/* ===================================================================== */}
-      {/* TAB: MEMBERS & KYC                                                    */}
-      {/* ===================================================================== */}
-      {activeTab === 'MEMBERS' && !isMemberOnly && !isGuarantorOnly && (
-        <div className="gbs-grid-2">
-          <div className="glass-panel" style={{ padding: 20 }}>
-            <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>Register Borrower &amp; Mandatory GPS Digital Address</h3>
-            <form onSubmit={handleCreateMember} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div className="gbs-grid-2" style={{ gap: 10 }}>
-                <input type="text" required className="gbs-input" placeholder="First Name" value={newMember.firstName} onChange={(e) => setNewMember({ ...newMember, firstName: e.target.value })} />
-                <input type="text" required className="gbs-input" placeholder="Last Name" value={newMember.lastName} onChange={(e) => setNewMember({ ...newMember, lastName: e.target.value })} />
-              </div>
-              <input type="tel" required className="gbs-input" placeholder="Phone (+233...)" value={newMember.phone} onChange={(e) => setNewMember({ ...newMember, phone: e.target.value })} />
-              <input type="email" className="gbs-input" placeholder="Email (optional)" value={newMember.email} onChange={(e) => setNewMember({ ...newMember, email: e.target.value })} />
-              <input type="text" className="gbs-input" placeholder="Ghana Card No. (GHA-...)" value={newMember.ghanaCardNumber} onChange={(e) => setNewMember({ ...newMember, ghanaCardNumber: e.target.value })} />
-              <input type="text" required className="gbs-input" placeholder="GPS Digital Address (e.g. GA-183-8164)" value={newMember.gpsAddress} onChange={(e) => setNewMember({ ...newMember, gpsAddress: e.target.value })} />
-              <input type="text" className="gbs-input" placeholder="Physical Street / Business Location" value={newMember.address} onChange={(e) => setNewMember({ ...newMember, address: e.target.value })} />
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.8rem', color: '#CBD5E1', cursor: 'pointer' }}>
-                <input type="checkbox" checked={newMember.isHidden} onChange={(e) => setNewMember({ ...newMember, isHidden: e.target.checked })} />
-                Mark customer confidential/hidden (locatable when searching phone or GPS address)
-              </label>
-              <button type="submit" className="btn btn-primary" style={{ justifyContent: 'center' }}>Register Borrower Profile</button>
-            </form>
-          </div>
-
-          <div className="glass-panel" style={{ padding: 20 }}>
-            <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}>Borrowers Directory ({members.length})</h3>
-            <form
-              onSubmit={(e) => handleSearchMembers(e)}
-              style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14, alignItems: 'center' }}
-            >
-              <input
-                type="search"
-                className="gbs-input"
-                style={{ flex: 1, minWidth: 190 }}
-                placeholder="Search customer by name, phone, GPS address, MBR #, Ghana Card..."
-                value={memberSearchInput}
-                onChange={(e) => setMemberSearchInput(e.target.value)}
-              />
-              <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.75rem', color: '#CBD5E1', cursor: 'pointer' }}>
-                <input type="checkbox" checked={includeHiddenMembers} onChange={(e) => setIncludeHiddenMembers(e.target.checked)} />
-                Hidden
-              </label>
-              <button type="submit" disabled={memberSearching} className="btn btn-primary" style={{ padding: '8px 14px' }}>
-                <Search size={14} /> {memberSearching ? 'Searching...' : 'Search'}
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                style={{ padding: '8px 12px' }}
-                onClick={() => {
-                  setMemberSearchInput('');
-                  setMemberSearchCount(null);
-                  handleSearchMembers(null, '');
-                }}
-              >
-                Show All
-              </button>
-            </form>
-            <div className="data-table-container" style={{ maxHeight: 420 }}>
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Member #</th>
-                    <th>Full Name</th>
-                    <th>Phone / GPS Address</th>
-                    <th>KYC Status</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {members.map((m) => (
-                    <tr key={m.id} onClick={() => navigate(`/members/${m.id}`)} style={{ cursor: 'pointer' }}>
-                      <td>
-                        <strong>{m.memberNumber}</strong>
-                        {m.isHidden && <div><span className="badge badge-danger" style={{ fontSize: '0.62rem' }}>HIDDEN</span></div>}
-                      </td>
-                      <td>{m.user?.firstName} {m.user?.lastName}</td>
-                      <td>
-                        <div>{m.user?.phone}</div>
-                        <div style={{ fontSize: '0.72rem', color: '#00F2FE' }}>{m.gpsAddress || m.user?.gpsAddress || 'No GPS Addr'}</div>
-                      </td>
-                      <td><span className={`badge ${m.ghanaCardVerified ? 'badge-success' : 'badge-warning'}`}>{m.ghanaCardVerified ? 'KYC VERIFIED' : 'PENDING KYC'}</span></td>
-                      <td style={{ display: 'flex', gap: 6 }}>
-                        <button type="button" className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.74rem' }}>Open</button>
-                        {(m.user?.phone || m.gpsAddress) && (
-                          <Link
-                            to={`/dashboard/tab/FIELD_OPS?locate=${encodeURIComponent(m.user?.phone || m.gpsAddress || '')}`}
-                            className="btn btn-primary"
-                            style={{ padding: '4px 8px', fontSize: '0.74rem', textDecoration: 'none' }}
-                            onClick={(ev) => ev.stopPropagation()}
-                          >
-                            <MapPin size={12} /> Locate
-                          </Link>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                  {members.length === 0 && (
-                    <tr>
-                      <td colSpan={5} style={{ textAlign: 'center', color: '#94A3B8', padding: 24 }}>
-                        No members/customers found matching your search.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ===================================================================== */}
-      {/* TAB: GUARANTORS                                                       */}
-      {/* ===================================================================== */}
-      {activeTab === 'GUARANTORS' && (
-        isGuarantorOnly ? (
-          <div className="gbs-grid-2">
-            <div className="glass-panel" style={{ padding: 20 }}>
-              <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>My Digital Surety Profile &amp; Agreement Controls</h3>
-              {guarantors.length === 0 ? (
-                <div style={{ fontSize: '0.84rem', color: '#CBD5E1' }}>
-                  Your Guarantor Portal account (<strong>{user?.firstName} {user?.lastName}</strong>) is active. When a Loan Officer links you as a surety to a borrower facility, your digital agreement and penalty alert controls will appear here.
-                </div>
-              ) : (
-                guarantors.map((g) => (
-                  <div key={g.id} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    <div style={{ padding: 14, borderRadius: 10, background: 'rgba(6,12,24,0.85)', border: '1px solid rgba(212,175,55,0.28)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                        <strong style={{ fontSize: '0.96rem', color: '#F8FAFC' }}>{g.user?.firstName || user?.firstName} {g.user?.lastName || user?.lastName}</strong>
-                        <span className={`badge ${g.agreementSigned ? 'badge-success' : 'badge-warning'}`}>
-                          {g.agreementSigned ? 'DIGITAL SURETY SIGNED' : 'SIGNATURE REQUIRED'}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '0.8rem', color: '#CBD5E1', display: 'grid', gap: 4 }}>
-                        <div>Phone Contact: <strong>{g.user?.phone || user?.phone || 'N/A'}</strong></div>
-                        <div>GPS Digital Address: <strong style={{ color: '#00F2FE' }}>{g.gpsAddress || g.user?.gpsAddress || user?.gpsAddress || 'N/A'}</strong></div>
-                        <div>Ghana Card: <strong>{g.ghanaCardNumber || 'Verified on File'}</strong></div>
-                        <div>Relationship: <strong>{g.relationship || 'Business / Family Surety'}</strong></div>
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                      {!g.agreementSigned && (
-                        <button type="button" className="btn btn-primary" onClick={() => handleSignGuarantorAgreement(g.id)}>
-                          <CheckCircle2 size={15} /> Sign Digital Surety Agreement
-                        </button>
-                      )}
+            {!isMemberOnly && !isGuarantorOnly && (
+              <div className="glass-panel" style={{ padding: 16 }}>
+                <form
+                  onSubmit={(e) => handleSearchMembers(e)}
+                  style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}
+                >
+                  <Search size={18} color="#00F2FE" />
+                  <input
+                    type="search"
+                    className="gbs-input"
+                    style={{ flex: 1, minWidth: 230 }}
+                    placeholder="Find customer (including hidden) by Name, Mobile, GPS Digital Address, Member # or Ghana Card..."
+                    value={memberSearchInput}
+                    onChange={(e) => setMemberSearchInput(e.target.value)}
+                  />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', color: '#CBD5E1', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={includeHiddenMembers}
+                      onChange={(e) => setIncludeHiddenMembers(e.target.checked)}
+                    />
+                    Include Hidden
+                  </label>
+                  <button type="submit" disabled={memberSearching} className="btn btn-primary" style={{ padding: '9px 16px' }}>
+                    <Search size={14} /> {memberSearching ? 'Searching...' : 'Search Customers'}
+                  </button>
+                  <Link
+                    to="/dashboard/tab/MEMBERS"
+                    className="btn btn-secondary"
+                    style={{ textDecoration: 'none' }}
+                  >
+                    Open Directory ({members.length}) <ArrowUpRight size={13} />
+                  </Link>
+                </form>
+                {memberSearchCount !== null && (
+                  <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {members.slice(0, 6).map((m) => (
                       <button
+                        key={m.id}
                         type="button"
                         className="btn btn-secondary"
-                        onClick={() => handleToggleGuarantorPenalty(g.id, !g.penaltyNotifyEnabled)}
+                        style={{ padding: '5px 10px', fontSize: '0.76rem' }}
+                        onClick={() => navigate(`/members/${m.id}`)}
                       >
-                        <Bell size={15} /> {g.penaltyNotifyEnabled ? 'Disable Penalty SMS Alerts' : 'Enable Penalty SMS Alerts'}
+                        {m.memberNumber} — {m.user?.firstName} {m.user?.lastName} ({m.user?.phone}){m.gpsAddress || m.user?.gpsAddress ? ` • ${m.gpsAddress || m.user?.gpsAddress}` : ''}
                       </button>
-                      <button type="button" className="btn btn-secondary" onClick={() => navigate(`/guarantors/${g.id}`)}>
-                        View Full Surety Dossier <ArrowUpRight size={13} />
-                      </button>
+                    ))}
+                    {members.length === 0 && (
+                      <span style={{ fontSize: '0.8rem', color: '#FBBF24' }}>No customers matched your search query.</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!isMemberOnly && !isGuarantorOnly && (
+              <div className="glass-panel" style={{ padding: 18, borderColor: 'rgba(245, 158, 11, 0.35)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 10 }}>
+                  <div>
+                    <h3 style={{ margin: 0, color: '#FBBF24', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <AlertTriangle size={17} /> Borrower Payment Collection Alerts ({repaymentAlerts.totalBorrowers || 0} Installments Due / {repaymentAlerts.overdueCount || 0} Overdue)
+                    </h3>
+                    <div style={{ fontSize: '0.78rem', color: '#CBD5E1', marginTop: 2 }}>
+                      Total Due Recovery Target: <strong>{formatGHS(repaymentAlerts.totalDueAmountGhs)}</strong> — Staff must follow up to ensure borrowers pay on schedule.
                     </div>
                   </div>
-                ))
-              )}
+                  {(isManagement || isCredit || isField || isFinance) && (
+                    <button
+                      type="button"
+                      disabled={dispatchingAlerts}
+                      className="btn btn-primary"
+                      style={{ padding: '7px 14px', fontSize: '0.8rem' }}
+                      onClick={handleDispatchCollectionAlerts}
+                    >
+                      <Bell size={14} /> {dispatchingAlerts ? 'Dispatching...' : 'Notify Collection Staff Now'}
+                    </button>
+                  )}
+                </div>
+                {repaymentAlerts.dueLoans?.length > 0 ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
+                    {repaymentAlerts.dueLoans.slice(0, 6).map((item) => (
+                      <div key={item.scheduleId} style={{ padding: 10, borderRadius: 8, background: 'rgba(6,12,24,0.8)', border: `1px solid ${item.isOverdue ? 'rgba(239,68,68,0.45)' : 'rgba(212,175,55,0.22)'}`, fontSize: '0.78rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, color: '#F1F5F9' }}>
+                          <span>{item.borrowerName} ({item.loanNumber})</span>
+                          <span style={{ color: item.isOverdue ? '#F87171' : '#FBBF24' }}>{formatGHS(item.amountDueGhs)}</span>
+                        </div>
+                        <div style={{ color: '#94A3B8', marginTop: 2 }}>
+                          Phone: {item.borrowerPhone || 'N/A'}{item.borrowerGpsAddress ? ` • GPS: ${item.borrowerGpsAddress}` : ''}
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: item.isOverdue ? '#FCA5A5' : '#00F2FE', marginTop: 2 }}>
+                          {item.isOverdue ? 'OVERDUE' : 'DUE SOON'} • {new Date(item.dueDate).toLocaleDateString()}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: '0.8rem', color: '#34D399' }}>All scheduled installments are currently up to date.</div>
+                )}
+              </div>
+            )}
+
+            {!isMemberOnly && !isGuarantorOnly && (
+              <div className="gbs-grid-2">
+                <div className="glass-panel" style={{ padding: 20 }}>
+                  <h3 style={{ margin: '0 0 12px', color: '#D4AF37', fontSize: '1rem' }}>
+                    Loan Portfolio Status Distribution (PostgreSQL)
+                  </h3>
+                  <div style={{ height: 240 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={loanChart}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.12)" />
+                        <XAxis dataKey="status" stroke="#94A3B8" fontSize={11} />
+                        <YAxis stroke="#94A3B8" fontSize={11} />
+                        <Tooltip contentStyle={{ background: '#060c18', border: '1px solid #D4AF37' }} />
+                        <Bar dataKey="count" fill="#D4AF37" radius={[6, 6, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="glass-panel" style={{ padding: 20 }}>
+                  <h3 style={{ margin: '0 0 12px', color: '#00F2FE', fontSize: '1rem' }}>
+                    Monthly Repayment Collections Trend
+                  </h3>
+                  <div style={{ height: 240 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={paymentChart}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.12)" />
+                        <XAxis dataKey="month" stroke="#94A3B8" fontSize={11} />
+                        <YAxis stroke="#94A3B8" fontSize={11} />
+                        <Tooltip contentStyle={{ background: '#060c18', border: '1px solid #00F2FE' }} />
+                        <Area type="monotone" dataKey="total" stroke="#00F2FE" fill="rgba(0,242,254,0.22)" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Self-Service Summary Cards for Borrower (Member Portal) & Guarantor Portal */}
+            {(isMemberOnly || isGuarantorOnly) && (
+              <div className="gbs-grid-2">
+                <div className="glass-panel" style={{ padding: 20 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <h3 style={{ margin: 0, color: '#D4AF37', fontSize: '1rem' }}>
+                      {isMemberOnly ? `My Loan Facilities (${loans.length})` : `Guaranteed Loan Facilities (${loans.length})`}
+                    </h3>
+                    <Link to="/dashboard/tab/LOANS" className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.76rem', textDecoration: 'none' }}>
+                      {isMemberOnly ? 'Apply / View All' : 'Inspect Loans'} <ArrowUpRight size={12} />
+                    </Link>
+                  </div>
+                  {loans.length === 0 ? (
+                    <p style={{ color: '#94A3B8', fontSize: '0.84rem' }}>
+                      {isMemberOnly ? 'No active loans yet. Click "Apply / View All" to submit a new loan application.' : 'No guaranteed loans linked to your profile yet.'}
+                    </p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {loans.slice(0, 5).map((l) => (
+                        <div key={l.id} style={{ padding: 12, borderRadius: 10, background: 'rgba(6,12,24,0.8)', border: '1px solid rgba(212,175,55,0.2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                          <div>
+                            <strong style={{ color: '#F8FAFC', fontSize: '0.86rem' }}>{l.loanNumber}</strong>
+                            <div style={{ fontSize: '0.76rem', color: '#94A3B8' }}>
+                              Principal: {formatGHS(l.principalAmount)} • Outstanding: {formatGHS(l.outstandingAmount ?? l.totalOutstanding ?? l.principalAmount)}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                            <span className={`badge ${['APPROVED', 'DISBURSED', 'ONGOING', 'PAID'].includes(l.status) ? 'badge-success' : 'badge-warning'}`}>{l.status}</span>
+                            <button type="button" className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '0.74rem' }} onClick={() => navigate(`/loans/${l.id}`)}>
+                              Schedule
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="glass-panel" style={{ padding: 20 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <h3 style={{ margin: 0, color: '#00F2FE', fontSize: '1rem' }}>
+                      {isGuarantorOnly ? 'My Surety Agreement Standing' : `Recent Repayments (${payments.length})`}
+                    </h3>
+                    <Link
+                      to={isGuarantorOnly ? '/dashboard/tab/GUARANTORS' : '/dashboard/tab/PAYMENTS'}
+                      className="btn btn-secondary"
+                      style={{ padding: '6px 12px', fontSize: '0.76rem', textDecoration: 'none' }}
+                    >
+                      {isGuarantorOnly ? 'Manage Surety' : 'Pay via MoMo'} <ArrowUpRight size={12} />
+                    </Link>
+                  </div>
+                  {isGuarantorOnly ? (
+                    guarantors.length === 0 ? (
+                      <p style={{ color: '#94A3B8', fontSize: '0.84rem' }}>Your guarantor profile is active and ready for digital surety signing.</p>
+                    ) : (
+                      guarantors.map((g) => (
+                        <div key={g.id} style={{ padding: 14, borderRadius: 10, background: 'rgba(6,12,24,0.8)', border: '1px solid rgba(0,242,254,0.25)' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                            <strong>{g.user?.firstName || user?.firstName} {g.user?.lastName || user?.lastName}</strong>
+                            <span className={`badge ${g.agreementSigned ? 'badge-success' : 'badge-warning'}`}>
+                              {g.agreementSigned ? 'SURETY SIGNED' : 'PENDING SIGNATURE'}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '0.78rem', color: '#CBD5E1', marginBottom: 10 }}>
+                            GPS Digital Address: <strong style={{ color: '#00F2FE' }}>{g.gpsAddress || g.user?.gpsAddress || user?.gpsAddress || 'Verified'}</strong> • Guaranteed Loans: {(g.loanGuarantors || []).length}
+                          </div>
+                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            {!g.agreementSigned && (
+                              <button type="button" className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.76rem' }} onClick={() => handleSignGuarantorAgreement(g.id)}>
+                                <CheckCircle2 size={14} /> Sign Digital Surety Agreement
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              style={{ padding: '6px 12px', fontSize: '0.76rem' }}
+                              onClick={() => handleToggleGuarantorPenalty(g.id, !g.penaltyNotifyEnabled)}
+                            >
+                              <Bell size={14} /> {g.penaltyNotifyEnabled ? 'Penalty Alerts: ON' : 'Enable Penalty Alerts'}
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )
+                  ) : payments.length === 0 ? (
+                    <p style={{ color: '#94A3B8', fontSize: '0.84rem' }}>No repayments recorded yet.</p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {payments.slice(0, 5).map((p) => {
+                        const dt = formatTxDateParts(p.paidAt || p.createdAt);
+                        const refName = p.payerName || (p.loan?.member ? `${p.loan.member.firstName} ${p.loan.member.lastName}` : null) || p.loan?.loanNumber || 'Loan Repayment';
+                        return (
+                          <div key={p.id} style={{ padding: 10, borderRadius: 8, background: 'rgba(6,12,24,0.8)', border: '1px solid rgba(0,242,254,0.18)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                            <div>
+                              <strong style={{ fontSize: '0.88rem' }}>{p.transactionRef || p.receiptNumber || p.id.slice(0, 8)} — {refName}</strong>
+                              <div style={{ fontSize: '0.78rem', color: '#CBD5E1' }}>{p.method} • {p.loan?.loanNumber || 'Loan'}</div>
+                              <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>{dt.full}</div>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontWeight: 700, color: '#34D399', fontSize: '0.9rem' }}>{formatGHS(p.amount)}</div>
+                              <span className={`badge ${p.status === 'COMPLETED' ? 'badge-success' : 'badge-warning'}`} style={{ fontSize: '0.68rem' }}>{p.status}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Role-Specific Backend Telemetry Snapshot */}
+            {roleMetrics && (
+              <div className="glass-panel" style={{ padding: 20 }}>
+                <h3 style={{ margin: '0 0 10px', color: '#D4AF37', fontSize: '1rem' }}>
+                  {roleMeta.title} — Specialized Live Telemetry
+                </h3>
+                <div className="gbs-grid-3">
+                  {Object.entries(roleMetrics)
+                    .filter(([, v]) => typeof v !== 'object' || v === null)
+                    .slice(0, 9)
+                    .map(([k, v]) => (
+                      <div key={k} style={{ background: 'rgba(6,12,24,0.75)', padding: 12, borderRadius: 8, border: '1px solid rgba(212,175,55,0.18)' }}>
+                        <div style={{ fontSize: '0.7rem', color: '#94A3B8', textTransform: 'uppercase' }}>{k.replace(/([A-Z])/g, ' $1')}</div>
+                        <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#F1F5F9', marginTop: 4 }}>{String(v ?? '0')}</div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ===================================================================== */}
+        {/* TAB: LOANS & APPROVALS                                                */}
+        {/* ===================================================================== */}
+        {activeTab === 'LOANS' && (
+          <div className="gbs-grid-2">
+            <div className="glass-panel" style={{ padding: 20 }}>
+              <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>
+                <Plus size={16} style={{ verticalAlign: 'middle' }} /> New Loan Application
+              </h3>
+              <form onSubmit={handleApplyLoan} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {isMemberOnly ? (
+                  <div style={{ padding: '10px 12px', borderRadius: 8, background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', fontSize: '0.8rem', color: '#34D399' }}>
+                    <strong>Borrower Applicant:</strong> {user?.firstName} {user?.lastName} ({user?.phone || user?.email}) — Self-Service Facility Application
+                  </div>
+                ) : (
+                  <div>
+                    <label className="gbs-label">Borrower / Member</label>
+                    <select required className="gbs-select" value={newLoan.memberId} onChange={(e) => setNewLoan({ ...newLoan, memberId: e.target.value })}>
+                      <option value="">Select Registered Member...</option>
+                      {members.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.memberNumber} — {m.user?.firstName} {m.user?.lastName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div>
+                  <label className="gbs-label">Loan Product</label>
+                  <select className="gbs-select" required value={newLoan.loanProductId || loanProducts[0]?.id || ''} onChange={(e) => setNewLoan({ ...newLoan, loanProductId: e.target.value })}>
+                    {loanProducts.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name} ({p.interestRate}% • {p.minTermMonths}-{p.maxTermMonths} mo)</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="gbs-grid-2" style={{ gap: 10 }}>
+                  <div>
+                    <label className="gbs-label">Principal Amount (GHS)</label>
+                    <input type="number" required min="100" className="gbs-input" value={newLoan.principalAmount} onChange={(e) => setNewLoan({ ...newLoan, principalAmount: e.target.value })} placeholder="5000" />
+                  </div>
+                  <div>
+                    <label className="gbs-label">Term (Months)</label>
+                    <input type="number" required min="1" max="60" className="gbs-input" value={newLoan.termMonths} onChange={(e) => setNewLoan({ ...newLoan, termMonths: e.target.value })} />
+                  </div>
+                </div>
+                {Number(newLoan.principalAmount) > 0 && Number(newLoan.termMonths) > 0 && (() => {
+                  const selectedProd = loanProducts.find((p) => p.id === (newLoan.loanProductId || loanProducts[0]?.id)) || loanProducts[0];
+                  const ratePct = Number(selectedProd?.interestRate || 15);
+                  const principal = Number(newLoan.principalAmount);
+                  const term = Math.max(1, Number(newLoan.termMonths));
+                  const estTotal = principal + (principal * (ratePct / 100));
+                  const estMonthly = estTotal / term;
+                  return (
+                    <div style={{ padding: '10px 12px', borderRadius: 8, background: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.3)', fontSize: '0.78rem', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                      <span>Est. Monthly Installment: <strong style={{ color: '#F4E07B' }}>{formatGHS(estMonthly)}/mo</strong></span>
+                      <span>Total Repayable ({ratePct}%): <strong style={{ color: '#00F2FE' }}>{formatGHS(estTotal)}</strong></span>
+                    </div>
+                  );
+                })()}
+                <div>
+                  <label className="gbs-label">Loan Purpose</label>
+                  <input type="text" required className="gbs-input" value={newLoan.purpose} onChange={(e) => setNewLoan({ ...newLoan, purpose: e.target.value })} placeholder="Working Capital / Retail Expansion" />
+                </div>
+                <button type="submit" className="btn btn-primary" style={{ justifyContent: 'center' }}>
+                  Submit Application to Underwriting
+                </button>
+              </form>
             </div>
 
             <div className="glass-panel" style={{ padding: 20 }}>
-              <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}>
-                Loans I Have Guaranteed ({guarantors.reduce((acc, g) => acc + (g.loanGuarantors?.length || 0), 0)})
-              </h3>
-              <div className="data-table-container">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8, flexWrap: 'wrap' }}>
+                <h3 style={{ margin: 0, color: '#00F2FE' }}>Loan Portfolio ({filteredLoans.length})</h3>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input type="text" className="gbs-input" style={{ width: 170, padding: '6px 10px' }} placeholder="Search loan / member..." value={search} onChange={(e) => setSearch(e.target.value)} />
+                  <select className="gbs-select" style={{ width: 130, padding: '6px 10px' }} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                    <option value="">All Status</option>
+                    <option value="PENDING">PENDING</option>
+                    <option value="UNDER_REVIEW">UNDER_REVIEW</option>
+                    <option value="APPROVED">APPROVED</option>
+                    <option value="DISBURSED">DISBURSED</option>
+                    <option value="ONGOING">ONGOING</option>
+                    <option value="OVERDUE">OVERDUE</option>
+                    <option value="DEFAULTED">DEFAULTED</option>
+                    <option value="PAID">PAID</option>
+                    <option value="CLOSED">CLOSED</option>
+                    <option value="REJECTED">REJECTED</option>
+                  </select>
+                </div>
+              </div>
+              <div className="data-table-container" style={{ maxHeight: 420 }}>
                 <table className="data-table">
                   <thead>
                     <tr>
@@ -2189,27 +1806,46 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                       <th>Borrower</th>
                       <th>Principal</th>
                       <th>Status</th>
-                      <th>Inspect</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {guarantors.flatMap((g) => g.loanGuarantors || []).map((lg) => (
-                      <tr key={lg.id} onClick={() => lg.loan?.id && navigate(`/loans/${lg.loan.id}`)} style={{ cursor: 'pointer' }}>
-                        <td><strong>{lg.loan?.loanNumber || 'N/A'}</strong></td>
-                        <td>{lg.loan?.member?.user?.firstName} {lg.loan?.member?.user?.lastName}</td>
-                        <td>{formatGHS(lg.loan?.principalAmount)}</td>
-                        <td><span className={`badge ${['APPROVED', 'DISBURSED', 'ONGOING', 'PAID'].includes(lg.loan?.status) ? 'badge-success' : 'badge-warning'}`}>{lg.loan?.status}</span></td>
-                        <td>
-                          <button type="button" className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.74rem' }}>
-                            Inspect <ArrowUpRight size={12} />
+                    {filteredLoans.map((l) => (
+                      <tr key={l.id} onClick={() => navigate(`/loans/${l.id}`)} style={{ cursor: 'pointer' }}>
+                        <td><strong>{l.loanNumber}</strong></td>
+                        <td>{l.member?.user?.firstName || user?.firstName} {l.member?.user?.lastName || user?.lastName}</td>
+                        <td>{formatGHS(l.principalAmount)}</td>
+                        <td><span className={`badge ${['APPROVED', 'DISBURSED', 'ONGOING', 'PAID'].includes(l.status) ? 'badge-success' : ['OVERDUE', 'DEFAULTED', 'REJECTED'].includes(l.status) ? 'badge-danger' : 'badge-warning'}`}>{l.status}</span></td>
+                        <td style={{ display: 'flex', gap: 6 }}>
+                          <button type="button" className="btn btn-secondary" style={{ padding: '4px 9px', fontSize: '0.74rem' }}>
+                            Open <ArrowUpRight size={12} />
                           </button>
+                          {['DISBURSED', 'ONGOING', 'OVERDUE', 'APPROVED'].includes(l.status) && (
+                            <button
+                              type="button"
+                              className="btn btn-primary"
+                              style={{ padding: '4px 9px', fontSize: '0.74rem' }}
+                              onClick={(ev) => {
+                                ev.stopPropagation();
+                                const outBal = Number(l.outstandingAmount ?? l.totalOutstanding ?? l.principalAmount ?? 0);
+                                setNewPayment((prev) => ({
+                                  ...prev,
+                                  loanId: l.id,
+                                  amount: outBal > 0 ? String(Math.min(outBal, Math.round((outBal / Math.max(1, Number(l.termMonths || 12))) * 100) / 100)) : prev.amount,
+                                }));
+                                navigate('/dashboard/tab/PAYMENTS');
+                              }}
+                            >
+                              Pay
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
-                    {guarantors.flatMap((g) => g.loanGuarantors || []).length === 0 && (
+                    {filteredLoans.length === 0 && (
                       <tr>
                         <td colSpan={5} style={{ textAlign: 'center', color: '#94A3B8', padding: 24 }}>
-                          No guaranteed loan facilities currently linked.
+                          No loan records match the current filter.
                         </td>
                       </tr>
                     )}
@@ -2218,88 +1854,260 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
               </div>
             </div>
           </div>
-        ) : (
+        )}
+
+        {/* ===================================================================== */}
+        {/* TAB: PAYMENTS (MOMO / BANK / CASH)                                    */}
+        {/* ===================================================================== */}
+        {activeTab === 'PAYMENTS' && (
           <div className="gbs-grid-2">
             <div className="glass-panel" style={{ padding: 20 }}>
-              <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>Register Loan Guarantor (with GPS Address)</h3>
-              <form onSubmit={handleCreateGuarantor} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div className="gbs-grid-2" style={{ gap: 10 }}>
-                  <input type="text" required className="gbs-input" placeholder="First Name" value={newGuarantor.firstName} onChange={(e) => setNewGuarantor({ ...newGuarantor, firstName: e.target.value })} />
-                  <input type="text" required className="gbs-input" placeholder="Last Name" value={newGuarantor.lastName} onChange={(e) => setNewGuarantor({ ...newGuarantor, lastName: e.target.value })} />
+              <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>Record Loan Repayment</h3>
+              <form onSubmit={handleRecordPayment} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div>
+                  <label className="gbs-label">Target Loan</label>
+                  <select className="gbs-select" required value={newPayment.loanId} onChange={(e) => setNewPayment({ ...newPayment, loanId: e.target.value })}>
+                    <option value="">Select Active Loan...</option>
+                    {loans.map((l) => (
+                      <option key={l.id} value={l.id}>{l.loanNumber} — {l.member?.user?.firstName || user?.firstName} ({formatGHS(l.outstandingAmount ?? l.totalOutstanding ?? l.principalAmount)})</option>
+                    ))}
+                  </select>
                 </div>
-                <input type="tel" required className="gbs-input" placeholder="Mobile Phone (+233...)" value={newGuarantor.phone} onChange={(e) => setNewGuarantor({ ...newGuarantor, phone: e.target.value })} />
-                <input type="email" className="gbs-input" placeholder="Email (optional)" value={newGuarantor.email} onChange={(e) => setNewGuarantor({ ...newGuarantor, email: e.target.value })} />
-                <input type="text" required className="gbs-input" placeholder="GPS Digital Address (e.g. GA-492-1180)" value={newGuarantor.gpsAddress} onChange={(e) => setNewGuarantor({ ...newGuarantor, gpsAddress: e.target.value })} />
+                {newPayment.loanId && (() => {
+                  const selLoan = loans.find((x) => x.id === newPayment.loanId);
+                  if (!selLoan) return null;
+                  const fullOut = Number(selLoan.outstandingAmount ?? selLoan.totalOutstanding ?? selLoan.principalAmount ?? 0);
+                  const estInstallment = Math.max(1, Math.round((fullOut / Math.max(1, Number(selLoan.termMonths || 12))) * 100) / 100);
+                  return (
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        style={{ padding: '5px 10px', fontSize: '0.74rem' }}
+                        onClick={() => setNewPayment((prev) => ({ ...prev, amount: String(estInstallment) }))}
+                      >
+                        Fill Est. Installment ({formatGHS(estInstallment)})
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        style={{ padding: '5px 10px', fontSize: '0.74rem' }}
+                        onClick={() => setNewPayment((prev) => ({ ...prev, amount: String(fullOut) }))}
+                      >
+                        Fill Full Balance ({formatGHS(fullOut)})
+                      </button>
+                    </div>
+                  );
+                })()}
                 <div className="gbs-grid-2" style={{ gap: 10 }}>
-                  <input type="text" className="gbs-input" placeholder="Ghana Card No." value={newGuarantor.ghanaCardNumber} onChange={(e) => setNewGuarantor({ ...newGuarantor, ghanaCardNumber: e.target.value })} />
-                  <input type="text" className="gbs-input" placeholder="Relationship" value={newGuarantor.relationship} onChange={(e) => setNewGuarantor({ ...newGuarantor, relationship: e.target.value })} />
+                  <div>
+                    <label className="gbs-label">Amount (GHS)</label>
+                    <input type="number" required min="1" step="0.01" className="gbs-input" value={newPayment.amount} onChange={(e) => setNewPayment({ ...newPayment, amount: e.target.value })} placeholder="350" />
+                  </div>
+                  <div>
+                    <label className="gbs-label">Method</label>
+                    <select className="gbs-select" value={newPayment.method} onChange={(e) => setNewPayment({ ...newPayment, method: e.target.value })}>
+                      <option value="MOMO">Mobile Money (MTN/Telecel)</option>
+                      <option value="BANK_TRANSFER">Direct Bank Transfer</option>
+                      <option value="CASH">Cash Payment (Needs Accounting Approval)</option>
+                    </select>
+                  </div>
                 </div>
-                <input type="text" className="gbs-input" placeholder="Residential / Work Physical Address" value={newGuarantor.address} onChange={(e) => setNewGuarantor({ ...newGuarantor, address: e.target.value })} />
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.8rem', color: '#CBD5E1', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={newGuarantor.isHidden} onChange={(e) => setNewGuarantor({ ...newGuarantor, isHidden: e.target.checked })} />
-                  Mark guarantor hidden (findable by Mobile Contact or GPS Digital Address)
-                </label>
-                <button type="submit" className="btn btn-primary" style={{ justifyContent: 'center' }}>Save Guarantor Profile</button>
+                {newPayment.method === 'MOMO' && (
+                  <div className="gbs-grid-2" style={{ gap: 10 }}>
+                    <div>
+                      <label className="gbs-label">MoMo Phone</label>
+                      <input type="tel" required className="gbs-input" value={newPayment.momoPhone} onChange={(e) => setNewPayment({ ...newPayment, momoPhone: e.target.value })} placeholder="+233240000000" />
+                    </div>
+                    <div>
+                      <label className="gbs-label">Network</label>
+                      <select className="gbs-select" value={newPayment.momoNetwork} onChange={(e) => setNewPayment({ ...newPayment, momoNetwork: e.target.value })}>
+                        <option value="MTN">MTN MoMo</option>
+                        <option value="TELECEL">Telecel Cash</option>
+                        <option value="AT">AT Money</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+                <button type="submit" className="btn btn-primary" style={{ justifyContent: 'center' }}>Process Payment</button>
               </form>
             </div>
 
             <div className="glass-panel" style={{ padding: 20 }}>
-              <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}>Registered Loan Guarantors ({guarantors.length})</h3>
-              <form onSubmit={(e) => handleSearchGuarantors(e)} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
-                <input
-                  type="search"
-                  className="gbs-input"
-                  style={{ flex: 1, minWidth: 180 }}
-                  placeholder="Search guarantor by phone, GPS digital address, name..."
-                  value={guarantorSearchInput}
-                  onChange={(e) => setGuarantorSearchInput(e.target.value)}
-                />
-                <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.75rem', color: '#CBD5E1', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={includeHiddenGuarantors} onChange={(e) => setIncludeHiddenGuarantors(e.target.checked)} />
-                  Hidden
-                </label>
-                <button type="submit" className="btn btn-primary" style={{ padding: '8px 14px' }}>Find</button>
-              </form>
-              <div className="data-table-container">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8, flexWrap: 'wrap' }}>
+                <h3 style={{ margin: 0, color: '#00F2FE' }}>Payment &amp; Receipt Ledger ({filteredPayments.length})</h3>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    type="text"
+                    className="gbs-input"
+                    style={{ width: 155, padding: '6px 10px' }}
+                    placeholder="Search receipt / loan..."
+                    value={paymentSearch}
+                    onChange={(e) => setPaymentSearch(e.target.value)}
+                  />
+                  <select
+                    className="gbs-select"
+                    style={{ width: 130, padding: '6px 10px' }}
+                    value={paymentMethodFilter}
+                    onChange={(e) => setPaymentMethodFilter(e.target.value)}
+                  >
+                    <option value="">All Methods</option>
+                    <option value="MOMO">MOMO</option>
+                    <option value="BANK_TRANSFER">BANK_TRANSFER</option>
+                    <option value="CASH">CASH</option>
+                  </select>
+                </div>
+              </div>
+              <div className="data-table-container" style={{ maxHeight: 420 }}>
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th>Name</th>
+                      <th>Reference &amp; Name</th>
+                      <th>Day / Date / Month</th>
+                      <th>Method</th>
+                      <th>Amount</th>
+                      <th>Status</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredPayments.map((p) => {
+                      const dt = formatTxDateParts(p.paidAt || p.createdAt);
+                      const refName = p.payerName || (p.loan?.member ? `${p.loan.member.firstName} ${p.loan.member.lastName}` : null) || p.loan?.loanNumber || 'Customer Repayment';
+                      return (
+                        <tr key={p.id} onClick={() => navigate(`/payments/${p.id}`)} style={{ cursor: 'pointer' }}>
+                          <td>
+                            <strong>{p.transactionRef || p.receiptNumber || p.reference || p.id.slice(0, 8)}</strong>
+                            <div style={{ fontSize: '0.78rem', color: '#CBD5E1' }}>{refName}{p.loan?.loanNumber ? ` • ${p.loan.loanNumber}` : ''}</div>
+                          </td>
+                          <td>
+                            <div style={{ fontWeight: 600, color: '#F1F5F9', fontSize: '0.84rem' }}>{dt.day}, {dt.date}</div>
+                            <div style={{ fontSize: '0.76rem', color: '#94A3B8' }}>{dt.month} • {dt.time}</div>
+                          </td>
+                          <td>{p.method}</td>
+                          <td>{formatGHS(p.amount)}</td>
+                          <td><span className={`badge ${p.status === 'COMPLETED' ? 'badge-success' : 'badge-warning'}`}>{p.status}</span></td>
+                          <td style={{ display: 'flex', gap: 6 }}>
+                            <button type="button" className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.78rem' }}>Inspect</button>
+                            {p.method === 'CASH' && p.status !== 'COMPLETED' && (isFinance || isManagement) && (
+                              <button
+                                type="button"
+                                className="btn btn-primary"
+                                style={{ padding: '4px 8px', fontSize: '0.76rem' }}
+                                onClick={(ev) => {
+                                  ev.stopPropagation();
+                                  handleApproveCashPayment(p.id);
+                                }}
+                              >
+                                Approve Cash
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {filteredPayments.length === 0 && (
+                      <tr>
+                        <td colSpan={6} style={{ textAlign: 'center', color: '#94A3B8', padding: 24 }}>
+                          No repayments match the current filter.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ===================================================================== */}
+        {/* TAB: MEMBERS & KYC                                                    */}
+        {/* ===================================================================== */}
+        {activeTab === 'MEMBERS' && !isMemberOnly && !isGuarantorOnly && (
+          <div className="gbs-grid-2">
+            <div className="glass-panel" style={{ padding: 20 }}>
+              <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>Register Borrower &amp; Mandatory GPS Digital Address</h3>
+              <form onSubmit={handleCreateMember} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div className="gbs-grid-2" style={{ gap: 10 }}>
+                  <input type="text" required className="gbs-input" placeholder="First Name" value={newMember.firstName} onChange={(e) => setNewMember({ ...newMember, firstName: e.target.value })} />
+                  <input type="text" required className="gbs-input" placeholder="Last Name" value={newMember.lastName} onChange={(e) => setNewMember({ ...newMember, lastName: e.target.value })} />
+                </div>
+                <input type="tel" required className="gbs-input" placeholder="Phone (+233...)" value={newMember.phone} onChange={(e) => setNewMember({ ...newMember, phone: e.target.value })} />
+                <input type="email" className="gbs-input" placeholder="Email (optional)" value={newMember.email} onChange={(e) => setNewMember({ ...newMember, email: e.target.value })} />
+                <input type="text" className="gbs-input" placeholder="Ghana Card No. (GHA-...)" value={newMember.ghanaCardNumber} onChange={(e) => setNewMember({ ...newMember, ghanaCardNumber: e.target.value })} />
+                <input type="text" required className="gbs-input" placeholder="GPS Digital Address (e.g. GA-183-8164)" value={newMember.gpsAddress} onChange={(e) => setNewMember({ ...newMember, gpsAddress: e.target.value })} />
+                <input type="text" className="gbs-input" placeholder="Physical Street / Business Location" value={newMember.address} onChange={(e) => setNewMember({ ...newMember, address: e.target.value })} />
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.8rem', color: '#CBD5E1', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={newMember.isHidden} onChange={(e) => setNewMember({ ...newMember, isHidden: e.target.checked })} />
+                  Mark customer confidential/hidden (locatable when searching phone or GPS address)
+                </label>
+                <button type="submit" className="btn btn-primary" style={{ justifyContent: 'center' }}>Register Borrower Profile</button>
+              </form>
+            </div>
+
+            <div className="glass-panel" style={{ padding: 20 }}>
+              <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}>Borrowers Directory ({members.length})</h3>
+              <form
+                onSubmit={(e) => handleSearchMembers(e)}
+                style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14, alignItems: 'center' }}
+              >
+                <input
+                  type="search"
+                  className="gbs-input"
+                  style={{ flex: 1, minWidth: 190 }}
+                  placeholder="Search customer by name, phone, GPS address, MBR #, Ghana Card..."
+                  value={memberSearchInput}
+                  onChange={(e) => setMemberSearchInput(e.target.value)}
+                />
+                <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.75rem', color: '#CBD5E1', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={includeHiddenMembers} onChange={(e) => setIncludeHiddenMembers(e.target.checked)} />
+                  Hidden
+                </label>
+                <button type="submit" disabled={memberSearching} className="btn btn-primary" style={{ padding: '8px 14px' }}>
+                  <Search size={14} /> {memberSearching ? 'Searching...' : 'Search'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ padding: '8px 12px' }}
+                  onClick={() => {
+                    setMemberSearchInput('');
+                    setMemberSearchCount(null);
+                    handleSearchMembers(null, '');
+                  }}
+                >
+                  Show All
+                </button>
+              </form>
+              <div className="data-table-container" style={{ maxHeight: 420 }}>
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Member #</th>
+                      <th>Full Name</th>
                       <th>Phone / GPS Address</th>
-                      <th>Agreement</th>
+                      <th>KYC Status</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {guarantors.map((g) => (
-                      <tr key={g.id} onClick={() => navigate(`/guarantors/${g.id}`)} style={{ cursor: 'pointer' }}>
+                    {members.map((m) => (
+                      <tr key={m.id} onClick={() => navigate(`/members/${m.id}`)} style={{ cursor: 'pointer' }}>
                         <td>
-                          <strong>{g.user?.firstName} {g.user?.lastName}</strong>
-                          {g.isHidden && <div><span className="badge badge-danger" style={{ fontSize: '0.62rem' }}>HIDDEN</span></div>}
+                          <strong>{m.memberNumber}</strong>
+                          {m.isHidden && <div><span className="badge badge-danger" style={{ fontSize: '0.62rem' }}>HIDDEN</span></div>}
                         </td>
+                        <td>{m.user?.firstName} {m.user?.lastName}</td>
                         <td>
-                          <div>{g.user?.phone}</div>
-                          <div style={{ fontSize: '0.72rem', color: '#00F2FE' }}>{g.gpsAddress || g.user?.gpsAddress || 'No GPS Addr'}</div>
+                          <div>{m.user?.phone}</div>
+                          <div style={{ fontSize: '0.72rem', color: '#00F2FE' }}>{m.gpsAddress || m.user?.gpsAddress || 'No GPS Addr'}</div>
                         </td>
-                        <td><span className={`badge ${g.agreementSigned ? 'badge-success' : 'badge-warning'}`}>{g.agreementSigned ? 'SIGNED' : 'UNSIGNED'}</span></td>
-                        <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                          <button type="button" className="btn btn-secondary" style={{ padding: '4px 9px', fontSize: '0.75rem' }}>Manage</button>
-                          {!g.agreementSigned && (
-                            <button
-                              type="button"
-                              className="btn btn-primary"
-                              style={{ padding: '4px 8px', fontSize: '0.74rem' }}
-                              onClick={(ev) => {
-                                ev.stopPropagation();
-                                handleSignGuarantorAgreement(g.id);
-                              }}
-                            >
-                              Sign
-                            </button>
-                          )}
-                          {(g.user?.phone || g.gpsAddress) && (
+                        <td><span className={`badge ${m.ghanaCardVerified ? 'badge-success' : 'badge-warning'}`}>{m.ghanaCardVerified ? 'KYC VERIFIED' : 'PENDING KYC'}</span></td>
+                        <td style={{ display: 'flex', gap: 6 }}>
+                          <button type="button" className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.74rem' }}>Open</button>
+                          {(m.user?.phone || m.gpsAddress) && (
                             <Link
-                              to={`/dashboard/tab/FIELD_OPS?locate=${encodeURIComponent(g.user?.phone || g.gpsAddress || '')}`}
+                              to={`/dashboard/tab/FIELD_OPS?locate=${encodeURIComponent(m.user?.phone || m.gpsAddress || '')}`}
                               className="btn btn-primary"
                               style={{ padding: '4px 8px', fontSize: '0.74rem', textDecoration: 'none' }}
                               onClick={(ev) => ev.stopPropagation()}
@@ -2310,863 +2118,1062 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                         </td>
                       </tr>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )
-      )}
-
-      {/* ===================================================================== */}
-      {/* TAB: LIVE GOOGLE MAPS PHONE LOCATOR, FIELD COLLECTORS & VISITS        */}
-      {/* ===================================================================== */}
-      {activeTab === 'FIELD_OPS' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          <LiveLocationTrackerMap
-            mode="tenant"
-            initialPhone={locatePhoneTarget}
-            onLocationPublished={loadDashboardData}
-            markers={collectors
-              .filter((c) => c.lastLatitude != null && c.lastLongitude != null)
-              .map((c) => ({
-                id: c.id,
-                type: 'COLLECTOR',
-                name: `${c.user?.firstName || 'Collector'} ${c.user?.lastName || ''}`.trim(),
-                phone: c.user?.phone,
-                status: c.status,
-                lastUpdatedAt: c.lastLocationAt,
-                coordinates: { latitude: Number(c.lastLatitude), longitude: Number(c.lastLongitude) },
-              }))}
-          />
-          <div className="gbs-grid-2">
-            <div className="glass-panel" style={{ padding: 20 }}>
-              <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>Log Customer Visit &amp; GPS Telemetry</h3>
-              <form onSubmit={handleRecordVisit} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <input type="text" required className="gbs-input" placeholder="Customer Name" value={visitForm.customerName} onChange={(e) => setVisitForm({ ...visitForm, customerName: e.target.value })} />
-                <select className="gbs-select" value={visitForm.visitOutcome} onChange={(e) => setVisitForm({ ...visitForm, visitOutcome: e.target.value })}>
-                  <option value="PAYMENT_COLLECTED">Payment Collected</option>
-                  <option value="PROMISE_TO_PAY">Promise to Pay</option>
-                  <option value="KYC_RESIDENCE_VERIFIED">KYC Residence Verified</option>
-                  <option value="CUSTOMER_UNAVAILABLE">Customer Unavailable</option>
-                </select>
-                <textarea rows={2} className="gbs-textarea" placeholder="Field inspection notes..." value={visitForm.notes} onChange={(e) => setVisitForm({ ...visitForm, notes: e.target.value })} />
-                <div className="gbs-grid-2" style={{ gap: 10 }}>
-                  <input type="text" className="gbs-input" value={visitForm.latitude} onChange={(e) => setVisitForm({ ...visitForm, latitude: e.target.value })} placeholder="Lat" />
-                  <input type="text" className="gbs-input" value={visitForm.longitude} onChange={(e) => setVisitForm({ ...visitForm, longitude: e.target.value })} placeholder="Lng" />
-                </div>
-                <button type="submit" className="btn btn-primary">Record Field Visit</button>
-              </form>
-            </div>
-
-            <div className="glass-panel" style={{ padding: 20 }}>
-              <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}>Active Field Collectors ({collectors.length})</h3>
-              <div className="data-table-container">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>ID</th>
-                      <th>Collector</th>
-                      <th>Phone</th>
-                      <th>Status</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {collectors.map((c) => (
-                      <tr key={c.id} onClick={() => navigate(`/collectors/${c.id}`)} style={{ cursor: 'pointer' }}>
-                        <td>{c.employeeId}</td>
-                        <td>{c.user?.firstName} {c.user?.lastName}</td>
-                        <td>{c.user?.phone || c.assignedZone || 'N/A'}</td>
-                        <td><span className="badge badge-success">{c.status}</span></td>
-                        <td style={{ display: 'flex', gap: 6 }}>
-                          <button type="button" className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.75rem' }}><Navigation size={12} /> History</button>
-                          {c.user?.phone && (
-                            <button
-                              type="button"
-                              className="btn btn-primary"
-                              style={{ padding: '4px 8px', fontSize: '0.75rem' }}
-                              onClick={(ev) => {
-                                ev.stopPropagation();
-                                setLocatePhoneTarget(c.user.phone);
-                              }}
-                            >
-                              <MapPin size={12} /> Pin
-                            </button>
-                          )}
+                    {members.length === 0 && (
+                      <tr>
+                        <td colSpan={5} style={{ textAlign: 'center', color: '#94A3B8', padding: 24 }}>
+                          No members/customers found matching your search.
                         </td>
                       </tr>
-                    ))}
+                    )}
                   </tbody>
                 </table>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ===================================================================== */}
-      {/* TAB: HR STAFF, APPROVAL QUEUE, ATTENDANCE LOGS & PAYROLL              */}
-      {/* ===================================================================== */}
-      {activeTab === 'HR_PAYROLL' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          {isCompanyOwner && (
-            <div className="glass-panel" style={{ padding: 20, borderColor: 'rgba(245, 158, 11, 0.4)' }}>
-              <h3 style={{ margin: '0 0 12px', color: '#FBBF24' }}>
-                Company Owner Pending Staff Approval Queue ({pendingStaff.length})
-              </h3>
-              {pendingStaff.length === 0 ? (
-                <p style={{ color: '#94A3B8', fontSize: '0.84rem', margin: 0 }}>
-                  All newly created or registered institution staff have been reviewed.
+        {/* ===================================================================== */}
+        {/* TAB: GUARANTORS                                                       */}
+        {/* ===================================================================== */}
+        {activeTab === 'GUARANTORS' && (
+          isGuarantorOnly ? (
+            <div className="gbs-grid-2">
+              <div className="glass-panel" style={{ padding: 20 }}>
+                <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>My Digital Surety Profile &amp; Agreement Controls</h3>
+                {guarantors.length === 0 ? (
+                  <div style={{ fontSize: '0.84rem', color: '#CBD5E1' }}>
+                    Your Guarantor Portal account (<strong>{user?.firstName} {user?.lastName}</strong>) is active. When a Loan Officer links you as a surety to a borrower facility, your digital agreement and penalty alert controls will appear here.
+                  </div>
+                ) : (
+                  guarantors.map((g) => (
+                    <div key={g.id} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div style={{ padding: 14, borderRadius: 10, background: 'rgba(6,12,24,0.85)', border: '1px solid rgba(212,175,55,0.28)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                          <strong style={{ fontSize: '0.96rem', color: '#F8FAFC' }}>{g.user?.firstName || user?.firstName} {g.user?.lastName || user?.lastName}</strong>
+                          <span className={`badge ${g.agreementSigned ? 'badge-success' : 'badge-warning'}`}>
+                            {g.agreementSigned ? 'DIGITAL SURETY SIGNED' : 'SIGNATURE REQUIRED'}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: '#CBD5E1', display: 'grid', gap: 4 }}>
+                          <div>Phone Contact: <strong>{g.user?.phone || user?.phone || 'N/A'}</strong></div>
+                          <div>GPS Digital Address: <strong style={{ color: '#00F2FE' }}>{g.gpsAddress || g.user?.gpsAddress || user?.gpsAddress || 'N/A'}</strong></div>
+                          <div>Ghana Card: <strong>{g.ghanaCardNumber || 'Verified on File'}</strong></div>
+                          <div>Relationship: <strong>{g.relationship || 'Business / Family Surety'}</strong></div>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                        {!g.agreementSigned && (
+                          <button type="button" className="btn btn-primary" onClick={() => handleSignGuarantorAgreement(g.id)}>
+                            <CheckCircle2 size={15} /> Sign Digital Surety Agreement
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={() => handleToggleGuarantorPenalty(g.id, !g.penaltyNotifyEnabled)}
+                        >
+                          <Bell size={15} /> {g.penaltyNotifyEnabled ? 'Disable Penalty SMS Alerts' : 'Enable Penalty SMS Alerts'}
+                        </button>
+                        <button type="button" className="btn btn-secondary" onClick={() => navigate(`/guarantors/${g.id}`)}>
+                          View Full Surety Dossier <ArrowUpRight size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="glass-panel" style={{ padding: 20 }}>
+                <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}>
+                  Loans I Have Guaranteed ({guarantors.reduce((acc, g) => acc + (g.loanGuarantors?.length || 0), 0)})
+                </h3>
+                <div className="data-table-container">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Loan #</th>
+                        <th>Borrower</th>
+                        <th>Principal</th>
+                        <th>Status</th>
+                        <th>Inspect</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {guarantors.flatMap((g) => g.loanGuarantors || []).map((lg) => (
+                        <tr key={lg.id} onClick={() => lg.loan?.id && navigate(`/loans/${lg.loan.id}`)} style={{ cursor: 'pointer' }}>
+                          <td><strong>{lg.loan?.loanNumber || 'N/A'}</strong></td>
+                          <td>{lg.loan?.member?.user?.firstName} {lg.loan?.member?.user?.lastName}</td>
+                          <td>{formatGHS(lg.loan?.principalAmount)}</td>
+                          <td><span className={`badge ${['APPROVED', 'DISBURSED', 'ONGOING', 'PAID'].includes(lg.loan?.status) ? 'badge-success' : 'badge-warning'}`}>{lg.loan?.status}</span></td>
+                          <td>
+                            <button type="button" className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.74rem' }}>
+                              Inspect <ArrowUpRight size={12} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {guarantors.flatMap((g) => g.loanGuarantors || []).length === 0 && (
+                        <tr>
+                          <td colSpan={5} style={{ textAlign: 'center', color: '#94A3B8', padding: 24 }}>
+                            No guaranteed loan facilities currently linked.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="gbs-grid-2">
+              <div className="glass-panel" style={{ padding: 20 }}>
+                <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>Register Loan Guarantor (with GPS Address)</h3>
+                <form onSubmit={handleCreateGuarantor} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div className="gbs-grid-2" style={{ gap: 10 }}>
+                    <input type="text" required className="gbs-input" placeholder="First Name" value={newGuarantor.firstName} onChange={(e) => setNewGuarantor({ ...newGuarantor, firstName: e.target.value })} />
+                    <input type="text" required className="gbs-input" placeholder="Last Name" value={newGuarantor.lastName} onChange={(e) => setNewGuarantor({ ...newGuarantor, lastName: e.target.value })} />
+                  </div>
+                  <input type="tel" required className="gbs-input" placeholder="Mobile Phone (+233...)" value={newGuarantor.phone} onChange={(e) => setNewGuarantor({ ...newGuarantor, phone: e.target.value })} />
+                  <input type="email" className="gbs-input" placeholder="Email (optional)" value={newGuarantor.email} onChange={(e) => setNewGuarantor({ ...newGuarantor, email: e.target.value })} />
+                  <input type="text" required className="gbs-input" placeholder="GPS Digital Address (e.g. GA-492-1180)" value={newGuarantor.gpsAddress} onChange={(e) => setNewGuarantor({ ...newGuarantor, gpsAddress: e.target.value })} />
+                  <div className="gbs-grid-2" style={{ gap: 10 }}>
+                    <input type="text" className="gbs-input" placeholder="Ghana Card No." value={newGuarantor.ghanaCardNumber} onChange={(e) => setNewGuarantor({ ...newGuarantor, ghanaCardNumber: e.target.value })} />
+                    <input type="text" className="gbs-input" placeholder="Relationship" value={newGuarantor.relationship} onChange={(e) => setNewGuarantor({ ...newGuarantor, relationship: e.target.value })} />
+                  </div>
+                  <input type="text" className="gbs-input" placeholder="Residential / Work Physical Address" value={newGuarantor.address} onChange={(e) => setNewGuarantor({ ...newGuarantor, address: e.target.value })} />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.8rem', color: '#CBD5E1', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={newGuarantor.isHidden} onChange={(e) => setNewGuarantor({ ...newGuarantor, isHidden: e.target.checked })} />
+                    Mark guarantor hidden (findable by Mobile Contact or GPS Digital Address)
+                  </label>
+                  <button type="submit" className="btn btn-primary" style={{ justifyContent: 'center' }}>Save Guarantor Profile</button>
+                </form>
+              </div>
+
+              <div className="glass-panel" style={{ padding: 20 }}>
+                <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}>Registered Loan Guarantors ({guarantors.length})</h3>
+                <form onSubmit={(e) => handleSearchGuarantors(e)} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
+                  <input
+                    type="search"
+                    className="gbs-input"
+                    style={{ flex: 1, minWidth: 180 }}
+                    placeholder="Search guarantor by phone, GPS digital address, name..."
+                    value={guarantorSearchInput}
+                    onChange={(e) => setGuarantorSearchInput(e.target.value)}
+                  />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.75rem', color: '#CBD5E1', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={includeHiddenGuarantors} onChange={(e) => setIncludeHiddenGuarantors(e.target.checked)} />
+                    Hidden
+                  </label>
+                  <button type="submit" className="btn btn-primary" style={{ padding: '8px 14px' }}>Find</button>
+                </form>
+                <div className="data-table-container">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Phone / GPS Address</th>
+                        <th>Agreement</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {guarantors.map((g) => (
+                        <tr key={g.id} onClick={() => navigate(`/guarantors/${g.id}`)} style={{ cursor: 'pointer' }}>
+                          <td>
+                            <strong>{g.user?.firstName} {g.user?.lastName}</strong>
+                            {g.isHidden && <div><span className="badge badge-danger" style={{ fontSize: '0.62rem' }}>HIDDEN</span></div>}
+                          </td>
+                          <td>
+                            <div>{g.user?.phone}</div>
+                            <div style={{ fontSize: '0.72rem', color: '#00F2FE' }}>{g.gpsAddress || g.user?.gpsAddress || 'No GPS Addr'}</div>
+                          </td>
+                          <td><span className={`badge ${g.agreementSigned ? 'badge-success' : 'badge-warning'}`}>{g.agreementSigned ? 'SIGNED' : 'UNSIGNED'}</span></td>
+                          <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                            <button type="button" className="btn btn-secondary" style={{ padding: '4px 9px', fontSize: '0.75rem' }}>Manage</button>
+                            {!g.agreementSigned && (
+                              <button
+                                type="button"
+                                className="btn btn-primary"
+                                style={{ padding: '4px 8px', fontSize: '0.74rem' }}
+                                onClick={(ev) => {
+                                  ev.stopPropagation();
+                                  handleSignGuarantorAgreement(g.id);
+                                }}
+                              >
+                                Sign
+                              </button>
+                            )}
+                            {(g.user?.phone || g.gpsAddress) && (
+                              <Link
+                                to={`/dashboard/tab/FIELD_OPS?locate=${encodeURIComponent(g.user?.phone || g.gpsAddress || '')}`}
+                                className="btn btn-primary"
+                                style={{ padding: '4px 8px', fontSize: '0.74rem', textDecoration: 'none' }}
+                                onClick={(ev) => ev.stopPropagation()}
+                              >
+                                <MapPin size={12} /> Locate
+                              </Link>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )
+        )}
+
+        {/* ===================================================================== */}
+        {/* TAB: LIVE GOOGLE MAPS PHONE LOCATOR, FIELD COLLECTORS & VISITS        */}
+        {/* ===================================================================== */}
+        {activeTab === 'FIELD_OPS' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <LiveLocationTrackerMap
+              mode="tenant"
+              initialPhone={locatePhoneTarget}
+              onLocationPublished={loadDashboardData}
+              markers={collectors
+                .filter((c) => c.lastLatitude != null && c.lastLongitude != null)
+                .map((c) => ({
+                  id: c.id,
+                  type: 'COLLECTOR',
+                  name: `${c.user?.firstName || 'Collector'} ${c.user?.lastName || ''}`.trim(),
+                  phone: c.user?.phone,
+                  status: c.status,
+                  lastUpdatedAt: c.lastLocationAt,
+                  coordinates: { latitude: Number(c.lastLatitude), longitude: Number(c.lastLongitude) },
+                }))}
+            />
+            <div className="gbs-grid-2">
+              <div className="glass-panel" style={{ padding: 20 }}>
+                <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>Log Customer Visit &amp; GPS Telemetry</h3>
+                <form onSubmit={handleRecordVisit} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <input type="text" required className="gbs-input" placeholder="Customer Name" value={visitForm.customerName} onChange={(e) => setVisitForm({ ...visitForm, customerName: e.target.value })} />
+                  <select className="gbs-select" value={visitForm.visitOutcome} onChange={(e) => setVisitForm({ ...visitForm, visitOutcome: e.target.value })}>
+                    <option value="PAYMENT_COLLECTED">Payment Collected</option>
+                    <option value="PROMISE_TO_PAY">Promise to Pay</option>
+                    <option value="KYC_RESIDENCE_VERIFIED">KYC Residence Verified</option>
+                    <option value="CUSTOMER_UNAVAILABLE">Customer Unavailable</option>
+                  </select>
+                  <textarea rows={2} className="gbs-textarea" placeholder="Field inspection notes..." value={visitForm.notes} onChange={(e) => setVisitForm({ ...visitForm, notes: e.target.value })} />
+                  <div className="gbs-grid-2" style={{ gap: 10 }}>
+                    <input type="text" className="gbs-input" value={visitForm.latitude} onChange={(e) => setVisitForm({ ...visitForm, latitude: e.target.value })} placeholder="Lat" />
+                    <input type="text" className="gbs-input" value={visitForm.longitude} onChange={(e) => setVisitForm({ ...visitForm, longitude: e.target.value })} placeholder="Lng" />
+                  </div>
+                  <button type="submit" className="btn btn-primary">Record Field Visit</button>
+                </form>
+              </div>
+
+              <div className="glass-panel" style={{ padding: 20 }}>
+                <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}>Active Field Collectors ({collectors.length})</h3>
+                <div className="data-table-container">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>Collector</th>
+                        <th>Phone</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {collectors.map((c) => (
+                        <tr key={c.id} onClick={() => navigate(`/collectors/${c.id}`)} style={{ cursor: 'pointer' }}>
+                          <td>{c.employeeId}</td>
+                          <td>{c.user?.firstName} {c.user?.lastName}</td>
+                          <td>{c.user?.phone || c.assignedZone || 'N/A'}</td>
+                          <td><span className="badge badge-success">{c.status}</span></td>
+                          <td style={{ display: 'flex', gap: 6 }}>
+                            <button type="button" className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.75rem' }}><Navigation size={12} /> History</button>
+                            {c.user?.phone && (
+                              <button
+                                type="button"
+                                className="btn btn-primary"
+                                style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+                                onClick={(ev) => {
+                                  ev.stopPropagation();
+                                  setLocatePhoneTarget(c.user.phone);
+                                }}
+                              >
+                                <MapPin size={12} /> Pin
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ===================================================================== */}
+        {/* TAB: HR STAFF, APPROVAL QUEUE, ATTENDANCE LOGS & PAYROLL              */}
+        {/* ===================================================================== */}
+        {activeTab === 'HR_PAYROLL' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            {isCompanyOwner && (
+              <div className="glass-panel" style={{ padding: 20, borderColor: 'rgba(245, 158, 11, 0.4)' }}>
+                <h3 style={{ margin: '0 0 12px', color: '#FBBF24' }}>
+                  Company Owner Pending Staff Approval Queue ({pendingStaff.length})
+                </h3>
+                {pendingStaff.length === 0 ? (
+                  <p style={{ color: '#94A3B8', fontSize: '0.84rem', margin: 0 }}>
+                    All newly created or registered institution staff have been reviewed.
+                  </p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {pendingStaff.map((u) => (
+                      <div key={u.id} style={{ padding: 12, borderRadius: 10, background: 'rgba(6,12,24,0.85)', border: '1px solid rgba(245,158,11,0.3)', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+                        <div>
+                          <div style={{ fontWeight: 700, color: '#F1F5F9' }}>
+                            {u.firstName} {u.lastName} — <span className="badge badge-gold">{u.role}</span>
+                          </div>
+                          <div style={{ fontSize: '0.78rem', color: '#94A3B8' }}>
+                            {u.email} • {u.phone} {u.gpsAddress ? `• GPS: ${u.gpsAddress}` : ''}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button type="button" className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.78rem' }} onClick={() => handleApprovePendingStaff(u.id, true)}>
+                            <CheckCircle2 size={14} /> Approve Staff Access
+                          </button>
+                          <button type="button" className="btn btn-danger" style={{ padding: '6px 12px', fontSize: '0.78rem' }} onClick={() => handleApprovePendingStaff(u.id, false)}>
+                            Decline
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="gbs-grid-2">
+              {canCreateStaff && (
+                <div className="glass-panel" style={{ padding: 20 }}>
+                  <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}><UserPlus size={16} /> Create New Staff Account (All {ROLES_META.length} Roles + GPS Address)</h3>
+                  <form onSubmit={handleCreateStaffAccount} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div className="gbs-grid-2" style={{ gap: 10 }}>
+                      <input type="text" required className="gbs-input" placeholder="First Name" value={newStaffForm.firstName} onChange={(e) => setNewStaffForm({ ...newStaffForm, firstName: e.target.value })} />
+                      <input type="text" required className="gbs-input" placeholder="Last Name" value={newStaffForm.lastName} onChange={(e) => setNewStaffForm({ ...newStaffForm, lastName: e.target.value })} />
+                    </div>
+                    <div className="gbs-grid-2" style={{ gap: 10 }}>
+                      <input type="email" required className="gbs-input" placeholder="Work Email" value={newStaffForm.email} onChange={(e) => setNewStaffForm({ ...newStaffForm, email: e.target.value })} />
+                      <input type="tel" required className="gbs-input" placeholder="Phone (+233...)" value={newStaffForm.phone} onChange={(e) => setNewStaffForm({ ...newStaffForm, phone: e.target.value })} />
+                    </div>
+                    <div className="gbs-grid-2" style={{ gap: 10 }}>
+                      <select className="gbs-select" value={newStaffForm.role} onChange={(e) => setNewStaffForm({ ...newStaffForm, role: e.target.value })}>
+                        {ROLES_META.map((rm) => (
+                          <option key={rm.key} value={rm.key}>{rm.title} ({rm.key})</option>
+                        ))}
+                      </select>
+                      <input type="text" required className="gbs-input" placeholder="Staff GPS Address (e.g. GA-183-8164)" value={newStaffForm.gpsAddress} onChange={(e) => setNewStaffForm({ ...newStaffForm, gpsAddress: e.target.value })} />
+                    </div>
+                    <div className="gbs-grid-2" style={{ gap: 10 }}>
+                      <input type="text" className="gbs-input" placeholder="Department (e.g. CREDIT)" value={newStaffForm.department} onChange={(e) => setNewStaffForm({ ...newStaffForm, department: e.target.value })} />
+                      <input type="number" min="0" className="gbs-input" placeholder="Monthly Base Salary (GHS)" value={newStaffForm.baseSalary} onChange={(e) => setNewStaffForm({ ...newStaffForm, baseSalary: e.target.value })} />
+                    </div>
+                    <div className="gbs-password-wrap">
+                      <input
+                        type={showStaffPass ? 'text' : 'password'}
+                        required
+                        minLength={6}
+                        className="gbs-input gbs-input-with-eye"
+                        placeholder="Initial Staff Password (min 6 chars)"
+                        value={newStaffForm.password}
+                        onChange={(e) => setNewStaffForm({ ...newStaffForm, password: e.target.value })}
+                      />
+                      <button
+                        type="button"
+                        className="gbs-password-toggle"
+                        aria-label={showStaffPass ? 'Hide password' : 'Show password'}
+                        onClick={() => setShowStaffPass((v) => !v)}
+                      >
+                        {showStaffPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                    <button type="submit" disabled={creatingStaff} className="btn btn-primary" style={{ justifyContent: 'center' }}>
+                      <UserPlus size={15} /> {creatingStaff ? 'Creating Staff...' : isCompanyOwner ? 'Create & Activate Staff' : 'Create Staff (Queue for Owner Approval)'}
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              <div className="glass-panel" style={{ padding: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                  <h3 style={{ margin: 0, color: '#D4AF37' }}>Staff Roster ({staffList.length})</h3>
+                  <button type="button" className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.78rem' }} onClick={handleGeneratePayroll}>
+                    Generate Monthly Payroll
+                  </button>
+                </div>
+                <form onSubmit={(e) => handleSearchStaff(e)} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
+                  <input
+                    type="search"
+                    className="gbs-input"
+                    style={{ flex: 1, minWidth: 160 }}
+                    placeholder="Find staff by name, mobile, GPS address, ID..."
+                    value={staffSearchInput}
+                    onChange={(e) => setStaffSearchInput(e.target.value)}
+                  />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.74rem', color: '#CBD5E1', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={includeHiddenStaff} onChange={(e) => setIncludeHiddenStaff(e.target.checked)} />
+                    Hidden
+                  </label>
+                  <button type="submit" className="btn btn-secondary" style={{ padding: '7px 12px' }}>Find</button>
+                </form>
+                <div className="data-table-container">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Employee</th>
+                        <th>Role / GPS Addr</th>
+                        <th>Salary</th>
+                        <th>Locate</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {staffList.map((s) => (
+                        <tr key={s.id} onClick={() => navigate(`/staff/${s.id}`)} style={{ cursor: 'pointer' }}>
+                          <td><strong>{s.user?.firstName} {s.user?.lastName}</strong></td>
+                          <td>
+                            <div>{s.department} ({s.position})</div>
+                            <div style={{ fontSize: '0.72rem', color: '#00F2FE' }}>{s.user?.gpsAddress || s.gpsAddress || 'No GPS Addr'}</div>
+                          </td>
+                          <td>{formatGHS(s.baseSalary)}</td>
+                          <td>
+                            {(s.user?.phone || s.user?.gpsAddress || s.gpsAddress) ? (
+                              <Link
+                                to={`/dashboard/tab/FIELD_OPS?locate=${encodeURIComponent(s.user?.phone || s.user?.gpsAddress || s.gpsAddress || '')}`}
+                                className="btn btn-primary"
+                                style={{ padding: '4px 8px', fontSize: '0.74rem', textDecoration: 'none' }}
+                                onClick={(ev) => ev.stopPropagation()}
+                              >
+                                <MapPin size={12} /> Locate
+                              </Link>
+                            ) : (
+                              <button type="button" className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.74rem' }}>Open</button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div className="gbs-grid-2">
+              <div className="glass-panel" style={{ padding: 20 }}>
+                <h3 style={{ margin: '0 0 12px', color: '#10B981' }}>Daily Staff Clock In / Clock Out Logs ({attendanceLogs.length})</h3>
+                <div className="data-table-container" style={{ maxHeight: 320 }}>
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Staff Name</th>
+                        <th>Date</th>
+                        <th>Clock In / Out</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {attendanceLogs.map((a) => (
+                        <tr key={a.id}>
+                          <td><strong>{a.staffName || a.userEmail || 'Staff'}</strong></td>
+                          <td>{a.workDate}</td>
+                          <td>
+                            {new Date(a.clockInAt).toLocaleTimeString()} → {a.clockOutAt ? new Date(a.clockOutAt).toLocaleTimeString() : 'Active'}
+                            {a.durationMinutes != null ? ` (${a.durationMinutes}m)` : ''}
+                          </td>
+                          <td><span className={`badge ${a.status === 'CLOCKED_OUT' ? 'badge-success' : 'badge-cyan'}`}>{a.status}</span></td>
+                        </tr>
+                      ))}
+                      {attendanceLogs.length === 0 && (
+                        <tr><td colSpan={4} style={{ textAlign: 'center', color: '#94A3B8', padding: 18 }}>No attendance shifts logged yet.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="glass-panel" style={{ padding: 20 }}>
+                <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}>Monthly Salary Ledger ({salaries.length})</h3>
+                <div className="data-table-container" style={{ maxHeight: 320 }}>
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Month</th>
+                        <th>Staff</th>
+                        <th>Net Salary</th>
+                        <th>Status</th>
+                        <th>Pay</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {salaries.map((sal) => (
+                        <tr key={sal.id}>
+                          <td>{sal.month}/{sal.year}</td>
+                          <td>{sal.staff?.user?.firstName} {sal.staff?.user?.lastName}</td>
+                          <td>{formatGHS(sal.netAmount ?? sal.netSalary)}</td>
+                          <td><span className={`badge ${sal.status === 'PAID' ? 'badge-success' : 'badge-warning'}`}>{sal.status}</span></td>
+                          <td>
+                            {sal.status !== 'PAID' && (
+                              <button type="button" className="btn btn-primary" style={{ padding: '4px 8px', fontSize: '0.72rem' }} onClick={() => handlePaySalary(sal.id)}>
+                                Disburse
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ===================================================================== */}
+        {/* TAB: ACCOUNTANT AUDITING & COMPANY OWNER SIGN-OFF                     */}
+        {/* ===================================================================== */}
+        {activeTab === 'ACCOUNTING_AUDIT' && (isFinance || isManagement || isRiskLegal) && (
+          <AccountingAuditPanel userRole={roleKey} />
+        )}
+
+        {/* ===================================================================== */}
+        {/* TAB: COMPANY BRANDING, SUBSCRIPTIONS & CCTV MOBILE LINKING            */}
+        {/* ===================================================================== */}
+        {activeTab === 'BRANDING_CCTV' && canBrandCompany && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div className="gbs-grid-2">
+              <div className="glass-panel" style={{ padding: 20 }}>
+                <h3 style={{ margin: '0 0 10px', color: '#D4AF37' }}><Building2 size={16} /> Company Name &amp; Logo Branding</h3>
+                <p style={{ fontSize: '0.8rem', color: '#CBD5E1', marginBottom: 12 }}>
+                  Update your institution&rsquo;s exact operating name and upload your company logo. Your branding reflects immediately across all dashboards for your organization (excluding the core GBS Developer Portal).
                 </p>
+                <form onSubmit={handleUpdateBranding} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div>
+                    <label className="gbs-label">Registered Company Name</label>
+                    <input
+                      type="text"
+                      required
+                      className="gbs-input"
+                      value={brandingForm.name}
+                      onChange={(e) => setBrandingForm({ ...brandingForm, name: e.target.value })}
+                      placeholder="Enter your official institution name"
+                    />
+                  </div>
+                  <div>
+                    <label className="gbs-label">Company Logo Image (PNG / JPG / WEBP)</label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="gbs-input"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0] || null;
+                        setBrandingForm({
+                          ...brandingForm,
+                          logoFile: f,
+                          logoPreview: f ? URL.createObjectURL(f) : brandingForm.logoPreview,
+                        });
+                      }}
+                    />
+                  </div>
+                  {brandingForm.logoPreview && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <img src={brandingForm.logoPreview} alt="Company Logo Preview" style={{ width: 52, height: 52, borderRadius: 10, objectFit: 'cover', border: '1px solid #D4AF37' }} />
+                      <span style={{ fontSize: '0.78rem', color: '#34D399' }}>Active logo preview</span>
+                    </div>
+                  )}
+                  <button type="submit" disabled={savingBranding} className="btn btn-primary" style={{ justifyContent: 'center' }}>
+                    {savingBranding ? 'Updating Branding...' : 'Save Company Name & Logo'}
+                  </button>
+                </form>
+              </div>
+
+              <div className="glass-panel" style={{ padding: 20 }}>
+                <h3 style={{ margin: '0 0 10px', color: '#00F2FE' }}><Clock size={16} /> Subscription Plan &amp; Trial Renewal</h3>
+                <p style={{ fontSize: '0.8rem', color: '#CBD5E1', marginBottom: 12 }}>
+                  Active Plan: <strong>{tenantProfile?.subscriptionPlan || countdown?.subscriptionPlan || 'TRIAL_1M'}</strong>{' '}
+                  ({tenantProfile?.isLifetime ? 'LIFETIME' : `${tenantProfile?.daysLeft ?? countdown?.daysLeft ?? 30} days remaining`}).
+                  Choose a subscription duration after or during your 1-month free trial:
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: 10 }}>
+                  {[
+                    { code: 'PLAN_3M', label: '3 Months', sub: '90 Days Access' },
+                    { code: 'PLAN_6M', label: '6 Months', sub: '180 Days Access' },
+                    { code: 'PLAN_9M', label: '9 Months', sub: '270 Days Access' },
+                    { code: 'PLAN_12M', label: '12 Months', sub: '365 Days Access' },
+                    { code: 'LIFETIME', label: 'Lifetime License', sub: 'Permanent Unlock' },
+                  ].map((plan) => (
+                    <button
+                      key={plan.code}
+                      type="button"
+                      disabled={upgradingPlan === plan.code}
+                      onClick={() => handleSelectSubscription(plan.code)}
+                      className={(tenantProfile?.subscriptionPlan || countdown?.subscriptionPlan) === plan.code ? 'btn btn-primary' : 'btn btn-secondary'}
+                      style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '12px' }}
+                    >
+                      <strong style={{ fontSize: '0.88rem' }}>{plan.label}</strong>
+                      <span style={{ fontSize: '0.72rem', opacity: 0.85 }}>{upgradingPlan === plan.code ? 'Applying...' : plan.sub}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <CctvMobilePanel />
+          </div>
+        )}
+
+        {/* ===================================================================== */}
+        {/* TAB: COMPLIANCE, AUDIT, FRAUD & MANAGER DELETION APPROVALS            */}
+        {/* ===================================================================== */}
+        {activeTab === 'RISK_AUDIT' && (
+          <div className="gbs-grid-2">
+            <div className="glass-panel" style={{ padding: 20 }}>
+              <h3 style={{ margin: '0 0 12px', color: '#F87171' }}>Manager Deletion Approval Queue ({deletionQueue.length})</h3>
+              {deletionQueue.length === 0 ? (
+                <p style={{ color: '#94A3B8', fontSize: '0.84rem' }}>No pending staff deletion requests.</p>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {pendingStaff.map((u) => (
-                    <div key={u.id} style={{ padding: 12, borderRadius: 10, background: 'rgba(6,12,24,0.85)', border: '1px solid rgba(245,158,11,0.3)', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
-                      <div>
-                        <div style={{ fontWeight: 700, color: '#F1F5F9' }}>
-                          {u.firstName} {u.lastName} — <span className="badge badge-gold">{u.role}</span>
-                        </div>
-                        <div style={{ fontSize: '0.78rem', color: '#94A3B8' }}>
-                          {u.email} • {u.phone} {u.gpsAddress ? `• GPS: ${u.gpsAddress}` : ''}
-                        </div>
+                  {deletionQueue.map((req) => (
+                    <div key={req.id} style={{ padding: 12, borderRadius: 8, background: 'rgba(6,12,24,0.8)', border: '1px solid rgba(239,68,68,0.28)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <strong>{req.entityType} ({req.entityId.slice(0, 8)})</strong>
+                        <span className={`badge ${req.status === 'APPROVED' ? 'badge-success' : req.status === 'REJECTED' ? 'badge-danger' : 'badge-warning'}`}>{req.status}</span>
                       </div>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <button type="button" className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.78rem' }} onClick={() => handleApprovePendingStaff(u.id, true)}>
-                          <CheckCircle2 size={14} /> Approve Staff Access
-                        </button>
-                        <button type="button" className="btn btn-danger" style={{ padding: '6px 12px', fontSize: '0.78rem' }} onClick={() => handleApprovePendingStaff(u.id, false)}>
-                          Decline
-                        </button>
-                      </div>
+                      <div style={{ fontSize: '0.8rem', color: '#CBD5E1', marginBottom: 8 }}>{req.reason}</div>
+                      {['PENDING', 'PENDING_MANAGER_APPROVAL'].includes(req.status) && isManagement && (
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button type="button" className="btn btn-danger" style={{ padding: '5px 10px', fontSize: '0.74rem' }} onClick={() => handleReviewDeletion(req.id, 'APPROVED')}>Approve Deletion</button>
+                          <button type="button" className="btn btn-secondary" style={{ padding: '5px 10px', fontSize: '0.74rem' }} onClick={() => handleReviewDeletion(req.id, 'REJECTED')}>Reject</button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
               )}
-            </div>
-          )}
 
+              <h4 style={{ marginTop: 20, color: '#D4AF37' }}>Open Legal / Fraud / Risk Case</h4>
+              <form onSubmit={handleCreateCase} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div className="gbs-grid-2" style={{ gap: 8 }}>
+                  <select className="gbs-select" value={newCase.caseType} onChange={(e) => setNewCase({ ...newCase, caseType: e.target.value })}>
+                    <option value="COMPLIANCE">KYC / AML Compliance</option>
+                    <option value="FRAUD">Fraud Investigation</option>
+                    <option value="RISK">Credit Risk Alert</option>
+                    <option value="LEGAL">Legal Recovery Filing</option>
+                  </select>
+                  <select className="gbs-select" value={newCase.severity} onChange={(e) => setNewCase({ ...newCase, severity: e.target.value })}>
+                    <option value="LOW">LOW</option>
+                    <option value="MEDIUM">MEDIUM</option>
+                    <option value="HIGH">HIGH</option>
+                    <option value="CRITICAL">CRITICAL</option>
+                  </select>
+                </div>
+                <input type="text" required className="gbs-input" placeholder="Case Title" value={newCase.title} onChange={(e) => setNewCase({ ...newCase, title: e.target.value })} />
+                <textarea rows={2} required className="gbs-textarea" placeholder="Case evidence & investigation summary..." value={newCase.description} onChange={(e) => setNewCase({ ...newCase, description: e.target.value })} />
+                <button type="submit" className="btn btn-primary">File Case Record</button>
+              </form>
+            </div>
+
+            <div className="glass-panel" style={{ padding: 20 }}>
+              <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}>Cases ({cases.length}) &amp; Immutable Audit Trail ({auditLogs.length})</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 260, overflowY: 'auto', marginBottom: 16 }}>
+                {cases.map((c) => (
+                  <div key={c.id} style={{ padding: 12, borderRadius: 8, background: 'rgba(6,12,24,0.85)', border: '1px solid rgba(0,242,254,0.22)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                      <div style={{ fontWeight: 700, fontSize: '0.84rem', color: '#F4E07B' }}>
+                        [{c.category || c.caseType || 'COMPLIANCE'}] {c.title}
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <span className={`badge ${c.severity === 'CRITICAL' || c.severity === 'HIGH' ? 'badge-danger' : 'badge-gold'}`}>{c.severity}</span>
+                        <span className={`badge ${c.status === 'RESOLVED' ? 'badge-success' : 'badge-cyan'}`}>{c.status || 'OPEN'}</span>
+                      </div>
+                    </div>
+                    <div style={{ fontSize: '0.76rem', color: '#CBD5E1', marginBottom: 8 }}>{c.description}</div>
+                    {c.status !== 'RESOLVED' && (
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        {c.status !== 'INVESTIGATING' && (
+                          <button type="button" className="btn btn-secondary" style={{ padding: '4px 9px', fontSize: '0.72rem' }} onClick={() => handleUpdateCaseStatus(c.id, 'INVESTIGATING')}>
+                            Mark Investigating
+                          </button>
+                        )}
+                        <button type="button" className="btn btn-primary" style={{ padding: '4px 9px', fontSize: '0.72rem' }} onClick={() => handleUpdateCaseStatus(c.id, 'RESOLVED')}>
+                          <CheckCircle2 size={12} /> Resolve Case
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 240, overflowY: 'auto' }}>
+                {auditLogs.slice(0, 20).map((log) => (
+                  <div key={log.id} style={{ padding: 8, borderRadius: 6, background: 'rgba(4,8,16,0.75)', fontSize: '0.74rem', borderLeft: '2px solid #D4AF37' }}>
+                    <strong style={{ color: '#D4AF37' }}>{log.action}</strong> on {log.entityType} • {new Date(log.createdAt).toLocaleString()}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ===================================================================== */}
+        {/* TAB: CUSTOMER SERVICE & RECEPTION TICKETS                             */}
+        {/* ===================================================================== */}
+        {activeTab === 'SUPPORT' && (
           <div className="gbs-grid-2">
-            {canCreateStaff && (
+            <div className="glass-panel" style={{ padding: 20 }}>
+              <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>Log Borrower Support Inquiry / Front Desk Ticket</h3>
+              <form onSubmit={handleCreateTicket} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div className="gbs-grid-2" style={{ gap: 10 }}>
+                  <input type="text" required className="gbs-input" placeholder="Customer / Visitor Name" value={newTicket.requesterName} onChange={(e) => setNewTicket({ ...newTicket, requesterName: e.target.value })} />
+                  <input type="tel" className="gbs-input" placeholder="Customer Phone (+233...)" value={newTicket.requesterPhone} onChange={(e) => setNewTicket({ ...newTicket, requesterPhone: e.target.value })} />
+                </div>
+                <input type="text" required className="gbs-input" placeholder="Ticket Subject" value={newTicket.subject} onChange={(e) => setNewTicket({ ...newTicket, subject: e.target.value })} />
+                <div className="gbs-grid-2" style={{ gap: 10 }}>
+                  <select className="gbs-select" value={newTicket.category} onChange={(e) => setNewTicket({ ...newTicket, category: e.target.value })}>
+                    <option value="REPAYMENT_INQUIRY">Repayment Inquiry</option>
+                    <option value="KYC_WALK_IN">Walk-In KYC Intake</option>
+                    <option value="MOMO_SETTLEMENT">MoMo Reconciliation</option>
+                  </select>
+                  <select className="gbs-select" value={newTicket.priority} onChange={(e) => setNewTicket({ ...newTicket, priority: e.target.value })}>
+                    <option value="NORMAL">NORMAL</option>
+                    <option value="HIGH">HIGH</option>
+                    <option value="URGENT">URGENT</option>
+                  </select>
+                </div>
+                <textarea rows={3} required className="gbs-textarea" placeholder="Customer request notes..." value={newTicket.description} onChange={(e) => setNewTicket({ ...newTicket, description: e.target.value })} />
+                <button type="submit" className="btn btn-primary">Open Support Ticket</button>
+              </form>
+            </div>
+            <div className="glass-panel" style={{ padding: 20 }}>
+              <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}>Active Service Queue ({tickets.length})</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 420, overflowY: 'auto' }}>
+                {tickets.map((t) => (
+                  <div key={t.id} style={{ padding: 12, borderRadius: 8, background: 'rgba(6,12,24,0.85)', border: '1px solid rgba(212,175,55,0.22)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <strong>{t.ticketNumber ? `${t.ticketNumber} — ` : ''}{t.subject}</strong>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <span className="badge badge-cyan">{t.priority || 'NORMAL'}</span>
+                        <span className={`badge ${t.status === 'RESOLVED' ? 'badge-success' : 'badge-gold'}`}>{t.status}</span>
+                      </div>
+                    </div>
+                    {t.requesterName && (
+                      <div style={{ fontSize: '0.73rem', color: '#94A3B8', marginTop: 2 }}>
+                        Requester: {t.requesterName}{t.requesterPhone ? ` (${t.requesterPhone})` : ''}
+                      </div>
+                    )}
+                    <div style={{ fontSize: '0.78rem', color: '#CBD5E1', marginTop: 4, marginBottom: 8 }}>{t.description}</div>
+                    {t.status !== 'RESOLVED' && (
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        {t.status !== 'IN_PROGRESS' && (
+                          <button type="button" className="btn btn-secondary" style={{ padding: '4px 9px', fontSize: '0.72rem' }} onClick={() => handleUpdateTicketStatus(t.id, 'IN_PROGRESS')}>
+                            In Progress
+                          </button>
+                        )}
+                        <button type="button" className="btn btn-primary" style={{ padding: '4px 9px', fontSize: '0.72rem' }} onClick={() => handleUpdateTicketStatus(t.id, 'RESOLVED')}>
+                          <CheckCircle2 size={12} /> Resolve Ticket
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ===================================================================== */}
+        {/* TAB: MARKETING & INVESTORS                                            */}
+        {/* ===================================================================== */}
+        {activeTab === 'GROWTH_CAPITAL' && (
+          <div className="gbs-grid-2">
+            <div className="glass-panel" style={{ padding: 20 }}>
+              <h3 style={{ margin: '0 0 12px', color: '#A78BFA' }}><Megaphone size={16} /> Marketing Outreach Campaigns ({campaigns.length})</h3>
+              <form onSubmit={handleCreateCampaign} style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+                <input type="text" required className="gbs-input" placeholder="Campaign Name" value={newCampaign.name} onChange={(e) => setNewCampaign({ ...newCampaign, name: e.target.value })} />
+                <div className="gbs-grid-3" style={{ gap: 8 }}>
+                  <select className="gbs-select" value={newCampaign.channel} onChange={(e) => setNewCampaign({ ...newCampaign, channel: e.target.value })}>
+                    <option value="SMS">SMS</option>
+                    <option value="WHATSAPP">WhatsApp</option>
+                    <option value="FIELD_DRIVE">Field Drive</option>
+                  </select>
+                  <input type="number" className="gbs-input" placeholder="Budget GHS" value={newCampaign.budget} onChange={(e) => setNewCampaign({ ...newCampaign, budget: e.target.value })} />
+                  <input type="number" className="gbs-input" placeholder="Est. Reach" value={newCampaign.reachCount} onChange={(e) => setNewCampaign({ ...newCampaign, reachCount: e.target.value })} />
+                </div>
+                <button type="submit" className="btn btn-primary">Launch Campaign</button>
+              </form>
+              {campaigns.map((c) => (
+                <div key={c.id} style={{ padding: 10, borderRadius: 8, background: 'rgba(6,12,24,0.8)', marginBottom: 6, fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                  <div>
+                    <strong>{c.name}</strong> <span className="badge badge-cyan" style={{ fontSize: '0.64rem', marginLeft: 4 }}>{c.channel}</span>
+                  </div>
+                  <div style={{ color: '#CBD5E1' }}>
+                    Budget: <strong>{formatGHS(c.budget)}</strong> • Leads/Reach: <strong>{c.leadsCount ?? c.reachCount ?? 0}</strong>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="glass-panel" style={{ padding: 20 }}>
+              <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}><Briefcase size={16} /> Institutional Investors &amp; Yield ({investors.length})</h3>
+              {(isFinance || isManagement || roleKey === 'INVESTOR') && (
+                <form onSubmit={handleCreateInvestor} style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+                  <div className="gbs-grid-2" style={{ gap: 8 }}>
+                    <input type="text" required className="gbs-input" placeholder="Investor Name" value={newInvestor.investorName} onChange={(e) => setNewInvestor({ ...newInvestor, investorName: e.target.value })} />
+                    <input type="email" className="gbs-input" placeholder="Email" value={newInvestor.email} onChange={(e) => setNewInvestor({ ...newInvestor, email: e.target.value })} />
+                  </div>
+                  <div className="gbs-grid-2" style={{ gap: 8 }}>
+                    <input type="number" required className="gbs-input" placeholder="Invested GHS" value={newInvestor.investedAmount} onChange={(e) => setNewInvestor({ ...newInvestor, investedAmount: e.target.value })} />
+                    <input type="number" step="0.1" className="gbs-input" placeholder="Yield %" value={newInvestor.interestRate} onChange={(e) => setNewInvestor({ ...newInvestor, interestRate: e.target.value })} />
+                  </div>
+                  <button type="submit" className="btn btn-primary">Add Capital Tranche</button>
+                </form>
+              )}
+              {investors.map((inv) => (
+                <div key={inv.id} style={{ padding: 10, borderRadius: 8, background: 'rgba(6,12,24,0.8)', marginBottom: 6, fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                  <div>
+                    <strong>{inv.investorName}</strong>
+                    {inv.investorCode && <span style={{ fontSize: '0.72rem', color: '#94A3B8', marginLeft: 6 }}>({inv.investorCode})</span>}
+                  </div>
+                  <div>
+                    <strong style={{ color: '#34D399' }}>{formatGHS(inv.committedCapital ?? inv.investedAmount)}</strong> @ <span className="badge badge-gold">{inv.annualYieldRate ?? inv.interestRate ?? 18.5}% APR</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ===================================================================== */}
+        {/* TAB: COMPANY OWNER / MANAGEMENT STAFF BROADCAST & SELECTIVE MESSAGING */}
+        {/* ===================================================================== */}
+        {activeTab === 'STAFF_COMMS' && !isMemberOnly && !isGuarantorOnly && (
+          <div className="gbs-grid-2">
+            {isManagement && (
               <div className="glass-panel" style={{ padding: 20 }}>
-                <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}><UserPlus size={16} /> Create New Staff Account (All {ROLES_META.length} Roles + GPS Address)</h3>
-                <form onSubmit={handleCreateStaffAccount} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <div className="gbs-grid-2" style={{ gap: 10 }}>
-                    <input type="text" required className="gbs-input" placeholder="First Name" value={newStaffForm.firstName} onChange={(e) => setNewStaffForm({ ...newStaffForm, firstName: e.target.value })} />
-                    <input type="text" required className="gbs-input" placeholder="Last Name" value={newStaffForm.lastName} onChange={(e) => setNewStaffForm({ ...newStaffForm, lastName: e.target.value })} />
+                <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}><Send size={16} /> Send General or Selected Staff Message</h3>
+                <form onSubmit={handleSendBroadcast} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', cursor: 'pointer' }}>
+                      <input
+                        type="radio"
+                        checked={broadcastForm.sendToAll}
+                        onChange={() => setBroadcastForm({ ...broadcastForm, sendToAll: true, recipientUserIds: [] })}
+                      />
+                      General Notice (All Staff)
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', cursor: 'pointer' }}>
+                      <input
+                        type="radio"
+                        checked={!broadcastForm.sendToAll}
+                        onChange={() => setBroadcastForm({ ...broadcastForm, sendToAll: false })}
+                      />
+                      Selected Staff Members
+                    </label>
                   </div>
+
+                  {!broadcastForm.sendToAll && (
+                    <div style={{ maxHeight: 140, overflowY: 'auto', padding: 8, borderRadius: 8, background: 'rgba(6,12,24,0.75)', border: '1px solid rgba(0,242,254,0.2)', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))', gap: 6 }}>
+                      {staffList.filter((s) => s.user?.id).map((s) => {
+                        const uid = s.user.id;
+                        const checked = broadcastForm.recipientUserIds.includes(uid);
+                        return (
+                          <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.75rem', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                const next = e.target.checked
+                                  ? [...broadcastForm.recipientUserIds, uid]
+                                  : broadcastForm.recipientUserIds.filter((id) => id !== uid);
+                                setBroadcastForm({ ...broadcastForm, recipientUserIds: next });
+                              }}
+                            />
+                            {s.user.firstName} {s.user.lastName}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+
                   <div className="gbs-grid-2" style={{ gap: 10 }}>
-                    <input type="email" required className="gbs-input" placeholder="Work Email" value={newStaffForm.email} onChange={(e) => setNewStaffForm({ ...newStaffForm, email: e.target.value })} />
-                    <input type="tel" required className="gbs-input" placeholder="Phone (+233...)" value={newStaffForm.phone} onChange={(e) => setNewStaffForm({ ...newStaffForm, phone: e.target.value })} />
-                  </div>
-                  <div className="gbs-grid-2" style={{ gap: 10 }}>
-                    <select className="gbs-select" value={newStaffForm.role} onChange={(e) => setNewStaffForm({ ...newStaffForm, role: e.target.value })}>
-                      {ROLES_META.map((rm) => (
-                        <option key={rm.key} value={rm.key}>{rm.title} ({rm.key})</option>
-                      ))}
+                    <input type="text" required className="gbs-input" placeholder="Message Subject / Title" value={broadcastForm.title} onChange={(e) => setBroadcastForm({ ...broadcastForm, title: e.target.value })} />
+                    <select className="gbs-select" value={broadcastForm.priority} onChange={(e) => setBroadcastForm({ ...broadcastForm, priority: e.target.value })}>
+                      <option value="NORMAL">Priority: NORMAL</option>
+                      <option value="HIGH">Priority: HIGH</option>
+                      <option value="URGENT">Priority: URGENT</option>
                     </select>
-                    <input type="text" required className="gbs-input" placeholder="Staff GPS Address (e.g. GA-183-8164)" value={newStaffForm.gpsAddress} onChange={(e) => setNewStaffForm({ ...newStaffForm, gpsAddress: e.target.value })} />
                   </div>
-                  <div className="gbs-grid-2" style={{ gap: 10 }}>
-                    <input type="text" className="gbs-input" placeholder="Department (e.g. CREDIT)" value={newStaffForm.department} onChange={(e) => setNewStaffForm({ ...newStaffForm, department: e.target.value })} />
-                    <input type="number" min="0" className="gbs-input" placeholder="Monthly Base Salary (GHS)" value={newStaffForm.baseSalary} onChange={(e) => setNewStaffForm({ ...newStaffForm, baseSalary: e.target.value })} />
-                  </div>
-                  <div className="gbs-password-wrap">
-                    <input
-                      type={showStaffPass ? 'text' : 'password'}
-                      required
-                      minLength={6}
-                      className="gbs-input gbs-input-with-eye"
-                      placeholder="Initial Staff Password (min 6 chars)"
-                      value={newStaffForm.password}
-                      onChange={(e) => setNewStaffForm({ ...newStaffForm, password: e.target.value })}
-                    />
-                    <button
-                      type="button"
-                      className="gbs-password-toggle"
-                      aria-label={showStaffPass ? 'Hide password' : 'Show password'}
-                      onClick={() => setShowStaffPass((v) => !v)}
-                    >
-                      {showStaffPass ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
-                  </div>
-                  <button type="submit" disabled={creatingStaff} className="btn btn-primary" style={{ justifyContent: 'center' }}>
-                    <UserPlus size={15} /> {creatingStaff ? 'Creating Staff...' : isCompanyOwner ? 'Create & Activate Staff' : 'Create Staff (Queue for Owner Approval)'}
+                  <textarea rows={4} required className="gbs-textarea" placeholder="Write directive or operational announcement for staff..." value={broadcastForm.message} onChange={(e) => setBroadcastForm({ ...broadcastForm, message: e.target.value })} />
+                  <button type="submit" className="btn btn-primary" style={{ justifyContent: 'center' }}>
+                    <Send size={15} /> {broadcastForm.sendToAll ? 'Broadcast to All Staff' : 'Send to Selected Staff'}
                   </button>
                 </form>
               </div>
             )}
 
             <div className="glass-panel" style={{ padding: 20 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-                <h3 style={{ margin: 0, color: '#D4AF37' }}>Staff Roster ({staffList.length})</h3>
-                <button type="button" className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.78rem' }} onClick={handleGeneratePayroll}>
-                  Generate Monthly Payroll
-                </button>
-              </div>
-              <form onSubmit={(e) => handleSearchStaff(e)} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
-                <input
-                  type="search"
-                  className="gbs-input"
-                  style={{ flex: 1, minWidth: 160 }}
-                  placeholder="Find staff by name, mobile, GPS address, ID..."
-                  value={staffSearchInput}
-                  onChange={(e) => setStaffSearchInput(e.target.value)}
-                />
-                <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.74rem', color: '#CBD5E1', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={includeHiddenStaff} onChange={(e) => setIncludeHiddenStaff(e.target.checked)} />
-                  Hidden
-                </label>
-                <button type="submit" className="btn btn-secondary" style={{ padding: '7px 12px' }}>Find</button>
-              </form>
-              <div className="data-table-container">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Employee</th>
-                      <th>Role / GPS Addr</th>
-                      <th>Salary</th>
-                      <th>Locate</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {staffList.map((s) => (
-                      <tr key={s.id} onClick={() => navigate(`/staff/${s.id}`)} style={{ cursor: 'pointer' }}>
-                        <td><strong>{s.user?.firstName} {s.user?.lastName}</strong></td>
-                        <td>
-                          <div>{s.department} ({s.position})</div>
-                          <div style={{ fontSize: '0.72rem', color: '#00F2FE' }}>{s.user?.gpsAddress || s.gpsAddress || 'No GPS Addr'}</div>
-                        </td>
-                        <td>{formatGHS(s.baseSalary)}</td>
-                        <td>
-                          {(s.user?.phone || s.user?.gpsAddress || s.gpsAddress) ? (
-                            <Link
-                              to={`/dashboard/tab/FIELD_OPS?locate=${encodeURIComponent(s.user?.phone || s.user?.gpsAddress || s.gpsAddress || '')}`}
-                              className="btn btn-primary"
-                              style={{ padding: '4px 8px', fontSize: '0.74rem', textDecoration: 'none' }}
-                              onClick={(ev) => ev.stopPropagation()}
-                            >
-                              <MapPin size={12} /> Locate
-                            </Link>
-                          ) : (
-                            <button type="button" className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.74rem' }}>Open</button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          <div className="gbs-grid-2">
-            <div className="glass-panel" style={{ padding: 20 }}>
-              <h3 style={{ margin: '0 0 12px', color: '#10B981' }}>Daily Staff Clock In / Clock Out Logs ({attendanceLogs.length})</h3>
-              <div className="data-table-container" style={{ maxHeight: 320 }}>
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Staff Name</th>
-                      <th>Date</th>
-                      <th>Clock In / Out</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {attendanceLogs.map((a) => (
-                      <tr key={a.id}>
-                        <td><strong>{a.staffName || a.userEmail || 'Staff'}</strong></td>
-                        <td>{a.workDate}</td>
-                        <td>
-                          {new Date(a.clockInAt).toLocaleTimeString()} → {a.clockOutAt ? new Date(a.clockOutAt).toLocaleTimeString() : 'Active'}
-                          {a.durationMinutes != null ? ` (${a.durationMinutes}m)` : ''}
-                        </td>
-                        <td><span className={`badge ${a.status === 'CLOCKED_OUT' ? 'badge-success' : 'badge-cyan'}`}>{a.status}</span></td>
-                      </tr>
-                    ))}
-                    {attendanceLogs.length === 0 && (
-                      <tr><td colSpan={4} style={{ textAlign: 'center', color: '#94A3B8', padding: 18 }}>No attendance shifts logged yet.</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div className="glass-panel" style={{ padding: 20 }}>
-              <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}>Monthly Salary Ledger ({salaries.length})</h3>
-              <div className="data-table-container" style={{ maxHeight: 320 }}>
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Month</th>
-                      <th>Staff</th>
-                      <th>Net Salary</th>
-                      <th>Status</th>
-                      <th>Pay</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {salaries.map((sal) => (
-                      <tr key={sal.id}>
-                        <td>{sal.month}/{sal.year}</td>
-                        <td>{sal.staff?.user?.firstName} {sal.staff?.user?.lastName}</td>
-                        <td>{formatGHS(sal.netAmount ?? sal.netSalary)}</td>
-                        <td><span className={`badge ${sal.status === 'PAID' ? 'badge-success' : 'badge-warning'}`}>{sal.status}</span></td>
-                        <td>
-                          {sal.status !== 'PAID' && (
-                            <button type="button" className="btn btn-primary" style={{ padding: '4px 8px', fontSize: '0.72rem' }} onClick={() => handlePaySalary(sal.id)}>
-                              Disburse
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ===================================================================== */}
-      {/* TAB: ACCOUNTANT AUDITING & COMPANY OWNER SIGN-OFF                     */}
-      {/* ===================================================================== */}
-      {activeTab === 'ACCOUNTING_AUDIT' && (isFinance || isManagement || isRiskLegal) && (
-        <AccountingAuditPanel userRole={roleKey} />
-      )}
-
-      {/* ===================================================================== */}
-      {/* TAB: COMPANY BRANDING, SUBSCRIPTIONS & CCTV MOBILE LINKING            */}
-      {/* ===================================================================== */}
-      {activeTab === 'BRANDING_CCTV' && canBrandCompany && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          <div className="gbs-grid-2">
-            <div className="glass-panel" style={{ padding: 20 }}>
-              <h3 style={{ margin: '0 0 10px', color: '#D4AF37' }}><Building2 size={16} /> Company Name &amp; Logo Branding</h3>
-              <p style={{ fontSize: '0.8rem', color: '#CBD5E1', marginBottom: 12 }}>
-                Update your institution&rsquo;s exact operating name and upload your company logo. Your branding reflects immediately across all dashboards for your organization (excluding the core GBS Developer Portal).
-              </p>
-              <form onSubmit={handleUpdateBranding} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div>
-                  <label className="gbs-label">Registered Company Name</label>
-                  <input
-                    type="text"
-                    required
-                    className="gbs-input"
-                    value={brandingForm.name}
-                    onChange={(e) => setBrandingForm({ ...brandingForm, name: e.target.value })}
-                    placeholder="Enter your official institution name"
-                  />
-                </div>
-                <div>
-                  <label className="gbs-label">Company Logo Image (PNG / JPG / WEBP)</label>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="gbs-input"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0] || null;
-                      setBrandingForm({
-                        ...brandingForm,
-                        logoFile: f,
-                        logoPreview: f ? URL.createObjectURL(f) : brandingForm.logoPreview,
-                      });
-                    }}
-                  />
-                </div>
-                {brandingForm.logoPreview && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <img src={brandingForm.logoPreview} alt="Company Logo Preview" style={{ width: 52, height: 52, borderRadius: 10, objectFit: 'cover', border: '1px solid #D4AF37' }} />
-                    <span style={{ fontSize: '0.78rem', color: '#34D399' }}>Active logo preview</span>
+              <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}><Bell size={16} /> Staff Communications Inbox ({broadcastInbox.length})</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 420, overflowY: 'auto' }}>
+                {broadcastInbox.map((b) => (
+                  <div key={b.id} style={{ padding: 12, borderRadius: 8, background: 'rgba(6,12,24,0.85)', border: '1px solid rgba(212,175,55,0.22)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                      <strong style={{ color: '#F4E07B', fontSize: '0.86rem' }}>{b.title || b.subject}</strong>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <span className="badge badge-cyan">{b.targetScope === 'ALL_STAFF' ? 'ALL STAFF' : 'SELECTED'}</span>
+                        <span className="badge badge-gold">{b.priority}</span>
+                      </div>
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: '#E2E8F0', marginBottom: 6 }}>{b.message || b.body}</div>
+                    <div style={{ fontSize: '0.72rem', color: '#94A3B8' }}>
+                      From: {b.senderName || 'Management'} ({b.senderRole || 'OWNER'}) • {new Date(b.createdAt).toLocaleString()}
+                    </div>
                   </div>
+                ))}
+                {broadcastInbox.length === 0 && (
+                  <p style={{ color: '#94A3B8', fontSize: '0.84rem' }}>No internal staff announcements sent yet.</p>
                 )}
-                <button type="submit" disabled={savingBranding} className="btn btn-primary" style={{ justifyContent: 'center' }}>
-                  {savingBranding ? 'Updating Branding...' : 'Save Company Name & Logo'}
-                </button>
-              </form>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ===================================================================== */}
+        {/* TAB: VIDEO MEETINGS & WRAPPED WEEKLY/MONTHLY/YEARLY REPORTS           */}
+        {/* ===================================================================== */}
+        {activeTab === 'MEETINGS_REPORTS' && !isMemberOnly && !isGuarantorOnly && (
+          <div className="gbs-grid-2">
+            <div className="glass-panel" style={{ padding: 20 }}>
+              <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}><Video size={16} /> Executive &amp; Staff Online Meetings ({meetings.length})</h3>
+              {isManagement && (
+                <form onSubmit={handleScheduleMeeting} style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
+                  <input type="text" required className="gbs-input" placeholder="Credit Committee / Executive Briefing / Daily Standup" value={newMeeting.title} onChange={(e) => setNewMeeting({ ...newMeeting, title: e.target.value })} />
+                  <div className="gbs-grid-2" style={{ gap: 10 }}>
+                    <input type="datetime-local" className="gbs-input" value={newMeeting.scheduledAt} onChange={(e) => setNewMeeting({ ...newMeeting, scheduledAt: e.target.value })} />
+                    <select className="gbs-select" value={newMeeting.audienceType} onChange={(e) => setNewMeeting({ ...newMeeting, audienceType: e.target.value })}>
+                      <option value="ALL_STAFF">All Company Staff</option>
+                      <option value="EXECUTIVES_ONLY">Executives &amp; Managers Only</option>
+                      <option value="SELECTED_PARTICIPANTS">Selected Participants</option>
+                    </select>
+                  </div>
+                  {newMeeting.audienceType === 'SELECTED_PARTICIPANTS' && (
+                    <div style={{ maxHeight: 110, overflowY: 'auto', padding: 8, borderRadius: 8, background: 'rgba(6,12,24,0.75)', border: '1px solid rgba(0,242,254,0.2)', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(165px, 1fr))', gap: 6 }}>
+                      {staffList.filter((s) => s.user?.id).map((s) => {
+                        const uid = s.user.id;
+                        const checked = newMeeting.participantUserIds.includes(uid);
+                        return (
+                          <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.74rem', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                const next = e.target.checked
+                                  ? [...newMeeting.participantUserIds, uid]
+                                  : newMeeting.participantUserIds.filter((id) => id !== uid);
+                                setNewMeeting({ ...newMeeting, participantUserIds: next });
+                              }}
+                            />
+                            {s.user.firstName} {s.user.lastName}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <button type="submit" className="btn btn-primary">Schedule Online Meeting Room</button>
+                </form>
+              )}
+              {meetings.map((m) => (
+                <div key={m.id} style={{ padding: 10, borderRadius: 8, background: 'rgba(6,12,24,0.8)', border: '1px solid rgba(0,242,254,0.2)', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{m.topic || m.title}</div>
+                    <div style={{ fontSize: '0.72rem', color: '#94A3B8' }}>
+                      Host: {m.hostName || 'Management'} • {m.targetScope || 'ALL_STAFF'} • {new Date(m.startTime || m.scheduledAt).toLocaleString()}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {m.joinUrl && (
+                      <a href={m.joinUrl} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ padding: '5px 10px', fontSize: '0.75rem' }}>
+                        Join Room
+                      </a>
+                    )}
+                    {isManagement && (
+                      <button
+                        type="button"
+                        className="btn btn-danger"
+                        style={{ padding: '5px 10px', fontSize: '0.74rem' }}
+                        onClick={() => handleCancelMeeting(m.id)}
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
 
             <div className="glass-panel" style={{ padding: 20 }}>
-              <h3 style={{ margin: '0 0 10px', color: '#00F2FE' }}><Clock size={16} /> Subscription Plan &amp; Trial Renewal</h3>
+              <h3 style={{ margin: '0 0 10px', color: '#D4AF37' }}><Download size={16} /> Wrap &amp; Save Weekly / Monthly / Yearly Reports</h3>
               <p style={{ fontSize: '0.8rem', color: '#CBD5E1', marginBottom: 12 }}>
-                Active Plan: <strong>{tenantProfile?.subscriptionPlan || countdown?.subscriptionPlan || 'TRIAL_1M'}</strong>{' '}
-                ({tenantProfile?.isLifetime ? 'LIFETIME' : `${tenantProfile?.daysLeft ?? countdown?.daysLeft ?? 30} days remaining`}).
-                Choose a subscription duration after or during your 1-month free trial:
+                Roll up all staff-collected loans, repayments, customer registrations, field visits &amp; attendance shifts into saved snapshots in PostgreSQL.
               </p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: 10 }}>
-                {[
-                  { code: 'PLAN_3M', label: '3 Months', sub: '90 Days Access' },
-                  { code: 'PLAN_6M', label: '6 Months', sub: '180 Days Access' },
-                  { code: 'PLAN_9M', label: '9 Months', sub: '270 Days Access' },
-                  { code: 'PLAN_12M', label: '12 Months', sub: '365 Days Access' },
-                  { code: 'LIFETIME', label: 'Lifetime License', sub: 'Permanent Unlock' },
-                ].map((plan) => (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+                {['WEEKLY', 'MONTHLY', 'YEARLY'].map((p) => (
                   <button
-                    key={plan.code}
+                    key={p}
                     type="button"
-                    disabled={upgradingPlan === plan.code}
-                    onClick={() => handleSelectSubscription(plan.code)}
-                    className={(tenantProfile?.subscriptionPlan || countdown?.subscriptionPlan) === plan.code ? 'btn btn-primary' : 'btn btn-secondary'}
-                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '12px' }}
+                    disabled={wrappingPeriod === p}
+                    onClick={() => handleWrapReportPeriod(p)}
+                    className="btn btn-primary"
+                    style={{ padding: '7px 13px', fontSize: '0.78rem' }}
                   >
-                    <strong style={{ fontSize: '0.88rem' }}>{plan.label}</strong>
-                    <span style={{ fontSize: '0.72rem', opacity: 0.85 }}>{upgradingPlan === plan.code ? 'Applying...' : plan.sub}</span>
+                    {wrappingPeriod === p ? `Wrapping ${p}...` : `Wrap & Save ${p} Report`}
                   </button>
                 ))}
               </div>
-            </div>
-          </div>
 
-          <CctvMobilePanel />
-        </div>
-      )}
-
-      {/* ===================================================================== */}
-      {/* TAB: COMPLIANCE, AUDIT, FRAUD & MANAGER DELETION APPROVALS            */}
-      {/* ===================================================================== */}
-      {activeTab === 'RISK_AUDIT' && (
-        <div className="gbs-grid-2">
-          <div className="glass-panel" style={{ padding: 20 }}>
-            <h3 style={{ margin: '0 0 12px', color: '#F87171' }}>Manager Deletion Approval Queue ({deletionQueue.length})</h3>
-            {deletionQueue.length === 0 ? (
-              <p style={{ color: '#94A3B8', fontSize: '0.84rem' }}>No pending staff deletion requests.</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {deletionQueue.map((req) => (
-                  <div key={req.id} style={{ padding: 12, borderRadius: 8, background: 'rgba(6,12,24,0.8)', border: '1px solid rgba(239,68,68,0.28)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                      <strong>{req.entityType} ({req.entityId.slice(0, 8)})</strong>
-                      <span className={`badge ${req.status === 'APPROVED' ? 'badge-success' : req.status === 'REJECTED' ? 'badge-danger' : 'badge-warning'}`}>{req.status}</span>
-                    </div>
-                    <div style={{ fontSize: '0.8rem', color: '#CBD5E1', marginBottom: 8 }}>{req.reason}</div>
-                    {['PENDING', 'PENDING_MANAGER_APPROVAL'].includes(req.status) && isManagement && (
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <button type="button" className="btn btn-danger" style={{ padding: '5px 10px', fontSize: '0.74rem' }} onClick={() => handleReviewDeletion(req.id, 'APPROVED')}>Approve Deletion</button>
-                        <button type="button" className="btn btn-secondary" style={{ padding: '5px 10px', fontSize: '0.74rem' }} onClick={() => handleReviewDeletion(req.id, 'REJECTED')}>Reject</button>
+              {reportSnapshots.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 200, overflowY: 'auto', marginBottom: 16 }}>
+                  {reportSnapshots.slice(0, 8).map((snap) => (
+                    <div key={snap.id} style={{ padding: 10, borderRadius: 8, background: 'rgba(6,12,24,0.85)', border: '1px solid rgba(16,185,129,0.25)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <div>
+                        <strong style={{ fontSize: '0.8rem', color: '#34D399' }}>[{snap.periodType || snap.reportType}] {snap.periodLabel || snap.reportType}</strong>
+                        <div style={{ fontSize: '0.72rem', color: '#94A3B8' }}>Saved {new Date(snap.createdAt).toLocaleString()}</div>
                       </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <h4 style={{ marginTop: 20, color: '#D4AF37' }}>Open Legal / Fraud / Risk Case</h4>
-            <form onSubmit={handleCreateCase} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div className="gbs-grid-2" style={{ gap: 8 }}>
-                <select className="gbs-select" value={newCase.caseType} onChange={(e) => setNewCase({ ...newCase, caseType: e.target.value })}>
-                  <option value="COMPLIANCE">KYC / AML Compliance</option>
-                  <option value="FRAUD">Fraud Investigation</option>
-                  <option value="RISK">Credit Risk Alert</option>
-                  <option value="LEGAL">Legal Recovery Filing</option>
-                </select>
-                <select className="gbs-select" value={newCase.severity} onChange={(e) => setNewCase({ ...newCase, severity: e.target.value })}>
-                  <option value="LOW">LOW</option>
-                  <option value="MEDIUM">MEDIUM</option>
-                  <option value="HIGH">HIGH</option>
-                  <option value="CRITICAL">CRITICAL</option>
-                </select>
-              </div>
-              <input type="text" required className="gbs-input" placeholder="Case Title" value={newCase.title} onChange={(e) => setNewCase({ ...newCase, title: e.target.value })} />
-              <textarea rows={2} required className="gbs-textarea" placeholder="Case evidence & investigation summary..." value={newCase.description} onChange={(e) => setNewCase({ ...newCase, description: e.target.value })} />
-              <button type="submit" className="btn btn-primary">File Case Record</button>
-            </form>
-          </div>
-
-          <div className="glass-panel" style={{ padding: 20 }}>
-            <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}>Cases ({cases.length}) &amp; Immutable Audit Trail ({auditLogs.length})</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 260, overflowY: 'auto', marginBottom: 16 }}>
-              {cases.map((c) => (
-                <div key={c.id} style={{ padding: 12, borderRadius: 8, background: 'rgba(6,12,24,0.85)', border: '1px solid rgba(0,242,254,0.22)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
-                    <div style={{ fontWeight: 700, fontSize: '0.84rem', color: '#F4E07B' }}>
-                      [{c.category || c.caseType || 'COMPLIANCE'}] {c.title}
-                    </div>
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                      <span className={`badge ${c.severity === 'CRITICAL' || c.severity === 'HIGH' ? 'badge-danger' : 'badge-gold'}`}>{c.severity}</span>
-                      <span className={`badge ${c.status === 'RESOLVED' ? 'badge-success' : 'badge-cyan'}`}>{c.status || 'OPEN'}</span>
-                    </div>
-                  </div>
-                  <div style={{ fontSize: '0.76rem', color: '#CBD5E1', marginBottom: 8 }}>{c.description}</div>
-                  {c.status !== 'RESOLVED' && (
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      {c.status !== 'INVESTIGATING' && (
-                        <button type="button" className="btn btn-secondary" style={{ padding: '4px 9px', fontSize: '0.72rem' }} onClick={() => handleUpdateCaseStatus(c.id, 'INVESTIGATING')}>
-                          Mark Investigating
-                        </button>
-                      )}
-                      <button type="button" className="btn btn-primary" style={{ padding: '4px 9px', fontSize: '0.72rem' }} onClick={() => handleUpdateCaseStatus(c.id, 'RESOLVED')}>
-                        <CheckCircle2 size={12} /> Resolve Case
+                      <button type="button" className="btn btn-secondary" style={{ padding: '4px 9px', fontSize: '0.74rem' }} onClick={() => handleDownloadWrappedCsv(snap.id, snap.periodLabel)}>
+                        <Download size={12} /> CSV
                       </button>
                     </div>
-                  )}
+                  ))}
                 </div>
-              ))}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 240, overflowY: 'auto' }}>
-              {auditLogs.slice(0, 20).map((log) => (
-                <div key={log.id} style={{ padding: 8, borderRadius: 6, background: 'rgba(4,8,16,0.75)', fontSize: '0.74rem', borderLeft: '2px solid #D4AF37' }}>
-                  <strong style={{ color: '#D4AF37' }}>{log.action}</strong> on {log.entityType} • {new Date(log.createdAt).toLocaleString()}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ===================================================================== */}
-      {/* TAB: CUSTOMER SERVICE & RECEPTION TICKETS                             */}
-      {/* ===================================================================== */}
-      {activeTab === 'SUPPORT' && (
-        <div className="gbs-grid-2">
-          <div className="glass-panel" style={{ padding: 20 }}>
-            <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>Log Borrower Support Inquiry / Front Desk Ticket</h3>
-            <form onSubmit={handleCreateTicket} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div className="gbs-grid-2" style={{ gap: 10 }}>
-                <input type="text" required className="gbs-input" placeholder="Customer / Visitor Name" value={newTicket.requesterName} onChange={(e) => setNewTicket({ ...newTicket, requesterName: e.target.value })} />
-                <input type="tel" className="gbs-input" placeholder="Customer Phone (+233...)" value={newTicket.requesterPhone} onChange={(e) => setNewTicket({ ...newTicket, requesterPhone: e.target.value })} />
-              </div>
-              <input type="text" required className="gbs-input" placeholder="Ticket Subject" value={newTicket.subject} onChange={(e) => setNewTicket({ ...newTicket, subject: e.target.value })} />
-              <div className="gbs-grid-2" style={{ gap: 10 }}>
-                <select className="gbs-select" value={newTicket.category} onChange={(e) => setNewTicket({ ...newTicket, category: e.target.value })}>
-                  <option value="REPAYMENT_INQUIRY">Repayment Inquiry</option>
-                  <option value="KYC_WALK_IN">Walk-In KYC Intake</option>
-                  <option value="MOMO_SETTLEMENT">MoMo Reconciliation</option>
-                </select>
-                <select className="gbs-select" value={newTicket.priority} onChange={(e) => setNewTicket({ ...newTicket, priority: e.target.value })}>
-                  <option value="NORMAL">NORMAL</option>
-                  <option value="HIGH">HIGH</option>
-                  <option value="URGENT">URGENT</option>
-                </select>
-              </div>
-              <textarea rows={3} required className="gbs-textarea" placeholder="Customer request notes..." value={newTicket.description} onChange={(e) => setNewTicket({ ...newTicket, description: e.target.value })} />
-              <button type="submit" className="btn btn-primary">Open Support Ticket</button>
-            </form>
-          </div>
-          <div className="glass-panel" style={{ padding: 20 }}>
-            <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}>Active Service Queue ({tickets.length})</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 420, overflowY: 'auto' }}>
-              {tickets.map((t) => (
-                <div key={t.id} style={{ padding: 12, borderRadius: 8, background: 'rgba(6,12,24,0.85)', border: '1px solid rgba(212,175,55,0.22)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <strong>{t.ticketNumber ? `${t.ticketNumber} — ` : ''}{t.subject}</strong>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <span className="badge badge-cyan">{t.priority || 'NORMAL'}</span>
-                      <span className={`badge ${t.status === 'RESOLVED' ? 'badge-success' : 'badge-gold'}`}>{t.status}</span>
-                    </div>
-                  </div>
-                  {t.requesterName && (
-                    <div style={{ fontSize: '0.73rem', color: '#94A3B8', marginTop: 2 }}>
-                      Requester: {t.requesterName}{t.requesterPhone ? ` (${t.requesterPhone})` : ''}
-                    </div>
-                  )}
-                  <div style={{ fontSize: '0.78rem', color: '#CBD5E1', marginTop: 4, marginBottom: 8 }}>{t.description}</div>
-                  {t.status !== 'RESOLVED' && (
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      {t.status !== 'IN_PROGRESS' && (
-                        <button type="button" className="btn btn-secondary" style={{ padding: '4px 9px', fontSize: '0.72rem' }} onClick={() => handleUpdateTicketStatus(t.id, 'IN_PROGRESS')}>
-                          In Progress
-                        </button>
-                      )}
-                      <button type="button" className="btn btn-primary" style={{ padding: '4px 9px', fontSize: '0.72rem' }} onClick={() => handleUpdateTicketStatus(t.id, 'RESOLVED')}>
-                        <CheckCircle2 size={12} /> Resolve Ticket
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ===================================================================== */}
-      {/* TAB: MARKETING & INVESTORS                                            */}
-      {/* ===================================================================== */}
-      {activeTab === 'GROWTH_CAPITAL' && (
-        <div className="gbs-grid-2">
-          <div className="glass-panel" style={{ padding: 20 }}>
-            <h3 style={{ margin: '0 0 12px', color: '#A78BFA' }}><Megaphone size={16} /> Marketing Outreach Campaigns ({campaigns.length})</h3>
-            <form onSubmit={handleCreateCampaign} style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
-              <input type="text" required className="gbs-input" placeholder="Campaign Name" value={newCampaign.name} onChange={(e) => setNewCampaign({ ...newCampaign, name: e.target.value })} />
-              <div className="gbs-grid-3" style={{ gap: 8 }}>
-                <select className="gbs-select" value={newCampaign.channel} onChange={(e) => setNewCampaign({ ...newCampaign, channel: e.target.value })}>
-                  <option value="SMS">SMS</option>
-                  <option value="WHATSAPP">WhatsApp</option>
-                  <option value="FIELD_DRIVE">Field Drive</option>
-                </select>
-                <input type="number" className="gbs-input" placeholder="Budget GHS" value={newCampaign.budget} onChange={(e) => setNewCampaign({ ...newCampaign, budget: e.target.value })} />
-                <input type="number" className="gbs-input" placeholder="Est. Reach" value={newCampaign.reachCount} onChange={(e) => setNewCampaign({ ...newCampaign, reachCount: e.target.value })} />
-              </div>
-              <button type="submit" className="btn btn-primary">Launch Campaign</button>
-            </form>
-            {campaigns.map((c) => (
-              <div key={c.id} style={{ padding: 10, borderRadius: 8, background: 'rgba(6,12,24,0.8)', marginBottom: 6, fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                <div>
-                  <strong>{c.name}</strong> <span className="badge badge-cyan" style={{ fontSize: '0.64rem', marginLeft: 4 }}>{c.channel}</span>
-                </div>
-                <div style={{ color: '#CBD5E1' }}>
-                  Budget: <strong>{formatGHS(c.budget)}</strong> • Leads/Reach: <strong>{c.leadsCount ?? c.reachCount ?? 0}</strong>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="glass-panel" style={{ padding: 20 }}>
-            <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}><Briefcase size={16} /> Institutional Investors &amp; Yield ({investors.length})</h3>
-            {(isFinance || isManagement || roleKey === 'INVESTOR') && (
-              <form onSubmit={handleCreateInvestor} style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
-                <div className="gbs-grid-2" style={{ gap: 8 }}>
-                  <input type="text" required className="gbs-input" placeholder="Investor Name" value={newInvestor.investorName} onChange={(e) => setNewInvestor({ ...newInvestor, investorName: e.target.value })} />
-                  <input type="email" className="gbs-input" placeholder="Email" value={newInvestor.email} onChange={(e) => setNewInvestor({ ...newInvestor, email: e.target.value })} />
-                </div>
-                <div className="gbs-grid-2" style={{ gap: 8 }}>
-                  <input type="number" required className="gbs-input" placeholder="Invested GHS" value={newInvestor.investedAmount} onChange={(e) => setNewInvestor({ ...newInvestor, investedAmount: e.target.value })} />
-                  <input type="number" step="0.1" className="gbs-input" placeholder="Yield %" value={newInvestor.interestRate} onChange={(e) => setNewInvestor({ ...newInvestor, interestRate: e.target.value })} />
-                </div>
-                <button type="submit" className="btn btn-primary">Add Capital Tranche</button>
-              </form>
-            )}
-            {investors.map((inv) => (
-              <div key={inv.id} style={{ padding: 10, borderRadius: 8, background: 'rgba(6,12,24,0.8)', marginBottom: 6, fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                <div>
-                  <strong>{inv.investorName}</strong>
-                  {inv.investorCode && <span style={{ fontSize: '0.72rem', color: '#94A3B8', marginLeft: 6 }}>({inv.investorCode})</span>}
-                </div>
-                <div>
-                  <strong style={{ color: '#34D399' }}>{formatGHS(inv.committedCapital ?? inv.investedAmount)}</strong> @ <span className="badge badge-gold">{inv.annualYieldRate ?? inv.interestRate ?? 18.5}% APR</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ===================================================================== */}
-      {/* TAB: COMPANY OWNER / MANAGEMENT STAFF BROADCAST & SELECTIVE MESSAGING */}
-      {/* ===================================================================== */}
-      {activeTab === 'STAFF_COMMS' && !isMemberOnly && !isGuarantorOnly && (
-        <div className="gbs-grid-2">
-          {isManagement && (
-            <div className="glass-panel" style={{ padding: 20 }}>
-              <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}><Send size={16} /> Send General or Selected Staff Message</h3>
-              <form onSubmit={handleSendBroadcast} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', cursor: 'pointer' }}>
-                    <input
-                      type="radio"
-                      checked={broadcastForm.sendToAll}
-                      onChange={() => setBroadcastForm({ ...broadcastForm, sendToAll: true, recipientUserIds: [] })}
-                    />
-                    General Notice (All Staff)
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', cursor: 'pointer' }}>
-                    <input
-                      type="radio"
-                      checked={!broadcastForm.sendToAll}
-                      onChange={() => setBroadcastForm({ ...broadcastForm, sendToAll: false })}
-                    />
-                    Selected Staff Members
-                  </label>
-                </div>
-
-                {!broadcastForm.sendToAll && (
-                  <div style={{ maxHeight: 140, overflowY: 'auto', padding: 8, borderRadius: 8, background: 'rgba(6,12,24,0.75)', border: '1px solid rgba(0,242,254,0.2)', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))', gap: 6 }}>
-                    {staffList.filter((s) => s.user?.id).map((s) => {
-                      const uid = s.user.id;
-                      const checked = broadcastForm.recipientUserIds.includes(uid);
-                      return (
-                        <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.75rem', cursor: 'pointer' }}>
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(e) => {
-                              const next = e.target.checked
-                                ? [...broadcastForm.recipientUserIds, uid]
-                                : broadcastForm.recipientUserIds.filter((id) => id !== uid);
-                              setBroadcastForm({ ...broadcastForm, recipientUserIds: next });
-                            }}
-                          />
-                          {s.user.firstName} {s.user.lastName}
-                        </label>
-                      );
-                    })}
-                  </div>
-                )}
-
-                <div className="gbs-grid-2" style={{ gap: 10 }}>
-                  <input type="text" required className="gbs-input" placeholder="Message Subject / Title" value={broadcastForm.title} onChange={(e) => setBroadcastForm({ ...broadcastForm, title: e.target.value })} />
-                  <select className="gbs-select" value={broadcastForm.priority} onChange={(e) => setBroadcastForm({ ...broadcastForm, priority: e.target.value })}>
-                    <option value="NORMAL">Priority: NORMAL</option>
-                    <option value="HIGH">Priority: HIGH</option>
-                    <option value="URGENT">Priority: URGENT</option>
-                  </select>
-                </div>
-                <textarea rows={4} required className="gbs-textarea" placeholder="Write directive or operational announcement for staff..." value={broadcastForm.message} onChange={(e) => setBroadcastForm({ ...broadcastForm, message: e.target.value })} />
-                <button type="submit" className="btn btn-primary" style={{ justifyContent: 'center' }}>
-                  <Send size={15} /> {broadcastForm.sendToAll ? 'Broadcast to All Staff' : 'Send to Selected Staff'}
-                </button>
-              </form>
-            </div>
-          )}
-
-          <div className="glass-panel" style={{ padding: 20 }}>
-            <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}><Bell size={16} /> Staff Communications Inbox ({broadcastInbox.length})</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 420, overflowY: 'auto' }}>
-              {broadcastInbox.map((b) => (
-                <div key={b.id} style={{ padding: 12, borderRadius: 8, background: 'rgba(6,12,24,0.85)', border: '1px solid rgba(212,175,55,0.22)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
-                    <strong style={{ color: '#F4E07B', fontSize: '0.86rem' }}>{b.title || b.subject}</strong>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <span className="badge badge-cyan">{b.targetScope === 'ALL_STAFF' ? 'ALL STAFF' : 'SELECTED'}</span>
-                      <span className="badge badge-gold">{b.priority}</span>
-                    </div>
-                  </div>
-                  <div style={{ fontSize: '0.8rem', color: '#E2E8F0', marginBottom: 6 }}>{b.message || b.body}</div>
-                  <div style={{ fontSize: '0.72rem', color: '#94A3B8' }}>
-                    From: {b.senderName || 'Management'} ({b.senderRole || 'OWNER'}) • {new Date(b.createdAt).toLocaleString()}
-                  </div>
-                </div>
-              ))}
-              {broadcastInbox.length === 0 && (
-                <p style={{ color: '#94A3B8', fontSize: '0.84rem' }}>No internal staff announcements sent yet.</p>
               )}
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* ===================================================================== */}
-      {/* TAB: VIDEO MEETINGS & WRAPPED WEEKLY/MONTHLY/YEARLY REPORTS           */}
-      {/* ===================================================================== */}
-      {activeTab === 'MEETINGS_REPORTS' && !isMemberOnly && !isGuarantorOnly && (
-        <div className="gbs-grid-2">
-          <div className="glass-panel" style={{ padding: 20 }}>
-            <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}><Video size={16} /> Executive &amp; Staff Online Meetings ({meetings.length})</h3>
-            {isManagement && (
-              <form onSubmit={handleScheduleMeeting} style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
-                <input type="text" required className="gbs-input" placeholder="Credit Committee / Executive Briefing / Daily Standup" value={newMeeting.title} onChange={(e) => setNewMeeting({ ...newMeeting, title: e.target.value })} />
-                <div className="gbs-grid-2" style={{ gap: 10 }}>
-                  <input type="datetime-local" className="gbs-input" value={newMeeting.scheduledAt} onChange={(e) => setNewMeeting({ ...newMeeting, scheduledAt: e.target.value })} />
-                  <select className="gbs-select" value={newMeeting.audienceType} onChange={(e) => setNewMeeting({ ...newMeeting, audienceType: e.target.value })}>
-                    <option value="ALL_STAFF">All Company Staff</option>
-                    <option value="EXECUTIVES_ONLY">Executives &amp; Managers Only</option>
-                    <option value="SELECTED_PARTICIPANTS">Selected Participants</option>
-                  </select>
-                </div>
-                {newMeeting.audienceType === 'SELECTED_PARTICIPANTS' && (
-                  <div style={{ maxHeight: 110, overflowY: 'auto', padding: 8, borderRadius: 8, background: 'rgba(6,12,24,0.75)', border: '1px solid rgba(0,242,254,0.2)', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(165px, 1fr))', gap: 6 }}>
-                    {staffList.filter((s) => s.user?.id).map((s) => {
-                      const uid = s.user.id;
-                      const checked = newMeeting.participantUserIds.includes(uid);
-                      return (
-                        <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.74rem', cursor: 'pointer' }}>
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(e) => {
-                              const next = e.target.checked
-                                ? [...newMeeting.participantUserIds, uid]
-                                : newMeeting.participantUserIds.filter((id) => id !== uid);
-                              setNewMeeting({ ...newMeeting, participantUserIds: next });
-                            }}
-                          />
-                          {s.user.firstName} {s.user.lastName}
-                        </label>
-                      );
-                    })}
-                  </div>
-                )}
-                <button type="submit" className="btn btn-primary">Schedule Online Meeting Room</button>
-              </form>
-            )}
-            {meetings.map((m) => (
-              <div key={m.id} style={{ padding: 10, borderRadius: 8, background: 'rgba(6,12,24,0.8)', border: '1px solid rgba(0,242,254,0.2)', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{m.topic || m.title}</div>
-                  <div style={{ fontSize: '0.72rem', color: '#94A3B8' }}>
-                    Host: {m.hostName || 'Management'} • {m.targetScope || 'ALL_STAFF'} • {new Date(m.startTime || m.scheduledAt).toLocaleString()}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  {m.joinUrl && (
-                    <a href={m.joinUrl} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ padding: '5px 10px', fontSize: '0.75rem' }}>
-                      Join Room
-                    </a>
-                  )}
-                  {isManagement && (
-                    <button
-                      type="button"
-                      className="btn btn-danger"
-                      style={{ padding: '5px 10px', fontSize: '0.74rem' }}
-                      onClick={() => handleCancelMeeting(m.id)}
-                    >
-                      Cancel
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="glass-panel" style={{ padding: 20 }}>
-            <h3 style={{ margin: '0 0 10px', color: '#D4AF37' }}><Download size={16} /> Wrap &amp; Save Weekly / Monthly / Yearly Reports</h3>
-            <p style={{ fontSize: '0.8rem', color: '#CBD5E1', marginBottom: 12 }}>
-              Roll up all staff-collected loans, repayments, customer registrations, field visits &amp; attendance shifts into saved snapshots in PostgreSQL.
-            </p>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-              {['WEEKLY', 'MONTHLY', 'YEARLY'].map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  disabled={wrappingPeriod === p}
-                  onClick={() => handleWrapReportPeriod(p)}
-                  className="btn btn-primary"
-                  style={{ padding: '7px 13px', fontSize: '0.78rem' }}
-                >
-                  {wrappingPeriod === p ? `Wrapping ${p}...` : `Wrap & Save ${p} Report`}
-                </button>
-              ))}
-            </div>
-
-            {reportSnapshots.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 200, overflowY: 'auto', marginBottom: 16 }}>
-                {reportSnapshots.slice(0, 8).map((snap) => (
-                  <div key={snap.id} style={{ padding: 10, borderRadius: 8, background: 'rgba(6,12,24,0.85)', border: '1px solid rgba(16,185,129,0.25)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <div>
-                      <strong style={{ fontSize: '0.8rem', color: '#34D399' }}>[{snap.periodType || snap.reportType}] {snap.periodLabel || snap.reportType}</strong>
-                      <div style={{ fontSize: '0.72rem', color: '#94A3B8' }}>Saved {new Date(snap.createdAt).toLocaleString()}</div>
+              <h4 style={{ margin: '0 0 10px', color: '#00F2FE', fontSize: '0.9rem' }}>Live Ledger Exports (CSV, XLSX, PDF)</h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {[
+                  { type: 'loans', label: 'Loan Portfolio & Disbursement Ledger' },
+                  { type: 'payments', label: 'MoMo, Bank & Cash Repayments Statement' },
+                  { type: 'members', label: 'Borrower KYC & Registration Directory' },
+                  { type: 'audit', label: 'Immutable Governance & Security Audit Trail' },
+                ].map((rep) => (
+                  <div key={rep.type} style={{ padding: 10, borderRadius: 10, background: 'rgba(6,12,24,0.8)', border: '1px solid rgba(212,175,55,0.2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                    <span style={{ fontSize: '0.82rem', fontWeight: 600 }}>{rep.label}</span>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button type="button" className="btn btn-secondary" style={{ padding: '5px 10px', fontSize: '0.74rem' }} onClick={() => handleDownloadReport(rep.type, 'csv')}>CSV</button>
+                      <button type="button" className="btn btn-secondary" style={{ padding: '5px 10px', fontSize: '0.74rem' }} onClick={() => handleDownloadReport(rep.type, 'xlsx')}>XLSX</button>
+                      <button type="button" className="btn btn-primary" style={{ padding: '5px 10px', fontSize: '0.74rem' }} onClick={() => handleDownloadReport(rep.type, 'pdf')}>PDF</button>
                     </div>
-                    <button type="button" className="btn btn-secondary" style={{ padding: '4px 9px', fontSize: '0.74rem' }} onClick={() => handleDownloadWrappedCsv(snap.id, snap.periodLabel)}>
-                      <Download size={12} /> CSV
-                    </button>
                   </div>
                 ))}
               </div>
-            )}
-
-            <h4 style={{ margin: '0 0 10px', color: '#00F2FE', fontSize: '0.9rem' }}>Live Ledger Exports (CSV, XLSX, PDF)</h4>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {[
-                { type: 'loans', label: 'Loan Portfolio & Disbursement Ledger' },
-                { type: 'payments', label: 'MoMo, Bank & Cash Repayments Statement' },
-                { type: 'members', label: 'Borrower KYC & Registration Directory' },
-                { type: 'audit', label: 'Immutable Governance & Security Audit Trail' },
-              ].map((rep) => (
-                <div key={rep.type} style={{ padding: 10, borderRadius: 10, background: 'rgba(6,12,24,0.8)', border: '1px solid rgba(212,175,55,0.2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                  <span style={{ fontSize: '0.82rem', fontWeight: 600 }}>{rep.label}</span>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button type="button" className="btn btn-secondary" style={{ padding: '5px 10px', fontSize: '0.74rem' }} onClick={() => handleDownloadReport(rep.type, 'csv')}>CSV</button>
-                    <button type="button" className="btn btn-secondary" style={{ padding: '5px 10px', fontSize: '0.74rem' }} onClick={() => handleDownloadReport(rep.type, 'xlsx')}>XLSX</button>
-                    <button type="button" className="btn btn-primary" style={{ padding: '5px 10px', fontSize: '0.74rem' }} onClick={() => handleDownloadReport(rep.type, 'pdf')}>PDF</button>
-                  </div>
-                </div>
-              ))}
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
