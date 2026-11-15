@@ -859,16 +859,25 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
     return matchesSearch && matchesMethod;
   });
 
-  // Tab Navigation tailorable by role with icons & live badge counts
+  const canViewLoans = isMemberOnly || isManagement || isCredit || isField || isFinance || isRiskLegal;
+  const canViewPayments = isMemberOnly || isManagement || isCredit || isField || isFinance || isRiskLegal;
+  const canViewMembers = !isMemberOnly && !isGuarantorOnly && (isManagement || isCredit || isField || isRiskLegal || roleKey === 'CUSTOMER_SERVICE' || roleKey === 'RECEPTION');
+  const canViewGuarantors = isGuarantorOnly || isManagement || isCredit || isField || isRiskLegal;
+
+  // Tab Navigation strictly scoped to each role's permitted domain
   const tabs = [
     { id: 'OVERVIEW', label: 'Overview & Hub', icon: Landmark, badge: null },
-    { id: 'LOANS', label: isMemberOnly ? 'My Loans & Apply' : 'Loans & Approvals', icon: CreditCard, badge: loans.length },
-    { id: 'PAYMENTS', label: 'Repayments (MoMo/Bank/Cash)', icon: TrendingUp, badge: payments.length },
   ];
-  if (!isMemberOnly && !isGuarantorOnly) {
+  if (canViewLoans) {
+    tabs.push({ id: 'LOANS', label: isMemberOnly ? 'My Loans & Apply' : 'Loans & Approvals', icon: CreditCard, badge: loans.length });
+  }
+  if (canViewPayments) {
+    tabs.push({ id: 'PAYMENTS', label: 'Repayments (MoMo/Bank/Cash)', icon: TrendingUp, badge: payments.length });
+  }
+  if (canViewMembers) {
     tabs.push({ id: 'MEMBERS', label: 'Borrowers & KYC', icon: Users, badge: members.length });
   }
-  if (isGuarantorOnly || !isMemberOnly) {
+  if (canViewGuarantors) {
     tabs.push({ id: 'GUARANTORS', label: isGuarantorOnly ? 'My Guarantees & Surety' : 'Guarantors', icon: ShieldCheck, badge: guarantors.length });
   }
   if (isField || isCredit || isManagement || isRiskLegal) {
@@ -982,9 +991,8 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
     // MARKETING / INVESTOR
     return [
       { title: 'Marketing Outreach & Investor Tranches', desc: 'Launch SMS/WhatsApp borrower acquisition campaigns and track investor capital yields.', icon: Megaphone, to: '/dashboard/tab/GROWTH_CAPITAL' },
-      { title: 'Portfolio Performance & Analytics', desc: 'Inspect active loan growth, disbursed capital, and repayment yields.', icon: TrendingUp, to: '/dashboard/tab/LOANS' },
-      { title: 'Customer Growth Directory', desc: 'Review registered borrowers and regional market penetration.', icon: Users, to: '/dashboard/tab/MEMBERS' },
-      { title: 'Export Executive Reports', desc: 'Download wrapped period performance snapshots and financial statements.', icon: Download, to: '/dashboard/tab/MEETINGS_REPORTS' },
+      { title: 'Team Notices & Broadcasts', desc: 'Read institutional directives and coordinate campaign launches with management.', icon: Send, to: '/dashboard/tab/STAFF_COMMS' },
+      { title: 'Meetings & Executive Reports', desc: 'Join Zoom briefings and download wrapped period performance snapshots.', icon: Download, to: '/dashboard/tab/MEETINGS_REPORTS' },
     ];
   };
   const roleQuickCommands = buildRoleQuickCommands();
@@ -1030,7 +1038,7 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                       : `${countdown.daysLeft ?? 30} Days Remaining (${countdown.subscriptionPlan || countdown.planTier || 'TRIAL_1M'})`}
                   </span>
                 )}
-                {!isMemberOnly && !isGuarantorOnly && (
+                {canViewMembers && (
                   <span className="badge badge-cyan">
                     <Users size={12} style={{ marginRight: 4 }} />
                     Registered Customers: {overview?.totalMembers ?? members.length}
