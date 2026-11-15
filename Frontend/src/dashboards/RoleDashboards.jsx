@@ -83,6 +83,7 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
   const [countdown, setCountdown] = useState(propCountdown || null);
 
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [toast, setToast] = useState(null);
   const [memberSearchInput, setMemberSearchInput] = useState('');
   const [memberSearching, setMemberSearching] = useState(false);
@@ -160,11 +161,18 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
 
   const loadDashboardData = useCallback(async () => {
     setLoading(true);
+    setLoadError('');
     try {
-      const safe = (p) => p.catch(() => ({ data: { data: null } }));
+      let coreFailure = '';
+      const safe = (p, isCore = false) => p.catch((err) => {
+        if (isCore && !coreFailure) {
+          coreFailure = err?.response?.data?.message || err?.message || 'Unable to reach live database server.';
+        }
+        return { data: { data: null } };
+      });
       // Wave 1: Core role & tenant state (small batch to avoid DB pool spikes)
       const [roleRes, countdownRes, messagesRes, productsRes] = await Promise.all([
-        safe(api.get('/dashboard/my-role')),
+        safe(api.get('/dashboard/my-role'), true),
         safe(api.get('/tenants/my/countdown')),
         safe(api.get('/tenants/my/messages')),
         safe(api.get('/enterprise/loan-products')),
@@ -195,7 +203,7 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
       } else {
         // Wave 2: Primary overview, charts & core ledgers
         const [overviewRes, loanChartRes, paymentChartRes, loansRes, membersRes, paymentsRes] = await Promise.all([
-          safe(api.get('/dashboard/overview')),
+          safe(api.get('/dashboard/overview'), true),
           safe(api.get('/dashboard/loan-chart')),
           safe(api.get('/dashboard/payment-chart')),
           safe(api.get('/loans')),
@@ -273,6 +281,9 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
         setReportSnapshots(snapRes.data?.data || []);
         setPendingStaff(pendingRes.data?.data || []);
         setAttendanceLogs(attLogsRes.data?.data || []);
+      }
+      if (coreFailure) {
+        setLoadError(coreFailure);
       }
       restoreScroll();
     } finally {
@@ -1170,6 +1181,30 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
               <strong>{m.title}:</strong> {m.body}
             </div>
           ))}
+        </div>
+      )}
+
+      {loadError && (
+        <div
+          className="glass-panel"
+          role="alert"
+          style={{
+            padding: '12px 16px',
+            marginBottom: 18,
+            borderColor: 'rgba(239, 68, 68, 0.55)',
+            background: 'rgba(127, 29, 29, 0.35)',
+            color: '#FECACA',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 12,
+            flexWrap: 'wrap',
+          }}
+        >
+          <span><strong>Live Data Sync Notice:</strong> {loadError}</span>
+          <button type="button" className="btn btn-primary" style={{ padding: '6px 14px' }} onClick={loadDashboardData}>
+            <RefreshCw size={14} /> Retry Sync
+          </button>
         </div>
       )}
 
