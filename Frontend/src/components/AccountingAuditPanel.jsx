@@ -16,8 +16,8 @@ export default function AccountingAuditPanel({ userRole = '' }) {
   const [msg, setMsg] = useState(null);
 
   const upperRole = String(userRole || '').toUpperCase();
-  const isOwnerApprover = ['SUPER_ADMIN', 'COMPANY_OWNER', 'BOARD_EXECUTIVE', 'EXECUTIVE_MANAGEMENT'].includes(upperRole);
-  const canRunAudit = ['SUPER_ADMIN', 'COMPANY_OWNER', 'EXECUTIVE_MANAGEMENT', 'FINANCE_MANAGER', 'ACCOUNTANT', 'TREASURY', 'INTERNAL_AUDIT'].includes(upperRole);
+  const isOwnerApprover = ['COMPANY_OWNER', 'BOARD_EXECUTIVE', 'EXECUTIVE_MANAGEMENT'].includes(upperRole);
+  const canRunAudit = ['COMPANY_OWNER', 'EXECUTIVE_MANAGEMENT', 'FINANCE_MANAGER', 'ACCOUNTANT', 'TREASURY', 'INTERNAL_AUDIT'].includes(upperRole);
 
   const loadAudits = useCallback(async () => {
     try {
@@ -25,7 +25,7 @@ export default function AccountingAuditPanel({ userRole = '' }) {
       const data = res.data?.data || {};
       setRecords(data.records || []);
       setLiveSummary(data.liveSummary || null);
-    } catch (_) {}
+    } catch (_) { }
   }, []);
 
   useEffect(() => { loadAudits(); }, [loadAudits]);

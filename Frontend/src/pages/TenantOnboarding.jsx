@@ -337,14 +337,14 @@ export default function TenantOnboarding() {
 
                   <div className="gbs-grid-2" style={{ gap: 10 }}>
                     <div>
-                      <label className="gbs-label">Company Owner / Admin Name *</label>
+                      <label className="gbs-label">Company Owner / Managing Director Name *</label>
                       <input type="text" required className="gbs-input" value={form.representativeName} onChange={(e) => setForm({ ...form, representativeName: e.target.value })} placeholder="Ama Boateng" />
                     </div>
                     <div>
                       <label className="gbs-label">Primary Executive Role</label>
                       <select className="gbs-select" value={form.representativeRole} onChange={(e) => setForm({ ...form, representativeRole: e.target.value })}>
                         <option value="COMPANY_OWNER">Company Owner</option>
-                        <option value="SUPER_ADMIN">Super Admin</option>
+                        <option value="EXECUTIVE_MANAGEMENT">Executive Management</option>
                       </select>
                     </div>
                   </div>

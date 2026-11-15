@@ -80,8 +80,25 @@ class EnterpriseService {
     }
     if (!collectorId) {
       const firstCol = await prisma.collector.findFirst({ where: tenantId ? { tenantId } : undefined });
-      if (!firstCol) throw new ValidationError('Active collector profile required to log field visit');
-      collectorId = firstCol.id;
+      if (firstCol) {
+        collectorId = firstCol.id;
+      } else if (userId) {
+        const userRecord = await prisma.user.findUnique({ where: { id: userId }, select: { branchId: true, tenantId: true } });
+        const createdCol = await prisma.collector.create({
+          data: {
+            tenantId: tenantId || userRecord?.tenantId || null,
+            branchId: userRecord?.branchId || null,
+            userId,
+            employeeId: `COL-${Date.now().toString().slice(-6)}`,
+            assignedZone: 'General Field Operations',
+            status: 'ON_ROUTE',
+            isActive: true,
+          },
+        });
+        collectorId = createdCol.id;
+      } else {
+        throw new ValidationError('Active collector profile required to log field visit');
+      }
     }
 
     return prisma.customerVisit.create({
@@ -115,7 +132,7 @@ class EnterpriseService {
       data: {
         tenantId: tenantId || null,
         caseCode: data.caseCode || `CMP-${Date.now().toString().slice(-6)}`,
-        category: data.category || 'COMPLIANCE',
+        category: data.category || data.caseType || 'COMPLIANCE',
         severity: data.severity || 'MEDIUM',
         title: data.title,
         description: data.description,
@@ -130,9 +147,9 @@ class EnterpriseService {
     return prisma.complianceCase.update({
       where: { id },
       data: {
-        status: data.status,
-        severity: data.severity,
-        resolution: data.resolution,
+        ...(data.status ? { status: data.status } : {}),
+        ...(data.severity ? { severity: data.severity } : {}),
+        ...(data.resolution !== undefined ? { resolution: data.resolution } : {}),
       },
     });
   }
@@ -150,9 +167,9 @@ class EnterpriseService {
       data: {
         tenantId: tenantId || null,
         ticketNumber: data.ticketNumber || `TKT-${Date.now().toString().slice(-6)}`,
-        requesterName: data.requesterName,
+        requesterName: data.requesterName || 'Walk-In Customer',
         requesterPhone: data.requesterPhone || null,
-        channel: data.channel || 'WALK_IN',
+        channel: data.channel || data.category || 'WALK_IN',
         subject: data.subject,
         description: data.description,
         priority: data.priority || 'NORMAL',
@@ -164,7 +181,10 @@ class EnterpriseService {
   async updateSupportTicket(id, data) {
     return prisma.supportTicket.update({
       where: { id },
-      data: { status: data.status, priority: data.priority },
+      data: {
+        ...(data.status ? { status: data.status } : {}),
+        ...(data.priority ? { priority: data.priority } : {}),
+      },
     });
   }
 
@@ -177,15 +197,16 @@ class EnterpriseService {
   }
 
   async createInvestor(data, tenantId) {
+    const capital = parseFloat(data.committedCapital ?? data.investedAmount ?? 0);
     return prisma.investorAccount.create({
       data: {
         tenantId: tenantId || null,
         investorCode: data.investorCode || `INV-${Date.now().toString().slice(-5)}`,
         investorName: data.investorName,
         email: data.email || null,
-        committedCapital: parseFloat(data.committedCapital || 0),
-        deployedCapital: parseFloat(data.deployedCapital || 0),
-        annualYieldRate: parseFloat(data.annualYieldRate || 18.5),
+        committedCapital: capital,
+        deployedCapital: parseFloat(data.deployedCapital ?? capital),
+        annualYieldRate: parseFloat(data.annualYieldRate ?? data.interestRate ?? 18.5),
         returnsAccrued: parseFloat(data.returnsAccrued || 0),
       },
     });
@@ -207,7 +228,7 @@ class EnterpriseService {
         name: data.name,
         channel: data.channel || 'SMS_OUTREACH',
         targetSegment: data.targetSegment || null,
-        leadsCount: parseInt(data.leadsCount || 0, 10),
+        leadsCount: parseInt(data.leadsCount ?? data.reachCount ?? 0, 10),
         conversions: parseInt(data.conversions || 0, 10),
         budget: parseFloat(data.budget || 0),
       },

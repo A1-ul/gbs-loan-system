@@ -1,6 +1,6 @@
 /**
  * GBS LOAN MANAGEMENT SYSTEM - ROLE ACCESS MATRIX
- * Maps all 30 Master Blueprint roles to granular functional permissions.
+ * Maps all 29 Master Blueprint roles to granular functional permissions.
  * Standard: Node.js CommonJS
  */
 
@@ -8,19 +8,7 @@ const { ROLES } = require('../constants/roles');
 const PERMISSIONS = require('../constants/permissions');
 
 const ACCESS_MATRIX = {
-  [ROLES.SUPER_ADMIN]: Object.values(PERMISSIONS),
-
-  [ROLES.COMPANY_OWNER]: [
-    PERMISSIONS.USERS_VIEW,
-    PERMISSIONS.USERS_VERIFY_QUALIFICATION,
-    PERMISSIONS.LOANS_VIEW,
-    PERMISSIONS.LOANS_APPROVE_TIER2,
-    PERMISSIONS.PAYMENTS_RECONCILE,
-    PERMISSIONS.AUDIT_VIEW_LOGS,
-    PERMISSIONS.AUDIT_EXPORT,
-    PERMISSIONS.ACCOUNTING_VIEW_LEDGER,
-    PERMISSIONS.RISK_VIEW_PAR_METRICS,
-  ],
+  [ROLES.COMPANY_OWNER]: Object.values(PERMISSIONS),
 
   [ROLES.EXECUTIVE_MANAGEMENT]: [
     PERMISSIONS.USERS_VIEW,
@@ -226,8 +214,9 @@ const ACCESS_MATRIX = {
 };
 
 function hasPermission(role, permission) {
-  if (!ACCESS_MATRIX[role]) return false;
-  return ACCESS_MATRIX[role].includes(permission);
+  const normalizedRole = role === 'SUPER_ADMIN' ? ROLES.COMPANY_OWNER : role;
+  if (!ACCESS_MATRIX[normalizedRole]) return false;
+  return ACCESS_MATRIX[normalizedRole].includes(permission);
 }
 
 module.exports = {

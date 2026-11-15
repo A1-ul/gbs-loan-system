@@ -12,7 +12,6 @@ const DEMO_PROV = {
 };
 
 const CANONICAL_DEMO_ROLES = [
-  { key: 'SUPER_ADMIN', slug: 'super-admin', title: 'Super Admin', category: 'Executive & Governance', dept: 'EXECUTIVE' },
   { key: 'COMPANY_OWNER', slug: 'company-owner', title: 'Company Owner', category: 'Executive & Governance', dept: 'EXECUTIVE' },
   { key: 'EXECUTIVE_MANAGEMENT', slug: 'executive-management', title: 'Executive Management', category: 'Executive & Governance', dept: 'EXECUTIVE' },
   { key: 'REGIONAL_MANAGER', slug: 'regional-manager', title: 'Regional Manager', category: 'Executive & Governance', dept: 'OPERATIONS' },
@@ -59,7 +58,7 @@ const DEMO_WALKTHROUGH_STEPS = [
     title: 'Staff Creation, Owner Approval & Daily Clock In/Out',
     role: 'BRANCH_MANAGER',
     tab: 'HR_PAYROLL',
-    summary: 'Create staff across all 30 roles with mandatory GPS Digital Address, submit to Company Owner approval queue, log Clock In / Clock Out shifts, and run payroll.',
+    summary: 'Create staff across all 29 roles with mandatory GPS Digital Address, submit to Company Owner approval queue, log Clock In / Clock Out shifts, and run payroll.',
   },
   {
     id: 'step-customers-gps',
@@ -97,7 +96,7 @@ const DEMO_WALKTHROUGH_STEPS = [
     id: 'step-comms-reports',
     step: 7,
     title: 'Staff Broadcast Messaging, Online Meetings & Wrapped Reports',
-    role: 'SUPER_ADMIN',
+    role: 'COMPANY_OWNER',
     tab: 'MEETINGS_REPORTS',
     summary: 'Broadcast notices to all or selected staff, schedule Zoom/online meetings, and wrap Weekly, Monthly, and Yearly staff/financial reports with CSV/PDF export.',
   },
@@ -402,7 +401,7 @@ async function ensureDemoSandboxEnvironment() {
 
     await prisma.loanGuarantor.create({
       data: { loanId: loan1.id, guarantorId: demoGuarantor.id },
-    }).catch(() => {});
+    }).catch(() => { });
 
     for (let i = 1; i <= 6; i++) {
       const due = i === 2 ? yesterday : new Date(now.getTime() + (i - 1) * 30 * 86400000);
@@ -454,7 +453,7 @@ async function ensureDemoSandboxEnvironment() {
           outstandingAmount: 13437.5,
         },
       },
-    }).catch(() => {});
+    }).catch(() => { });
 
     await prisma.loan.create({
       data: {
@@ -476,7 +475,68 @@ async function ensureDemoSandboxEnvironment() {
         ...DEMO_PROV,
       },
     });
+
+    // Seed a pending CASH payment so Accountant/Finance/Owner can test Cash Approval in Demo
+    await prisma.payment.create({
+      data: {
+        tenantId: demoTenant.id,
+        branchId: demoBranch.id,
+        paymentRef: 'PAY-DEMO-CASH-1002',
+        loanId: loan1.id,
+        amount: 500.0,
+        method: 'CASH',
+        status: 'AWAITING_APPROVAL',
+        receiptNumber: 'RCP-DEMO-002',
+        notes: 'Demo field cash collection awaiting Accountant approval',
+        ...DEMO_PROV,
+      },
+    }).catch(() => { });
   }
+
+  // Ensure an unsigned Demo Guarantor exists so users can test Digital Surety Agreement signing
+  const demoUnsignedGuarantorEmail = 'demo.guarantor.pending@demo.gbsloan.com';
+  const demoUnsignedGuarantorUser = await prisma.user.upsert({
+    where: { email: demoUnsignedGuarantorEmail },
+    update: { tenantId: demoTenant.id, branchId: demoBranch.id, gpsAddress: 'GA-301-8840', ...DEMO_PROV },
+    create: {
+      tenantId: demoTenant.id,
+      branchId: demoBranch.id,
+      email: demoUnsignedGuarantorEmail,
+      username: 'demo_guarantor_pending',
+      phone: '+233591000099',
+      passwordHash: demoPasswordHash,
+      role: 'GUARANTOR_PORTAL',
+      status: 'ACTIVE',
+      firstName: 'Yaw',
+      lastName: 'Osei-Bonsu (Demo Surety)',
+      address: 'Tema Community 11',
+      gpsAddress: 'GT-301-8840',
+      gpsLatitude: 5.6698,
+      gpsLongitude: -0.0166,
+      otpVerified: true,
+      isEmailVerified: true,
+      isPhoneVerified: true,
+      qualificationVerified: true,
+      ...DEMO_PROV,
+    },
+  });
+
+  await prisma.guarantor.upsert({
+    where: { userId: demoUnsignedGuarantorUser.id },
+    update: { tenantId: demoTenant.id, gpsAddress: 'GT-301-8840' },
+    create: {
+      tenantId: demoTenant.id,
+      userId: demoUnsignedGuarantorUser.id,
+      ghanaCardNumber: 'GHA-441029300-5',
+      relationship: 'Trade Association Surety (Demo)',
+      gpsAddress: 'GT-301-8840',
+      gpsLatitude: 5.6698,
+      gpsLongitude: -0.0166,
+      isHidden: false,
+      agreementSigned: false,
+      penaltyNotifyEnabled: true,
+    },
+  });
 
   // Ensure Demo Collector exists on map
   const demoCollectorEmail = 'demo.collections@demo.gbsloan.com';
@@ -523,6 +583,131 @@ async function ensureDemoSandboxEnvironment() {
     },
   });
 
+  // Seed enterprise demo records (Compliance, Support, Investor, Campaign, Meeting, Notice) idempotently
+  const [caseCount, ticketCount, investorCount, campaignCount, meetingCount, noticeCount] = await Promise.all([
+    prisma.complianceCase.count({ where: { tenantId: demoTenant.id } }),
+    prisma.supportTicket.count({ where: { tenantId: demoTenant.id } }),
+    prisma.investorAccount.count({ where: { tenantId: demoTenant.id } }),
+    prisma.marketingCampaign.count({ where: { tenantId: demoTenant.id } }),
+    prisma.zoomMeeting.count({ where: { tenantId: demoTenant.id } }),
+    prisma.staffBroadcastMessage.count({ where: { tenantId: demoTenant.id } }),
+  ]);
+
+  if (caseCount === 0) {
+    await prisma.complianceCase.createMany({
+      data: [
+        {
+          tenantId: demoTenant.id,
+          caseCode: 'CMP-DEMO-001',
+          category: 'COMPLIANCE',
+          severity: 'MEDIUM',
+          title: 'Quarterly BoG KYC & Ghana Card Verification Audit',
+          description: 'Routine review of borrower Ghana Card & GhanaPost GPS records in Osu branch.',
+          status: 'OPEN',
+        },
+        {
+          tenantId: demoTenant.id,
+          caseCode: 'FRD-DEMO-002',
+          category: 'FRAUD',
+          severity: 'HIGH',
+          title: 'Duplicate Phone Number Velocity Check',
+          description: 'Automated anomaly flag for duplicate mobile contact review during onboarding.',
+          status: 'INVESTIGATING',
+        },
+      ],
+    }).catch(() => { });
+  }
+
+  if (ticketCount === 0) {
+    await prisma.supportTicket.createMany({
+      data: [
+        {
+          tenantId: demoTenant.id,
+          ticketNumber: 'TKT-DEMO-001',
+          requesterName: 'Kofi Boateng (Demo)',
+          requesterPhone: '+233591000016',
+          subject: 'MoMo Repayment Receipt Confirmation',
+          description: 'Borrower requested SMS confirmation for installment #1.',
+          channel: 'MOMO_INQUIRY',
+          priority: 'NORMAL',
+          status: 'OPEN',
+        },
+        {
+          tenantId: demoTenant.id,
+          ticketNumber: 'TKT-DEMO-002',
+          requesterName: 'Walk-In SME Prospect',
+          requesterPhone: '+233240001122',
+          subject: 'Front Desk SME Working Capital Inquiry',
+          description: 'Walk-in visitor checked in at Reception for SME loan requirements.',
+          channel: 'WALK_IN',
+          priority: 'HIGH',
+          status: 'IN_PROGRESS',
+        },
+      ],
+    }).catch(() => { });
+  }
+
+  if (investorCount === 0) {
+    await prisma.investorAccount.create({
+      data: {
+        tenantId: demoTenant.id,
+        investorCode: 'INV-DEMO-001',
+        investorName: 'Accra Growth Capital Partners (Demo)',
+        email: 'investments@accragrowth.demo',
+        committedCapital: 250000,
+        deployedCapital: 185000,
+        annualYieldRate: 18.5,
+        returnsAccrued: 14250,
+        status: 'ACTIVE',
+      },
+    }).catch(() => { });
+  }
+
+  if (campaignCount === 0) {
+    await prisma.marketingCampaign.create({
+      data: {
+        tenantId: demoTenant.id,
+        campaignCode: 'MKT-DEMO-001',
+        name: 'Osu Market Traders SME Drive (Demo)',
+        channel: 'SMS',
+        budget: 4500,
+        leadsCount: 148,
+        conversions: 34,
+        status: 'ACTIVE',
+      },
+    }).catch(() => { });
+  }
+
+  if (meetingCount === 0) {
+    await prisma.zoomMeeting.create({
+      data: {
+        tenant: { connect: { id: demoTenant.id } },
+        zoomMeetingId: `DEMO-MEETING-${Date.now().toString().slice(-6)}`,
+        topic: 'Weekly Credit & Collections Standup (Demo)',
+        startTime: new Date(now.getTime() + 86400000),
+        duration: 45,
+        joinUrl: 'https://meet.jit.si/gbs-demo-weekly-credit-standup',
+        hostId: demoCollectorUser.id,
+        targetScope: 'ALL_STAFF',
+        status: 'SCHEDULED',
+      },
+    }).catch(() => { });
+  }
+
+  if (noticeCount === 0) {
+    await prisma.staffBroadcastMessage.create({
+      data: {
+        tenant: { connect: { id: demoTenant.id } },
+        senderUserId: demoCollectorUser.id,
+        senderName: 'Company Owner (Demo)',
+        senderRole: 'COMPANY_OWNER',
+        targetScope: 'ALL_STAFF',
+        subject: 'Welcome to the GBS Loan Management Interactive Demo',
+        body: 'All 29 role portals, pesewa-accurate loan schedules, MoMo/Cash ledgers, GPS tracking, and audit workflows operate live in this isolated sandbox.',
+      },
+    }).catch(() => { });
+  }
+
   return { demoTenant, demoBranch, demoPasswordHash };
 }
 
@@ -537,7 +722,8 @@ function getWalkthroughCatalog() {
 }
 
 async function issueDemoWalkthroughSession(roleInput = 'COMPANY_OWNER', reqMeta = {}) {
-  const normalizedRole = String(roleInput || 'COMPANY_OWNER').toUpperCase().replace(/-/g, '_').trim();
+  const rawNormalizedRole = String(roleInput || 'COMPANY_OWNER').toUpperCase().replace(/-/g, '_').trim();
+  const normalizedRole = rawNormalizedRole === 'SUPER_ADMIN' ? 'COMPANY_OWNER' : rawNormalizedRole;
   if (['DEVELOPER', 'DEVELOPER_LANDLORD', 'LEAD_DEVELOPER'].includes(normalizedRole)) {
     throw new AuthorizationError('Developer Authority Control Center is never accessible via Demo Walkthrough.');
   }
@@ -631,7 +817,7 @@ async function issueDemoWalkthroughSession(roleInput = 'COMPANY_OWNER', reqMeta 
           gpsLongitude: demoUser.gpsLongitude,
           isActive: true,
         },
-      }).catch(() => {});
+      }).catch(() => { });
     }
   }
 

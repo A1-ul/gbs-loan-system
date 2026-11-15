@@ -320,10 +320,16 @@ async function main() {
     data: { tenantId: accraTenant.id, branchId: accraBranch?.id || null, ...prov },
   });
 
+  // Migrate any legacy SUPER_ADMIN user records to COMPANY_OWNER
+  await prisma.user.updateMany({
+    where: { role: 'SUPER_ADMIN' },
+    data: { role: 'COMPANY_OWNER' },
+  });
+
   // 3. Upsert core tenant role test accounts across key roles so dashboards can be signed into and audited cleanly
   const defaultPwd = await bcrypt.hash('GbsRole@2026!', 12);
   const roleSeeds = [
-    { email: 'admin@gbsloan.com', phone: '+233200000010', role: 'SUPER_ADMIN', firstName: 'System', lastName: 'Administrator', qual: true },
+    { email: 'admin@gbsloan.com', phone: '+233200000010', role: 'COMPANY_OWNER', firstName: 'Company', lastName: 'Owner', qual: true },
     { email: 'owner@accramfi.com', phone: '+233200000011', role: 'COMPANY_OWNER', firstName: 'Kwesi', lastName: 'Boateng', qual: true },
     { email: 'manager@gbsloan.com', phone: '+233200000001', role: 'OPERATIONS_MANAGER', firstName: 'System', lastName: 'Manager', qual: true },
     { email: 'accountant@gbsloan.com', phone: '+233200000002', role: 'ACCOUNTANT', firstName: 'Finance', lastName: 'Accountant', qual: true },

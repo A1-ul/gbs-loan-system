@@ -2,6 +2,35 @@ const { prisma } = require('../config/database');
 const { verifyAccessToken } = require('../utils/jwt');
 const { AuthenticationError, AppError } = require('../utils/errors');
 
+const LOCK_STATE_TTL_MS = 5000;
+let cachedLockState = null;
+let cachedLockAt = 0;
+let lockStateInFlight = null;
+
+async function getCachedSystemLockState() {
+  const now = Date.now();
+  if (cachedLockState !== undefined && cachedLockAt > 0 && (now - cachedLockAt) < LOCK_STATE_TTL_MS) {
+    return cachedLockState;
+  }
+  if (!lockStateInFlight) {
+    lockStateInFlight = prisma.systemLockState.findFirst()
+      .then((state) => {
+        cachedLockState = state || null;
+        cachedLockAt = Date.now();
+        return cachedLockState;
+      })
+      .finally(() => {
+        lockStateInFlight = null;
+      });
+  }
+  return lockStateInFlight;
+}
+
+function invalidateLockStateCache() {
+  cachedLockState = null;
+  cachedLockAt = 0;
+}
+
 const SAFE_LOCKED_PATHS = [
   '/auth/logout',
   '/tenants/my-status',
@@ -31,8 +60,8 @@ async function authenticate(req, res, next) {
       return next(new AuthenticationError('Malformed authentication token'));
     }
 
-    // Check global platform lock state first
-    const lockState = await prisma.systemLockState.findFirst();
+    // Check global platform lock state first (cached & deduplicated to prevent pool exhaustion)
+    const lockState = await getCachedSystemLockState();
     if (lockState && (lockState.isLocked || lockState.maintenanceMode)) {
       return res.status(503).json({
         success: false,
@@ -146,4 +175,4 @@ function optionalAuth(req, res, next) {
   return authenticate(req, res, next);
 }
 
-module.exports = { authenticate, authenticateJwt: authenticate, optionalAuth };
+module.exports = { authenticate, authenticateJwt: authenticate, optionalAuth, invalidateLockStateCache };

@@ -18,6 +18,7 @@ router.get('/', authenticate, staffAndAbove, paymentController.getAll);
 router.get('/monthly-trends', authenticate, staffAndAbove, paymentController.getMonthlyTrends);
 router.get('/:id', authenticate, paymentController.getById);
 router.put('/:id/approve-cash', authenticate, cashApprovers, validate(paymentSchemas.approveCash), paymentController.approveCash);
+router.post('/:id/approve-cash', authenticate, cashApprovers, validate(paymentSchemas.approveCash), paymentController.approveCash);
 router.post('/momo/initiate', authenticate, transactionLimiter, paymentController.initiateMoMo);
 router.post('/momo/callback', paymentController.momoCallback);
 router.post('/momo/status/:ref', authenticate, paymentController.checkMoMoStatus);

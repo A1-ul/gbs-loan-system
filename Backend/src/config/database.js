@@ -1,7 +1,27 @@
 const { PrismaClient } = require('@prisma/client');
 const logger = require('../utils/logger');
 
+function buildPooledDatabaseUrl() {
+  const rawUrl = process.env.DATABASE_URL;
+  if (!rawUrl) return undefined;
+  try {
+    const parsed = new URL(rawUrl);
+    if (!parsed.searchParams.has('connection_limit')) {
+      parsed.searchParams.set('connection_limit', '25');
+    }
+    if (!parsed.searchParams.has('pool_timeout')) {
+      parsed.searchParams.set('pool_timeout', '30');
+    }
+    return parsed.toString();
+  } catch {
+    return rawUrl;
+  }
+}
+
+const pooledUrl = buildPooledDatabaseUrl();
+
 const prisma = new PrismaClient({
+  ...(pooledUrl ? { datasources: { db: { url: pooledUrl } } } : {}),
   log: [
     { level: 'warn', emit: 'event' },
     { level: 'error', emit: 'event' },

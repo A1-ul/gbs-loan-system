@@ -68,6 +68,10 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
   const [otpCode, setOtpCode] = useState('');
   const [otpNotice, setOtpNotice] = useState('');
 
+  // Role Directory Search & Filter State
+  const [roleSearch, setRoleSearch] = useState('');
+  const [roleCategoryFilter, setRoleCategoryFilter] = useState('ALL');
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -266,7 +270,43 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
     }
   };
 
-  const groupedRoles = ROLES_META.reduce((acc, r) => {
+  const handleResendOtp = async () => {
+    if (!otpPhone.trim()) {
+      setError('Enter your registered mobile number to resend OTP.');
+      return;
+    }
+    setError('');
+    setSubmitting(true);
+    try {
+      const res = await api.post('/auth/resend-otp', { phone: otpPhone.trim() });
+      const data = res.data?.data || {};
+      setSuccessMsg(
+        data.otpCode
+          ? `New OTP dispatched! Code: ${data.otpCode}`
+          : res.data?.message || 'A fresh 6-digit verification code has been dispatched to your mobile number.'
+      );
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to resend OTP code');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const roleCategories = ['ALL', ...Array.from(new Set(ROLES_META.map((r) => r.category)))];
+  const filteredRolesMeta = ROLES_META.filter((r) => {
+    if (envMode === 'demo' && r.key === 'FRAUD_INVESTIGATION') return false;
+    const matchesCat = roleCategoryFilter === 'ALL' || r.category === roleCategoryFilter;
+    const q = roleSearch.trim().toLowerCase();
+    const matchesQuery =
+      !q ||
+      r.title.toLowerCase().includes(q) ||
+      r.subtitle.toLowerCase().includes(q) ||
+      r.category.toLowerCase().includes(q) ||
+      r.slug.toLowerCase().includes(q);
+    return matchesCat && matchesQuery;
+  });
+
+  const groupedRoles = filteredRolesMeta.reduce((acc, r) => {
     acc[r.category] = acc[r.category] || [];
     acc[r.category].push(r);
     return acc;
@@ -301,7 +341,7 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
             className="btn btn-secondary"
             style={{ padding: '7px 12px', fontSize: '0.78rem', textDecoration: 'none' }}
           >
-            <Grid size={14} /> {mode === 'directory' ? 'Back to Sign In' : 'All 30 Role Portals'}
+            <Grid size={14} /> {mode === 'directory' ? 'Back to Sign In' : `All ${ROLES_META.length} Role Portals`}
           </Link>
         </div>
 
@@ -324,7 +364,7 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
               {envMode === 'demo' ? 'Isolated Demo Sandbox' : 'PostgreSQL Multi-Tenant Live'}
             </span>
             <span className="badge badge-cyan">Live SMS OTP</span>
-            <span className="badge badge-gold">30 RBAC Portals</span>
+            <span className="badge badge-gold">{ROLES_META.length} RBAC Portals</span>
           </div>
         </div>
       </div>
@@ -400,17 +440,40 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
           {mode === 'directory' ? (
             <div>
               <h2 className="gold-gradient-text" style={{ fontSize: '1.4rem', marginBottom: 6 }}>
-                Select Your Institutional Role Portal (All 30 Roles — {envMode === 'demo' ? 'Demo Mode' : 'Production'})
+                Select Your Institutional Role Portal (All {ROLES_META.length} Roles — {envMode === 'demo' ? 'Demo Mode' : 'Production'})
               </h2>
-              <p style={{ fontSize: '0.82rem', color: '#94A3B8', marginBottom: 16 }}>
+              <p style={{ fontSize: '0.82rem', color: '#94A3B8', marginBottom: 12 }}>
                 Clicking any portal opens that role page cleanly with tailored dashboards, GPS tracking, and live verification.
               </p>
+
+              <div className="filter-toolbar" style={{ marginBottom: 14 }}>
+                <input
+                  type="text"
+                  className="gbs-input"
+                  style={{ flex: '1 1 200px', padding: '8px 12px', fontSize: '0.82rem' }}
+                  placeholder="Search role title, department, or keyword..."
+                  value={roleSearch}
+                  onChange={(e) => setRoleSearch(e.target.value)}
+                />
+                <select
+                  className="gbs-select"
+                  style={{ flex: '0 1 210px', padding: '8px 12px', fontSize: '0.8rem' }}
+                  value={roleCategoryFilter}
+                  onChange={(e) => setRoleCategoryFilter(e.target.value)}
+                >
+                  {roleCategories.map((c) => (
+                    <option key={c} value={c}>
+                      {c === 'ALL' ? `All Categories (${ROLES_META.length})` : c}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {Object.entries(groupedRoles).map(([cat, items]) => (
                   <div key={cat}>
                     <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#D4AF37', textTransform: 'uppercase', marginBottom: 8 }}>
-                      {cat}
+                      {cat} ({items.length})
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 8 }}>
                       {items.map((r) => (
@@ -419,6 +482,7 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
                           to={envMode === 'demo'
                             ? `/demo-launch?role=${r.key}&tab=OVERVIEW`
                             : `/login/${r.slug}?env=production&mode=login&switch=1`}
+                          className="role-portal-card"
                           style={{
                             textAlign: 'left',
                             padding: 10,
@@ -462,11 +526,11 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
                   </h2>
                 </div>
                 <Link
-                  to={`/demo-launch?role=${roleMeta.key}&tab=OVERVIEW`}
+                  to={`/demo-launch?role=${roleMeta.key === 'FRAUD_INVESTIGATION' ? 'RISK_MANAGEMENT' : roleMeta.key}&tab=OVERVIEW`}
                   className="btn btn-primary"
                   style={{ background: 'linear-gradient(135deg, #F59E0B, #D97706)', color: '#09111F', textDecoration: 'none' }}
                 >
-                  <PlayCircle size={16} /> Launch {roleMeta.title} Demo <ArrowUpRight size={14} />
+                  <PlayCircle size={16} /> Open {roleMeta.key === 'FRAUD_INVESTIGATION' ? 'Risk & Compliance' : roleMeta.title} Demo <ArrowUpRight size={14} />
                 </Link>
               </div>
 
@@ -487,6 +551,7 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
                     <Link
                       key={step.id}
                       to={`/demo-launch?role=${encodeURIComponent(step.role)}&tab=${encodeURIComponent(step.tab)}`}
+                      className="role-portal-card"
                       style={{
                         display: 'flex',
                         justifyContent: 'space-between',
@@ -515,10 +580,10 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
               )}
 
               <div style={{ fontSize: '0.76rem', fontWeight: 700, color: '#D4AF37', marginBottom: 8, textTransform: 'uppercase' }}>
-                Or Test Any of All 30 Institutional Roles Directly
+                Or Test Any of All {ROLES_META.length} Institutional Roles Directly
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(165px, 1fr))', gap: 6, marginBottom: 16 }}>
-                {ROLES_META.map((r) => (
+                {ROLES_META.filter((r) => r.key !== 'FRAUD_INVESTIGATION').map((r) => (
                   <Link
                     key={r.key}
                     to={`/demo-launch?role=${r.key}&tab=OVERVIEW`}
@@ -595,7 +660,7 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
                   className={mode === 'register' ? 'btn btn-primary' : 'btn btn-secondary'}
                   style={{ flex: '1 1 130px', justifyContent: 'center', textDecoration: 'none' }}
                 >
-                  <UserCheck size={15} /> Register (30 Roles)
+                  <UserCheck size={15} /> Register ({ROLES_META.length} Roles)
                 </Link>
                 <Link
                   to={`/login/${roleMeta.slug}?env=production&mode=dev-hidden&switch=1`}
@@ -776,7 +841,7 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
                   </div>
 
                   <div>
-                    <label className="gbs-label">Account Role (All 30 System Roles Supported)</label>
+                    <label className="gbs-label">Account Role (All {ROLES_META.length} System Roles Supported)</label>
                     <select
                       className="gbs-select"
                       value={regData.role}
@@ -844,9 +909,20 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
                       placeholder="000000"
                     />
                   </div>
-                  <button type="submit" disabled={submitting} className="btn btn-primary" style={{ justifyContent: 'center' }}>
-                    <KeyRound size={16} /> {submitting ? 'Verifying OTP...' : 'Confirm OTP & Activate'}
-                  </button>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button type="submit" disabled={submitting} className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
+                      <KeyRound size={16} /> {submitting ? 'Verifying OTP...' : 'Confirm OTP & Activate'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={submitting}
+                      onClick={handleResendOtp}
+                      className="btn btn-secondary"
+                      style={{ justifyContent: 'center' }}
+                    >
+                      Resend OTP Code
+                    </button>
+                  </div>
                 </form>
               )}
 

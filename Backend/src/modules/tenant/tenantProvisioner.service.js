@@ -271,10 +271,20 @@ class TenantProvisionerService {
         },
       });
 
-      // Activate all pending onboarding users belonging to this tenant
+      // Activate all pending onboarding users, branches, and GIS locations belonging to this tenant
       await tx.user.updateMany({
         where: { tenantId: tenant.id, status: 'PENDING_VERIFICATION' },
         data: { status: 'ACTIVE', qualificationVerified: true, isEmailVerified: true },
+      });
+
+      await tx.branch.updateMany({
+        where: { tenantId: tenant.id, status: 'PENDING' },
+        data: { status: 'ACTIVE' },
+      });
+
+      await tx.tenantLocation.updateMany({
+        where: { tenantId: tenant.id, status: 'PENDING' },
+        data: { status: 'ACTIVE' },
       });
 
       if (!tenant.loanProducts || tenant.loanProducts.length === 0) {

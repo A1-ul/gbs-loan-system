@@ -1,26 +1,15 @@
 /**
- * Authoritative 30 Canonical GBS Loan System Roles + Developer Portal Metadata
+ * Authoritative 29 Canonical GBS Loan System Roles + Developer Portal Metadata
  * Each role has unique Login Photography and unique Dashboard Photography.
  */
 export const ROLES_META = [
-  {
-    key: 'SUPER_ADMIN',
-    slug: 'super-admin',
-    title: 'Super Admin',
-    category: 'Executive & Governance',
-    subtitle: 'Full Enterprise Institution Control, RBAC & User Qualification Governance',
-    accent: '#D4AF37',
-    loginImage: '/images/roles/login-super-admin.jpg',
-    dashboardImage: '/images/roles/dash-super-admin.jpg',
-    emailHint: 'admin@gbsloan.com',
-  },
   {
     key: 'COMPANY_OWNER',
     slug: 'company-owner',
     title: 'Company Owner',
     category: 'Executive & Governance',
-    subtitle: 'Institution Ownership, Branch Network, Subscription Standing & Capital Yield',
-    accent: '#C9A227',
+    subtitle: 'Full Institution Ownership, Enterprise Governance, Branch Network, Subscription Standing & Capital Yield',
+    accent: '#D4AF37',
     loginImage: '/images/roles/login-company-owner.jpg',
     dashboardImage: '/images/roles/dash-company-owner.jpg',
     emailHint: 'owner@accramfi.com',
@@ -338,6 +327,8 @@ export const ROLES_META = [
 export const ROLE_META_MAP = Object.fromEntries(ROLES_META.map((r) => [r.key, r]));
 
 export const CANONICAL_ROLE_ALIASES = {
+  SUPER_ADMIN: 'COMPANY_OWNER',
+  'SUPER-ADMIN': 'COMPANY_OWNER',
   MANAGER: 'BRANCH_MANAGER',
   STAFF: 'FIELD_OFFICER',
   COLLECTOR: 'COLLECTIONS',
@@ -365,7 +356,6 @@ export const ONBOARDING_META = {
 };
 
 export const USER_COUNT_DROPDOWN_ROLES = new Set([
-  'SUPER_ADMIN',
   'COMPANY_OWNER',
   'BOARD_EXECUTIVE',
   'EXECUTIVE_MANAGEMENT',

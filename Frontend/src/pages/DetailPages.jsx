@@ -685,7 +685,7 @@ export function DataMigrationPage() {
     try {
       const res = await api.get('/migration/jobs');
       setJobs(res.data?.data || []);
-    } catch (_) {}
+    } catch (_) { }
   };
 
   useEffect(() => { loadJobs(); }, []);

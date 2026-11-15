@@ -27,21 +27,14 @@ module.exports = {
     dangerRed: '#EF4444',
   },
 
-  // 30 User Dashboards and Canonical Roles as specified by Blueprint Architecture
+  // 29 User Dashboards and Canonical Roles as specified by Blueprint Architecture
   roles: {
-    SUPER_ADMIN: {
-      key: 'SUPER_ADMIN',
-      title: 'Super Admin Dashboard',
-      targetUsers: 'System Administrators',
-      hierarchy: 100,
-      scope: 'Global system provisioning, tenant creation, security controls & audit logs',
-    },
     COMPANY_OWNER: {
       key: 'COMPANY_OWNER',
       title: 'Company Owner Dashboard',
       targetUsers: 'Executive & Company Owners',
-      hierarchy: 95,
-      scope: 'Enterprise capital management, net balance sheet, dividend & profit analytics',
+      hierarchy: 100,
+      scope: 'Enterprise capital management, net balance sheet, dividend & profit analytics, global provisioning & audit logs',
     },
     EXECUTIVE_MANAGEMENT: {
       key: 'EXECUTIVE_MANAGEMENT',

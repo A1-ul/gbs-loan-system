@@ -1,11 +1,10 @@
 /**
  * GBS LOAN MANAGEMENT SYSTEM - CANONICAL ROLES DEFINITIONS
- * Blueprint Source of Truth: 30 Roles & Dashboards
+ * Blueprint Source of Truth: 29 Roles & Dashboards
  * Standard: Node.js CommonJS
  */
 
 const ROLES = {
-  SUPER_ADMIN: 'SUPER_ADMIN',
   COMPANY_OWNER: 'COMPANY_OWNER',
   EXECUTIVE_MANAGEMENT: 'EXECUTIVE_MANAGEMENT',
   REGIONAL_MANAGER: 'REGIONAL_MANAGER',
@@ -37,6 +36,7 @@ const ROLES = {
   MOBILE_STAFF: 'MOBILE_STAFF',
 
   // Backward Compatible Aliases
+  SUPER_ADMIN: 'COMPANY_OWNER',
   MANAGER: 'MANAGER',
   STAFF: 'STAFF',
   COLLECTOR: 'COLLECTOR',
@@ -46,7 +46,6 @@ const ROLES = {
 
 const ROLE_GROUPS = {
   EXECUTIVE: [
-    ROLES.SUPER_ADMIN,
     ROLES.COMPANY_OWNER,
     ROLES.EXECUTIVE_MANAGEMENT,
     ROLES.BOARD_EXECUTIVE,

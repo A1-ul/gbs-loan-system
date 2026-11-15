@@ -294,12 +294,12 @@ describe('GBS Enterprise Production Integration Suite (PostgreSQL Live)', () => 
       .set('Authorization', `Bearer ${memberToken}`);
     expect(lowPrivCounts.statusCode).toBe(403);
 
-    // Authorized HR & Super Admin succeed
+    // Authorized HR & Company Owner succeed
     const hrCounts = await request(app)
       .get('/api/v1/users/counts-by-role')
       .set('Authorization', `Bearer ${hrToken}`);
     expect(hrCounts.statusCode).toBe(200);
-    expect(hrCounts.body.data.roles.length).toBe(30);
+    expect(hrCounts.body.data.roles.length).toBe(29);
 
     // Create a temporary unqualified staff registration and remove via Admin cross-check endpoint
     const adminUser = await prisma.user.findUnique({ where: { email: 'admin@gbsloan.com' } });

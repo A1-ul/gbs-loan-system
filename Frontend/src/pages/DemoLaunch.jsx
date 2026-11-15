@@ -13,14 +13,16 @@ export default function DemoLaunch({ onAuthenticated }) {
   const requestedLocate = searchParams.get('locate') || '';
   const roleMeta = resolveRoleMeta(requestedRole);
 
-  const [statusText, setStatusText] = useState(`Preparing isolated Demo Sandbox for ${roleMeta.title}...`);
+  const safeRoleTitle = roleMeta.key === 'FRAUD_INVESTIGATION' ? 'Risk & Compliance Review' : roleMeta.title;
+
+  const [statusText, setStatusText] = useState(`Preparing isolated Demo Sandbox for ${safeRoleTitle}...`);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     setError('');
-    setStatusText(`Booting isolated Demo Walkthrough workspace for ${roleMeta.title}...`);
+    setStatusText(`Booting isolated Demo Walkthrough workspace for ${safeRoleTitle}...`);
 
     (async () => {
       try {
@@ -64,47 +66,44 @@ export default function DemoLaunch({ onAuthenticated }) {
       background: 'linear-gradient(135deg, #1E1008 0%, #3E2115 35%, #4A1826 70%, #09111F 100%)',
       color: '#F8FAFC',
     }}>
-      <div className="glass-card" style={{ maxWidth: 520, width: '100%', padding: 30, textAlign: 'center', border: '1px solid rgba(245, 158, 11, 0.45)' }}>
-        <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 10 }}>
-          <button type="button" onClick={() => navigate(-1)} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.78rem' }}>
-            <ArrowLeft size={14} /> Back
-          </button>
-        </div>
-        <div style={{
-          width: 60, height: 60, borderRadius: 16, margin: '0 auto 14px',
-          background: 'rgba(245, 158, 11, 0.16)', border: '1px solid rgba(245, 158, 11, 0.45)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FCD34D',
-        }}>
-          {error ? <AlertTriangle size={28} /> : <PlayCircle size={28} />}
-        </div>
-
-        <span className="badge badge-warning" style={{ marginBottom: 10 }}>DEMO WALKTHROUGH SANDBOX</span>
-        <h2 style={{ color: '#F4E07B', margin: '8px 0', fontSize: '1.3rem' }}>
-          {error ? 'Demo Session Launch Failed' : `Launching ${roleMeta.title} Demo`}
-        </h2>
-
-        <p style={{ color: '#CBD5E1', fontSize: '0.88rem', lineHeight: 1.55, marginBottom: 20 }}>
-          {error || statusText}
-        </p>
-
-        <div style={{ fontSize: '0.78rem', color: '#94A3B8', marginBottom: 20 }}>
-          Target Workspace Tab: <strong style={{ color: '#FDE68A' }}>{requestedTab}</strong> • Isolated Tenant: <strong style={{ color: '#38BDF8' }}>DEMO-SANDBOX</strong>
-        </div>
-
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-          {error && (
+      {error ? (
+        <div className="glass-card" style={{ maxWidth: 460, width: '100%', padding: 28, textAlign: 'center', border: '1px solid rgba(245, 158, 11, 0.45)' }}>
+          <div style={{
+            width: 54, height: 54, borderRadius: 14, margin: '0 auto 14px',
+            background: 'rgba(245, 158, 11, 0.16)', border: '1px solid rgba(245, 158, 11, 0.45)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FCD34D',
+          }}>
+            <AlertTriangle size={26} />
+          </div>
+          <h2 style={{ color: '#F4E07B', margin: '8px 0', fontSize: '1.2rem' }}>
+            Demo Session Launch Failed
+          </h2>
+          <p style={{ color: '#CBD5E1', fontSize: '0.88rem', lineHeight: 1.55, marginBottom: 20 }}>
+            {error}
+          </p>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
             <button type="button" onClick={() => setAttempt((a) => a + 1)} className="btn btn-primary">
               <RefreshCw size={15} /> Retry Demo Launch
             </button>
-          )}
-          <Link to="/login?env=demo&switch=1" className="btn btn-secondary" style={{ textDecoration: 'none' }}>
-            Back to Demo Walkthrough Directory
-          </Link>
-          <Link to="/login?env=production&switch=1" className="btn btn-secondary" style={{ textDecoration: 'none' }}>
-            Real-Life Production Login
-          </Link>
+            <Link to="/login?env=demo&switch=1" className="btn btn-secondary" style={{ textDecoration: 'none' }}>
+              Back to Demo Directory
+            </Link>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div
+          aria-label="Opening dashboard"
+          style={{
+            width: 38,
+            height: 38,
+            borderRadius: '50%',
+            border: '3px solid rgba(252, 211, 77, 0.25)',
+            borderTopColor: '#FCD34D',
+            animation: 'gbs-demo-spin 0.75s linear infinite',
+          }}
+        />
+      )}
+      <style>{`@keyframes gbs-demo-spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

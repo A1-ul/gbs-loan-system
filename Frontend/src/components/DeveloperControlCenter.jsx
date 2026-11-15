@@ -47,6 +47,8 @@ export default function DeveloperControlCenter({ onLogout }) {
   const [selectedTenantIds, setSelectedTenantIds] = useState([]);
   const [confirmDeleteId, setConfirmDeleteId] = useState('');
   const [planChoices, setPlanChoices] = useState({});
+  const [tenantSearch, setTenantSearch] = useState('');
+  const [tenantStatusFilter, setTenantStatusFilter] = useState('');
   const [guideOpen, setGuideOpen] = useState(false);
   const [envInfo, setEnvInfo] = useState({ environment: 'production', dataMode: 'PRODUCTION_LIVE' });
   const [toast, setToast] = useState(null);
@@ -518,25 +520,30 @@ export default function DeveloperControlCenter({ onLogout }) {
           />
         )}
 
-        {/* Subsystem Tabs (Every tab opens in a dedicated new page with Back button & scroll) */}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
+        {/* Subsystem Tabs (Organized Command Bar with Icons & Badges) */}
+        <div className="dashboard-tab-bar" role="navigation" aria-label="Developer Control Subsystems">
           {[
-            { id: 'TENANTS', label: `Tenant Approvals & Subscriptions (${pendingTenants.length} Pending)`, icon: Building2 },
-            { id: 'GIS_MAP', label: 'Live Tenant & Collector GIS Map', icon: MapPin },
-            { id: 'DIAGNOSTICS', label: 'AI Diagnostics, Crashes & Logs', icon: Wrench },
-            { id: 'LOCK_SUBS', label: 'System Lock/Unlock & Security Alerts', icon: ShieldAlert },
-            { id: 'BACKUPS', label: 'PgDump Backups & Recovery', icon: Database },
-            { id: 'MESSAGES', label: 'Broadcast to Tenants', icon: Send },
+            { id: 'TENANTS', label: 'Tenant Approvals & Subscriptions', icon: Building2, badge: pendingTenants.length > 0 ? `${tenants.length}+${pendingTenants.length}` : tenants.length },
+            { id: 'GIS_MAP', label: 'Live Tenant & Collector GIS Map', icon: MapPin, badge: gisData?.features?.length || 0 },
+            { id: 'DIAGNOSTICS', label: 'AI Diagnostics, Crashes & Logs', icon: Wrench, badge: crashes.length },
+            { id: 'LOCK_SUBS', label: 'System Lock/Unlock & Alerts', icon: ShieldAlert, badge: alerts.length },
+            { id: 'BACKUPS', label: 'PgDump Backups & Recovery', icon: Database, badge: backups.length },
+            { id: 'MESSAGES', label: 'Broadcast to Tenants', icon: Send, badge: messages.length },
           ].map((t) => {
             const Icon = t.icon;
+            const isCurrent = activeTab === t.id;
             return (
               <Link
                 key={t.id}
                 to={`/dev-portal/tab/${encodeURIComponent(t.id)}`}
-                className={activeTab === t.id ? 'btn btn-primary' : 'btn btn-secondary'}
+                className={`dashboard-tab-pill ${isCurrent ? 'active' : ''}`}
                 style={{ textDecoration: 'none' }}
               >
-                <Icon size={15} /> {t.label} <ArrowUpRight size={13} />
+                <Icon size={14} />
+                <span>{t.label}</span>
+                {t.badge !== null && t.badge !== undefined && (
+                  <span className="dashboard-tab-badge">{t.badge}</span>
+                )}
               </Link>
             );
           })}
@@ -627,6 +634,27 @@ export default function DeveloperControlCenter({ onLogout }) {
                   </button>
                 </div>
               </div>
+              <div className="filter-toolbar" style={{ marginBottom: 12 }}>
+                <input
+                  type="text"
+                  className="gbs-input"
+                  style={{ flex: '1 1 220px', padding: '7px 12px', fontSize: '0.82rem' }}
+                  placeholder="Filter institution by name, code, city, or representative email..."
+                  value={tenantSearch}
+                  onChange={(e) => setTenantSearch(e.target.value)}
+                />
+                <select
+                  className="gbs-select"
+                  style={{ flex: '0 1 180px', padding: '7px 12px', fontSize: '0.8rem' }}
+                  value={tenantStatusFilter}
+                  onChange={(e) => setTenantStatusFilter(e.target.value)}
+                >
+                  <option value="">All Statuses</option>
+                  <option value="ACTIVE">ACTIVE</option>
+                  <option value="LOCKED">LOCKED / SUSPENDED</option>
+                  <option value="PENDING">PENDING</option>
+                </select>
+              </div>
               <div className="data-table-container">
                 <table className="data-table">
                   <thead>
@@ -648,107 +676,123 @@ export default function DeveloperControlCenter({ onLogout }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {tenants.map((t) => {
-                      const isTenantLocked = ['LOCKED_EXPIRED', 'LOCKED', 'SUSPENDED'].includes(t.status) || t.onboardingStatus === 'LOCKED';
-                      return (
-                      <tr key={t.id}>
-                        <td>
-                          <input
-                            type="checkbox"
-                            checked={selectedTenantIds.includes(t.id)}
-                            onChange={() => toggleSelectTenant(t.id)}
-                            aria-label={`Select ${t.name}`}
-                          />
-                        </td>
-                        <td>
-                          <strong>{t.name}</strong>
-                          {t.code === 'DEMO-SANDBOX' && (
-                            <span className="badge badge-warning" style={{ marginLeft: 8, fontSize: '0.62rem' }}>
-                              DEMO SANDBOX
-                            </span>
-                          )}
-                          <div style={{ fontSize: '0.74rem', color: '#94A3B8' }}>{t.representativeEmail}</div>
-                        </td>
-                        <td>{t.code} • {t.city || 'Accra'}</td>
-                        <td>
-                          <span className={`badge ${['APPROVED', 'ACTIVE_TRIAL'].includes(t.onboardingStatus) ? 'badge-success' : t.onboardingStatus === 'REJECTED' ? 'badge-danger' : 'badge-warning'}`}>
-                            {t.onboardingStatus}
-                          </span>
-                        </td>
-                        <td>
-                          <span className={`badge ${t.status === 'ACTIVE' ? 'badge-success' : t.status === 'EXPIRING_SOON' ? 'badge-warning' : 'badge-danger'}`}>
-                            {t.status}
-                          </span>
-                        </td>
-                        <td>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontWeight: 700, color: t.isLifetime ? '#F4E07B' : (t.daysLeft || 0) <= 10 ? '#F87171' : '#34D399' }}>
-                            <Clock size={14} /> {t.isLifetime ? 'LIFETIME' : `${t.daysLeft ?? 0}d (${t.subscriptionPlan || 'TRIAL_1M'})`}
-                          </span>
-                        </td>
-                        <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                          {!['APPROVED', 'ACTIVE_TRIAL', 'ACTIVE_PAID'].includes(t.onboardingStatus) && (
-                            <button type="button" className="btn btn-primary" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => handleApproveTenant(t.id, t.name)}>
-                              Approve (1m Trial)
-                            </button>
-                          )}
-                          <select
-                            className="gbs-select"
-                            style={{ width: 118, padding: '4px 6px', fontSize: '0.73rem' }}
-                            value={planChoices[t.id] || 'PLAN_3M'}
-                            onChange={(e) => setPlanChoices((prev) => ({ ...prev, [t.id]: e.target.value }))}
-                          >
-                            <option value="TRIAL_1M">1 Mo Trial</option>
-                            <option value="PLAN_3M">3 Months</option>
-                            <option value="PLAN_6M">6 Months</option>
-                            <option value="PLAN_9M">9 Months</option>
-                            <option value="PLAN_12M">12 Months</option>
-                            <option value="LIFETIME">Lifetime</option>
-                          </select>
-                          <button type="button" className="btn btn-secondary" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => handleRenewTenant(t.id, planChoices[t.id] || 'PLAN_3M')}>
-                            Apply Plan
-                          </button>
-                          {isTenantLocked ? (
-                            <button type="button" className="btn btn-primary" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => handleUnlockTenant(t.id, 30)}>
-                              <Unlock size={12} /> Unlock
-                            </button>
-                          ) : (
-                            <button type="button" className="btn btn-danger" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => handleLockTenant(t.id)}>
-                              <Lock size={12} /> Lock
-                            </button>
-                          )}
-                          {confirmDeleteId === t.id ? (
-                            <>
-                              <button
-                                type="button"
-                                disabled={busyAction === `delete-${t.id}`}
-                                className="btn btn-danger"
-                                style={{ padding: '5px 10px', fontSize: '0.75rem', background: '#991B1B' }}
-                                onClick={() => handleDeleteTenant(t.id, t.name)}
+                    {tenants
+                      .filter((t) => {
+                        const q = tenantSearch.trim().toLowerCase();
+                        const matchesQ =
+                          !q ||
+                          (t.name || '').toLowerCase().includes(q) ||
+                          (t.code || '').toLowerCase().includes(q) ||
+                          (t.city || '').toLowerCase().includes(q) ||
+                          (t.representativeEmail || '').toLowerCase().includes(q);
+                        const isLocked = ['LOCKED_EXPIRED', 'LOCKED', 'SUSPENDED'].includes(t.status) || t.onboardingStatus === 'LOCKED';
+                        const matchesStatus =
+                          !tenantStatusFilter ||
+                          (tenantStatusFilter === 'LOCKED' ? isLocked : t.status === tenantStatusFilter || t.onboardingStatus === tenantStatusFilter);
+                        return matchesQ && matchesStatus;
+                      })
+                      .map((t) => {
+                        const isTenantLocked = ['LOCKED_EXPIRED', 'LOCKED', 'SUSPENDED'].includes(t.status) || t.onboardingStatus === 'LOCKED';
+                        return (
+                          <tr key={t.id}>
+                            <td>
+                              <input
+                                type="checkbox"
+                                checked={selectedTenantIds.includes(t.id)}
+                                onChange={() => toggleSelectTenant(t.id)}
+                                aria-label={`Select ${t.name}`}
+                              />
+                            </td>
+                            <td>
+                              <strong>{t.name}</strong>
+                              {t.code === 'DEMO-SANDBOX' && (
+                                <span className="badge badge-warning" style={{ marginLeft: 8, fontSize: '0.62rem' }}>
+                                  DEMO SANDBOX
+                                </span>
+                              )}
+                              <div style={{ fontSize: '0.74rem', color: '#94A3B8' }}>{t.representativeEmail}</div>
+                            </td>
+                            <td>{t.code} • {t.city || 'Accra'}</td>
+                            <td>
+                              <span className={`badge ${['APPROVED', 'ACTIVE_TRIAL'].includes(t.onboardingStatus) ? 'badge-success' : t.onboardingStatus === 'REJECTED' ? 'badge-danger' : 'badge-warning'}`}>
+                                {t.onboardingStatus}
+                              </span>
+                            </td>
+                            <td>
+                              <span className={`badge ${t.status === 'ACTIVE' ? 'badge-success' : t.status === 'EXPIRING_SOON' ? 'badge-warning' : 'badge-danger'}`}>
+                                {t.status}
+                              </span>
+                            </td>
+                            <td>
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontWeight: 700, color: t.isLifetime ? '#F4E07B' : (t.daysLeft || 0) <= 10 ? '#F87171' : '#34D399' }}>
+                                <Clock size={14} /> {t.isLifetime ? 'LIFETIME' : `${t.daysLeft ?? 0}d (${t.subscriptionPlan || 'TRIAL_1M'})`}
+                              </span>
+                            </td>
+                            <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                              {!['APPROVED', 'ACTIVE_TRIAL', 'ACTIVE_PAID'].includes(t.onboardingStatus) && (
+                                <button type="button" className="btn btn-primary" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => handleApproveTenant(t.id, t.name)}>
+                                  Approve (1m Trial)
+                                </button>
+                              )}
+                              <select
+                                className="gbs-select"
+                                style={{ width: 118, padding: '4px 6px', fontSize: '0.73rem' }}
+                                value={planChoices[t.id] || 'PLAN_3M'}
+                                onChange={(e) => setPlanChoices((prev) => ({ ...prev, [t.id]: e.target.value }))}
                               >
-                                Confirm Delete
+                                <option value="TRIAL_1M">1 Mo Trial</option>
+                                <option value="PLAN_3M">3 Months</option>
+                                <option value="PLAN_6M">6 Months</option>
+                                <option value="PLAN_9M">9 Months</option>
+                                <option value="PLAN_12M">12 Months</option>
+                                <option value="LIFETIME">Lifetime</option>
+                              </select>
+                              <button type="button" className="btn btn-secondary" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => handleRenewTenant(t.id, planChoices[t.id] || 'PLAN_3M')}>
+                                Apply Plan
                               </button>
-                              <button
-                                type="button"
-                                className="btn btn-secondary"
-                                style={{ padding: '5px 10px', fontSize: '0.75rem' }}
-                                onClick={() => setConfirmDeleteId('')}
-                              >
-                                Cancel
-                              </button>
-                            </>
-                          ) : (
-                            <button
-                              type="button"
-                              className="btn btn-secondary"
-                              style={{ padding: '5px 10px', fontSize: '0.75rem', borderColor: 'rgba(239,68,68,0.45)', color: '#FCA5A5' }}
-                              onClick={() => setConfirmDeleteId(t.id)}
-                            >
-                              <Trash2 size={12} /> Delete
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );})}
+                              {isTenantLocked ? (
+                                <button type="button" className="btn btn-primary" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => handleUnlockTenant(t.id, 30)}>
+                                  <Unlock size={12} /> Unlock
+                                </button>
+                              ) : (
+                                <button type="button" className="btn btn-danger" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => handleLockTenant(t.id)}>
+                                  <Lock size={12} /> Lock
+                                </button>
+                              )}
+                              {confirmDeleteId === t.id ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    disabled={busyAction === `delete-${t.id}`}
+                                    className="btn btn-danger"
+                                    style={{ padding: '5px 10px', fontSize: '0.75rem', background: '#991B1B' }}
+                                    onClick={() => handleDeleteTenant(t.id, t.name)}
+                                  >
+                                    Confirm Delete
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    style={{ padding: '5px 10px', fontSize: '0.75rem' }}
+                                    onClick={() => setConfirmDeleteId('')}
+                                  >
+                                    Cancel
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary"
+                                  style={{ padding: '5px 10px', fontSize: '0.75rem', borderColor: 'rgba(239,68,68,0.45)', color: '#FCA5A5' }}
+                                  onClick={() => setConfirmDeleteId(t.id)}
+                                >
+                                  <Trash2 size={12} /> Delete
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                   </tbody>
                 </table>
               </div>

@@ -8,17 +8,10 @@ function buildTenantFilter(tenantId) {
 async function getOverview(tenantId = null) {
   const where = buildTenantFilter(tenantId);
   const [
-    totalLoans,
-    pendingLoans,
-    underReviewLoans,
-    approvedLoans,
-    ongoingLoans,
-    overdueLoans,
-    paidLoans,
+    loanGroups,
     totalMembers,
     totalStaff,
-    totalCollectors,
-    onlineCollectors,
+    collectorGroups,
     totalGuarantors,
     loanAgg,
     paymentAgg,
@@ -26,17 +19,10 @@ async function getOverview(tenantId = null) {
     openTickets,
     openCases,
   ] = await Promise.all([
-    prisma.loan.count({ where }),
-    prisma.loan.count({ where: { ...where, status: 'PENDING' } }),
-    prisma.loan.count({ where: { ...where, status: 'UNDER_REVIEW' } }),
-    prisma.loan.count({ where: { ...where, status: 'APPROVED' } }),
-    prisma.loan.count({ where: { ...where, status: { in: ['DISBURSED', 'ONGOING'] } } }),
-    prisma.loan.count({ where: { ...where, status: { in: ['OVERDUE', 'DEFAULTED'] } } }),
-    prisma.loan.count({ where: { ...where, status: { in: ['PAID', 'CLOSED'] } } }),
+    prisma.loan.groupBy({ by: ['status'], where, _count: { id: true } }),
     prisma.member.count({ where }),
     prisma.staff.count({ where: { ...where, isActive: true } }),
-    prisma.collector.count({ where }),
-    prisma.collector.count({ where: { ...where, status: { in: ['ONLINE', 'ON_ROUTE', 'AT_LOCATION'] } } }),
+    prisma.collector.groupBy({ by: ['status'], where, _count: { id: true } }),
     prisma.guarantor.count({ where }),
     prisma.loan.aggregate({
       where,
@@ -51,6 +37,21 @@ async function getOverview(tenantId = null) {
     prisma.supportTicket.count({ where: { ...where, status: { in: ['OPEN', 'IN_PROGRESS'] } } }),
     prisma.complianceCase.count({ where: { ...where, status: { in: ['OPEN', 'INVESTIGATING'] } } }),
   ]);
+
+  const loanCountByStatus = new Map(loanGroups.map((g) => [g.status, g._count.id]));
+  const countLoanStatuses = (statuses) => statuses.reduce((sum, st) => sum + (loanCountByStatus.get(st) || 0), 0);
+  const totalLoans = loanGroups.reduce((sum, g) => sum + g._count.id, 0);
+  const pendingLoans = countLoanStatuses(['PENDING']);
+  const underReviewLoans = countLoanStatuses(['UNDER_REVIEW']);
+  const approvedLoans = countLoanStatuses(['APPROVED']);
+  const ongoingLoans = countLoanStatuses(['DISBURSED', 'ONGOING']);
+  const overdueLoans = countLoanStatuses(['OVERDUE', 'DEFAULTED']);
+  const paidLoans = countLoanStatuses(['PAID', 'CLOSED']);
+
+  const totalCollectors = collectorGroups.reduce((sum, g) => sum + g._count.id, 0);
+  const onlineCollectors = collectorGroups
+    .filter((g) => ['ONLINE', 'ON_ROUTE', 'AT_LOCATION'].includes(g.status))
+    .reduce((sum, g) => sum + g._count.id, 0);
 
   const totalPrincipal = Number(loanAgg._sum.principalAmount || 0);
   const totalReceivable = Number(loanAgg._sum.totalAmount || 0);
@@ -127,10 +128,10 @@ async function getMetrics(tenantId = null, userId = null, role = null) {
     roleBreakdown: roleCountsRaw.map((r) => ({ role: r.role, count: r._count.id })),
     systemHealth: recentHealth
       ? {
-          serverStatus: recentHealth.serverStatus,
-          databaseStatus: recentHealth.databaseStatus,
-          redisStatus: recentHealth.redisStatus,
-        }
+        serverStatus: recentHealth.serverStatus,
+        databaseStatus: recentHealth.databaseStatus,
+        redisStatus: recentHealth.redisStatus,
+      }
       : { serverStatus: 'HEALTHY', databaseStatus: 'CONNECTED', redisStatus: 'CONNECTED' },
   };
 }
@@ -210,7 +211,8 @@ async function getRoleDashboardMetrics(role, userId, tenantId = null) {
   const overview = await getOverview(tenantId);
   const where = buildTenantFilter(tenantId);
 
-  const normalized = String(role || 'MEMBER_PORTAL').toUpperCase().replace(/-/g, '_');
+  const rawNormalized = String(role || 'MEMBER_PORTAL').toUpperCase().replace(/-/g, '_');
+  const normalized = rawNormalized === 'SUPER_ADMIN' ? 'COMPANY_OWNER' : rawNormalized;
 
   const [
     recentLoans,

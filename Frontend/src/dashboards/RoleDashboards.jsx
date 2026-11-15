@@ -115,10 +115,12 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
   const [newPayment, setNewPayment] = useState({ loanId: '', amount: '', method: 'MOMO', momoPhone: '', momoNetwork: 'MTN' });
   const [newMeeting, setNewMeeting] = useState({ title: '', scheduledAt: '', audienceType: 'ALL_STAFF', participantUserIds: [] });
   const [newCase, setNewCase] = useState({ caseType: 'COMPLIANCE', severity: 'HIGH', title: '', description: '' });
-  const [newTicket, setNewTicket] = useState({ subject: '', description: '', category: 'REPAYMENT_INQUIRY', priority: 'NORMAL' });
+  const [newTicket, setNewTicket] = useState({ requesterName: '', requesterPhone: '', subject: '', description: '', category: 'REPAYMENT_INQUIRY', priority: 'NORMAL' });
   const [newCampaign, setNewCampaign] = useState({ name: '', channel: 'SMS', budget: '', reachCount: '' });
   const [newInvestor, setNewInvestor] = useState({ investorName: '', email: '', investedAmount: '', interestRate: '14.5', maturityDate: '' });
   const [visitForm, setVisitForm] = useState({ customerName: '', visitOutcome: 'PAYMENT_COLLECTED', notes: '', latitude: '5.6037', longitude: '-0.1870' });
+  const [paymentSearch, setPaymentSearch] = useState('');
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState('');
 
   const showToast = (msg, isErr = false) => {
     setToast({ msg, isErr });
@@ -131,65 +133,42 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
 
   const isMemberOnly = ['MEMBER', 'MEMBER_PORTAL'].includes(roleKey);
   const isGuarantorOnly = ['GUARANTOR', 'GUARANTOR_PORTAL'].includes(roleKey);
-  const isCompanyOwner = ['SUPER_ADMIN', 'COMPANY_OWNER'].includes(roleKey);
+  const isCompanyOwner = roleKey === 'COMPANY_OWNER';
   const isManagement = [
-    'SUPER_ADMIN', 'COMPANY_OWNER', 'BOARD_EXECUTIVE', 'EXECUTIVE_MANAGEMENT',
+    'COMPANY_OWNER', 'BOARD_EXECUTIVE', 'EXECUTIVE_MANAGEMENT',
     'REGIONAL_MANAGER', 'BRANCH_MANAGER', 'OPERATIONS_MANAGER', 'MANAGER',
   ].includes(roleKey);
-  const canBrandCompany = ['SUPER_ADMIN', 'COMPANY_OWNER', 'BRANCH_MANAGER', 'OPERATIONS_MANAGER', 'MANAGER', 'EXECUTIVE_MANAGEMENT'].includes(roleKey);
-  const canCreateStaff = ['SUPER_ADMIN', 'COMPANY_OWNER', 'BRANCH_MANAGER', 'OPERATIONS_MANAGER', 'MANAGER', 'HUMAN_RESOURCE', 'EXECUTIVE_MANAGEMENT'].includes(roleKey);
-  const isFinance = ['SUPER_ADMIN', 'COMPANY_OWNER', 'ACCOUNTANT', 'FINANCE_MANAGER', 'TREASURY', 'INTERNAL_AUDIT'].includes(roleKey);
-  const isCredit = ['SUPER_ADMIN', 'COMPANY_OWNER', 'OPERATIONS_MANAGER', 'BRANCH_MANAGER', 'MANAGER', 'LOAN_OFFICER', 'SENIOR_CREDIT_OFFICER', 'CREDIT_ANALYST', 'LOAN_UNDERWRITER'].includes(roleKey);
-  const isField = ['SUPER_ADMIN', 'COMPANY_OWNER', 'COLLECTIONS', 'FIELD_OFFICER', 'STAFF', 'MOBILE_STAFF', 'COLLECTOR', 'BRANCH_MANAGER'].includes(roleKey);
-  const isHR = ['SUPER_ADMIN', 'COMPANY_OWNER', 'HUMAN_RESOURCE', 'OPERATIONS_MANAGER', 'BRANCH_MANAGER', 'MANAGER'].includes(roleKey);
-  const isRiskLegal = ['SUPER_ADMIN', 'COMPANY_OWNER', 'LEGAL_DEPARTMENT', 'COMPLIANCE', 'INTERNAL_AUDIT', 'RISK_MANAGEMENT', 'FRAUD_INVESTIGATION', 'SECURITY_OPERATIONS'].includes(roleKey);
+  const canBrandCompany = ['COMPANY_OWNER', 'BRANCH_MANAGER', 'OPERATIONS_MANAGER', 'MANAGER', 'EXECUTIVE_MANAGEMENT'].includes(roleKey);
+  const canCreateStaff = ['COMPANY_OWNER', 'BRANCH_MANAGER', 'OPERATIONS_MANAGER', 'MANAGER', 'HUMAN_RESOURCE', 'EXECUTIVE_MANAGEMENT'].includes(roleKey);
+  const isFinance = ['COMPANY_OWNER', 'ACCOUNTANT', 'FINANCE_MANAGER', 'TREASURY', 'INTERNAL_AUDIT'].includes(roleKey);
+  const isCredit = ['COMPANY_OWNER', 'OPERATIONS_MANAGER', 'BRANCH_MANAGER', 'MANAGER', 'LOAN_OFFICER', 'SENIOR_CREDIT_OFFICER', 'CREDIT_ANALYST', 'LOAN_UNDERWRITER'].includes(roleKey);
+  const isField = ['COMPANY_OWNER', 'COLLECTIONS', 'FIELD_OFFICER', 'STAFF', 'MOBILE_STAFF', 'COLLECTOR', 'BRANCH_MANAGER'].includes(roleKey);
+  const isHR = ['COMPANY_OWNER', 'HUMAN_RESOURCE', 'OPERATIONS_MANAGER', 'BRANCH_MANAGER', 'MANAGER'].includes(roleKey);
+  const isRiskLegal = ['COMPANY_OWNER', 'LEGAL_DEPARTMENT', 'COMPLIANCE', 'INTERNAL_AUDIT', 'RISK_MANAGEMENT', 'FRAUD_INVESTIGATION', 'SECURITY_OPERATIONS'].includes(roleKey);
 
   const loadDashboardData = useCallback(async () => {
     setLoading(true);
     try {
       const safe = (p) => p.catch(() => ({ data: { data: null } }));
-      const requests = [
+      // Wave 1: Core role & tenant state (small batch to avoid DB pool spikes)
+      const [roleRes, countdownRes, messagesRes, productsRes] = await Promise.all([
         safe(api.get('/dashboard/my-role')),
         safe(api.get('/tenants/my/countdown')),
         safe(api.get('/tenants/my/messages')),
         safe(api.get('/enterprise/loan-products')),
-      ];
+      ]);
+
+      setRoleMetrics(roleRes.data?.data || null);
+      setCountdown(countdownRes.data?.data || propCountdown || null);
+      setDevMessages(messagesRes.data?.data || []);
+      setLoanProducts(productsRes.data?.data || []);
 
       if (isMemberOnly || isGuarantorOnly) {
-        requests.push(safe(api.get('/loans/my-loans')));
-        if (isGuarantorOnly) {
-          requests.push(safe(api.get('/guarantors/my-guarantees')));
-        }
-      } else {
-        requests.push(
-          safe(api.get('/dashboard/overview')),
-          safe(api.get('/dashboard/loan-chart')),
-          safe(api.get('/dashboard/payment-chart')),
-          safe(api.get('/loans')),
-          safe(api.get('/members')),
-          safe(api.get('/payments')),
-          safe(api.get('/collectors')),
-          safe(api.get('/staff')),
-          safe(api.get('/guarantors')),
-          safe(api.get('/meetings')),
-          safe(api.get('/salaries')),
-          safe(api.get('/enterprise/compliance-cases')),
-          safe(api.get('/enterprise/support-tickets')),
-          safe(api.get('/enterprise/investors')),
-          safe(api.get('/enterprise/campaigns')),
-        );
-        if (isManagement) requests.push(safe(api.get('/enterprise/deletion-requests')));
-        if (isRiskLegal || isManagement) requests.push(safe(api.get('/audit-logs')));
-      }
-
-      const res = await Promise.all(requests);
-      setRoleMetrics(res[0].data?.data || null);
-      setCountdown(res[1].data?.data || propCountdown || null);
-      setDevMessages(res[2].data?.data || []);
-      setLoanProducts(res[3].data?.data || []);
-
-      if (isMemberOnly || isGuarantorOnly) {
-        const myLoansList = res[4]?.data?.data || [];
+        const [myLoansRes, myGuaranteesRes] = await Promise.all([
+          safe(api.get('/loans/my-loans')),
+          isGuarantorOnly ? safe(api.get('/guarantors/my-guarantees')) : Promise.resolve({ data: { data: null } }),
+        ]);
+        const myLoansList = myLoansRes.data?.data || [];
         setLoans(myLoansList);
         if (isMemberOnly) {
           const derivedPayments = myLoansList
@@ -200,33 +179,55 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
             .sort((a, b) => new Date(b.paidAt || b.createdAt || 0) - new Date(a.paidAt || a.createdAt || 0));
           setPayments(derivedPayments);
         }
-        if (isGuarantorOnly && res[5]) setGuarantors(res[5].data?.data || []);
+        if (isGuarantorOnly && myGuaranteesRes) setGuarantors(myGuaranteesRes.data?.data || []);
       } else {
-        setOverview(res[4]?.data?.data || null);
-        setLoanChart(res[5]?.data?.data || []);
-        setPaymentChart(res[6]?.data?.data || []);
-        setLoans(res[7]?.data?.data || []);
-        setMembers(res[8]?.data?.data || []);
-        setPayments(res[9]?.data?.data || []);
-        setCollectors(res[10]?.data?.data || []);
-        setStaffList(res[11]?.data?.data || []);
-        setGuarantors(res[12]?.data?.data || []);
-        setMeetings(res[13]?.data?.data || []);
-        setSalaries(res[14]?.data?.data || []);
-        setCases(res[15]?.data?.data || []);
-        setTickets(res[16]?.data?.data || []);
-        setInvestors(res[17]?.data?.data || []);
-        setCampaigns(res[18]?.data?.data || []);
-        let idx = 19;
-        if (isManagement && res[idx]) {
-          setDeletionQueue(res[idx].data?.data || []);
-          idx++;
-        }
-        if ((isRiskLegal || isManagement) && res[idx]) {
-          setAuditLogs(res[idx].data?.data || []);
-        }
+        // Wave 2: Primary overview, charts & core ledgers
+        const [overviewRes, loanChartRes, paymentChartRes, loansRes, membersRes, paymentsRes] = await Promise.all([
+          safe(api.get('/dashboard/overview')),
+          safe(api.get('/dashboard/loan-chart')),
+          safe(api.get('/dashboard/payment-chart')),
+          safe(api.get('/loans')),
+          safe(api.get('/members')),
+          safe(api.get('/payments')),
+        ]);
+        setOverview(overviewRes.data?.data || null);
+        setLoanChart(loanChartRes.data?.data || []);
+        setPaymentChart(paymentChartRes.data?.data || []);
+        setLoans(loansRes.data?.data || []);
+        setMembers(membersRes.data?.data || []);
+        setPayments(paymentsRes.data?.data || []);
 
-        // Enterprise v3 secondary telemetry slices loaded cleanly in parallel
+        // Wave 3: Operations & enterprise modules
+        const [
+          collectorsRes, staffRes, guarantorsRes, meetingsRes, salariesRes,
+          casesRes, ticketsRes, investorsRes, campaignsRes,
+          deletionRes, auditRes,
+        ] = await Promise.all([
+          safe(api.get('/collectors')),
+          safe(api.get('/staff')),
+          safe(api.get('/guarantors')),
+          safe(api.get('/meetings')),
+          safe(api.get('/salaries')),
+          safe(api.get('/enterprise/compliance-cases')),
+          safe(api.get('/enterprise/support-tickets')),
+          safe(api.get('/enterprise/investors')),
+          safe(api.get('/enterprise/campaigns')),
+          isManagement ? safe(api.get('/enterprise/deletion-requests')) : Promise.resolve({ data: { data: [] } }),
+          (isRiskLegal || isManagement) ? safe(api.get('/audit-logs')) : Promise.resolve({ data: { data: [] } }),
+        ]);
+        setCollectors(collectorsRes.data?.data || []);
+        setStaffList(staffRes.data?.data || []);
+        setGuarantors(guarantorsRes.data?.data || []);
+        setMeetings(meetingsRes.data?.data || []);
+        setSalaries(salariesRes.data?.data || []);
+        setCases(casesRes.data?.data || []);
+        setTickets(ticketsRes.data?.data || []);
+        setInvestors(investorsRes.data?.data || []);
+        setCampaigns(campaignsRes.data?.data || []);
+        if (isManagement) setDeletionQueue(deletionRes.data?.data || []);
+        if (isRiskLegal || isManagement) setAuditLogs(auditRes.data?.data || []);
+
+        // Wave 4: Enterprise v3 secondary telemetry slices
         const [
           profileRes,
           attMyRes,
@@ -567,8 +568,11 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
   const handleApplyLoan = async (e) => {
     e.preventDefault();
     try {
+      const resolvedMemberId = isMemberOnly
+        ? (newLoan.memberId || roleMetrics?.datasets?.memberProfile?.id || undefined)
+        : (newLoan.memberId || undefined);
       await api.post('/loans/apply', {
-        memberId: newLoan.memberId || undefined,
+        memberId: resolvedMemberId,
         loanProductId: newLoan.loanProductId || loanProducts[0]?.id,
         principalAmount: Number(newLoan.principalAmount),
         termMonths: Number(newLoan.termMonths),
@@ -579,6 +583,70 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
       loadDashboardData();
     } catch (err) {
       showToast(err.response?.data?.message || 'Loan application failed', true);
+    }
+  };
+
+  const handleSignGuarantorAgreement = async (guarantorId) => {
+    try {
+      await api.post(`/guarantors/${guarantorId}/sign-agreement`, {});
+      showToast('Guarantor digital surety agreement signed & timestamped!');
+      loadDashboardData();
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Could not sign guarantor agreement', true);
+    }
+  };
+
+  const handleToggleGuarantorPenalty = async (guarantorId, enabled) => {
+    try {
+      await api.put(`/guarantors/${guarantorId}/penalty-notifications`, { enabled });
+      showToast(`Guarantor penalty alerts ${enabled ? 'enabled' : 'disabled'}.`);
+      loadDashboardData();
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Could not update penalty notifications', true);
+    }
+  };
+
+  const handleApproveCashPayment = async (paymentId) => {
+    try {
+      await api.put(`/payments/${paymentId}/approve-cash`, {
+        paymentId,
+        approved: true,
+        notes: 'Cash repayment verified & approved in ledger',
+      });
+      showToast('Cash repayment verified & approved in ledger!');
+      loadDashboardData();
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Cash approval failed', true);
+    }
+  };
+
+  const handleUpdateCaseStatus = async (caseId, status) => {
+    try {
+      await api.put(`/enterprise/compliance-cases/${caseId}`, { status });
+      showToast(`Case status updated to ${status}.`);
+      loadDashboardData();
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Case update failed', true);
+    }
+  };
+
+  const handleUpdateTicketStatus = async (ticketId, status) => {
+    try {
+      await api.put(`/enterprise/support-tickets/${ticketId}`, { status });
+      showToast(`Support ticket marked ${status}.`);
+      loadDashboardData();
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Ticket update failed', true);
+    }
+  };
+
+  const handleCancelMeeting = async (meetingId) => {
+    try {
+      await api.delete(`/meetings/${meetingId}`);
+      showToast('Scheduled meeting cancelled.');
+      loadDashboardData();
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Could not cancel meeting', true);
     }
   };
 
@@ -683,9 +751,12 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
   const handleCreateTicket = async (e) => {
     e.preventDefault();
     try {
-      await api.post('/enterprise/support-tickets', newTicket);
+      await api.post('/enterprise/support-tickets', {
+        ...newTicket,
+        requesterName: newTicket.requesterName || `${user?.firstName || 'Walk-In'} ${user?.lastName || 'Customer'}`.trim(),
+      });
       showToast('Customer support ticket opened!');
-      setNewTicket({ subject: '', description: '', category: 'REPAYMENT_INQUIRY', priority: 'NORMAL' });
+      setNewTicket({ requesterName: '', requesterPhone: '', subject: '', description: '', category: 'REPAYMENT_INQUIRY', priority: 'NORMAL' });
       loadDashboardData();
     } catch (err) {
       showToast(err.response?.data?.message || 'Could not open ticket', true);
@@ -733,43 +804,144 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
     return matchesSearch && matchesStatus;
   });
 
-  // Tab Navigation tailorable by role
+  const filteredPayments = payments.filter((p) => {
+    const q = paymentSearch.toLowerCase().trim();
+    const refStr = (p.transactionRef || p.receiptNumber || p.reference || p.id || '').toLowerCase();
+    const loanNum = (p.loan?.loanNumber || '').toLowerCase();
+    const matchesSearch = !q || refStr.includes(q) || loanNum.includes(q);
+    const matchesMethod = !paymentMethodFilter || p.method === paymentMethodFilter;
+    return matchesSearch && matchesMethod;
+  });
+
+  // Tab Navigation tailorable by role with icons & live badge counts
   const tabs = [
-    { id: 'OVERVIEW', label: 'Overview & Analytics' },
-    { id: 'LOANS', label: isMemberOnly ? 'My Loans & Apply' : 'Loans & Approvals' },
-    { id: 'PAYMENTS', label: 'Repayments (MoMo/Bank/Cash)' },
+    { id: 'OVERVIEW', label: 'Overview & Hub', icon: Landmark, badge: null },
+    { id: 'LOANS', label: isMemberOnly ? 'My Loans & Apply' : 'Loans & Approvals', icon: CreditCard, badge: loans.length },
+    { id: 'PAYMENTS', label: 'Repayments (MoMo/Bank/Cash)', icon: TrendingUp, badge: payments.length },
   ];
   if (!isMemberOnly && !isGuarantorOnly) {
-    tabs.push({ id: 'MEMBERS', label: 'Borrowers & KYC' });
+    tabs.push({ id: 'MEMBERS', label: 'Borrowers & KYC', icon: Users, badge: members.length });
   }
   if (isGuarantorOnly || !isMemberOnly) {
-    tabs.push({ id: 'GUARANTORS', label: 'Guarantors' });
+    tabs.push({ id: 'GUARANTORS', label: isGuarantorOnly ? 'My Guarantees & Surety' : 'Guarantors', icon: ShieldCheck, badge: guarantors.length });
   }
   if (isField || isCredit || isManagement || isRiskLegal) {
-    tabs.push({ id: 'FIELD_OPS', label: 'Live GPS Map & Visits' });
+    tabs.push({ id: 'FIELD_OPS', label: 'Live GPS Map & Visits', icon: MapPin, badge: collectors.length });
   }
   if (isHR || isFinance || isManagement) {
-    tabs.push({ id: 'HR_PAYROLL', label: 'Staff, Approvals & Attendance' });
+    tabs.push({ id: 'HR_PAYROLL', label: 'Staff, Approvals & Attendance', icon: UserPlus, badge: pendingStaff.length > 0 ? `${staffList.length}+${pendingStaff.length}` : staffList.length });
   }
   if (isFinance || isManagement || isRiskLegal) {
-    tabs.push({ id: 'ACCOUNTING_AUDIT', label: 'Accountant Audit & Sign-Off' });
+    tabs.push({ id: 'ACCOUNTING_AUDIT', label: 'Accountant Audit & Sign-Off', icon: Calculator, badge: null });
   }
   if (canBrandCompany) {
-    tabs.push({ id: 'BRANDING_CCTV', label: 'Company Branding, Plans & CCTV' });
+    tabs.push({ id: 'BRANDING_CCTV', label: 'Branding, Plans & CCTV', icon: Building2, badge: null });
   }
   if (isRiskLegal || isManagement) {
-    tabs.push({ id: 'RISK_AUDIT', label: 'Compliance, Audit & Deletions' });
+    tabs.push({ id: 'RISK_AUDIT', label: 'Compliance, Audit & Deletions', icon: AlertTriangle, badge: cases.length + deletionQueue.length });
   }
   if (roleKey === 'CUSTOMER_SERVICE' || roleKey === 'RECEPTION' || isManagement) {
-    tabs.push({ id: 'SUPPORT', label: 'Support & Front Desk' });
+    tabs.push({ id: 'SUPPORT', label: 'Support & Front Desk', icon: Bell, badge: tickets.length });
   }
   if (roleKey === 'MARKETING' || roleKey === 'INVESTOR' || isManagement) {
-    tabs.push({ id: 'GROWTH_CAPITAL', label: 'Marketing & Investors' });
+    tabs.push({ id: 'GROWTH_CAPITAL', label: 'Marketing & Investors', icon: Megaphone, badge: campaigns.length + investors.length });
   }
   if (!isMemberOnly && !isGuarantorOnly) {
-    tabs.push({ id: 'STAFF_COMMS', label: `Staff Messaging (${broadcastInbox.length})` });
-    tabs.push({ id: 'MEETINGS_REPORTS', label: 'Meetings & Wrapped Reports' });
+    tabs.push({ id: 'STAFF_COMMS', label: 'Staff Messaging', icon: Send, badge: broadcastInbox.length });
+    tabs.push({ id: 'MEETINGS_REPORTS', label: 'Meetings & Reports', icon: Video, badge: meetings.length });
   }
+
+  // Role-Tailored Quick-Action Command Hub for all 29 Canonical Roles
+  const buildRoleQuickCommands = () => {
+    if (isMemberOnly) {
+      return [
+        { title: 'Apply for New Loan', desc: 'Submit a new personal or SME facility request with instant installment preview.', icon: Plus, to: '/dashboard/tab/LOANS' },
+        { title: 'Pay Installment via MoMo', desc: 'Make an instant MTN MoMo, Telecel Cash, or Bank repayment toward your loan.', icon: CreditCard, to: '/dashboard/tab/PAYMENTS' },
+        { title: 'Inspect Loan Schedule', desc: 'View your active loan balance, installment breakdown, and payment receipts.', icon: Landmark, to: loans[0] ? `/loans/${loans[0].id}` : '/dashboard/tab/LOANS' },
+        { title: 'Security & Biometric Settings', desc: 'Manage 2FA authenticator, Voice ID passphrase, and Facial verification.', icon: ShieldCheck, to: '/profile/security' },
+      ];
+    }
+    if (isGuarantorOnly) {
+      return [
+        { title: 'Review & Sign Surety Agreements', desc: 'Inspect guaranteed borrower facilities and digitally sign surety agreements.', icon: ShieldCheck, to: '/dashboard/tab/GUARANTORS' },
+        { title: 'Inspect Guaranteed Loans', desc: 'Check live repayment standing and outstanding balances on guaranteed loans.', icon: Landmark, to: '/dashboard/tab/LOANS' },
+        { title: 'Make Surety Repayment', desc: 'Submit a MoMo or Bank payment on behalf of a guaranteed borrower.', icon: CreditCard, to: '/dashboard/tab/PAYMENTS' },
+        { title: 'Security & Alert Preferences', desc: 'Configure penalty notification alerts and biometric security settings.', icon: Bell, to: '/profile/security' },
+      ];
+    }
+    if (isCompanyOwner || ['BOARD_EXECUTIVE', 'EXECUTIVE_MANAGEMENT'].includes(roleKey)) {
+      return [
+        { title: 'Company Branding, Plans & CCTV', desc: 'Customize institution name/logo, renew subscription plan, and view live branch CCTV.', icon: Building2, to: '/dashboard/tab/BRANDING_CCTV' },
+        { title: `Approve Staff & Payroll (${pendingStaff.length} Pending)`, desc: 'Review pending staff accounts, provision new roles, and oversee monthly payroll.', icon: UserPlus, to: '/dashboard/tab/HR_PAYROLL' },
+        { title: 'Accountant Ledger Sign-Off', desc: 'Review and sign off balanced or flagged general ledger audits.', icon: Calculator, to: '/dashboard/tab/ACCOUNTING_AUDIT' },
+        { title: 'Meetings & Wrapped Reports', desc: 'Host executive online meetings and wrap Weekly/Monthly/Yearly snapshots.', icon: Video, to: '/dashboard/tab/MEETINGS_REPORTS' },
+      ];
+    }
+    if (['REGIONAL_MANAGER', 'BRANCH_MANAGER', 'OPERATIONS_MANAGER', 'MANAGER'].includes(roleKey)) {
+      return [
+        { title: `Review Loan Approvals (${loans.filter((l) => ['PENDING', 'UNDER_REVIEW'].includes(l.status)).length})`, desc: 'Appraise, approve, or disburse pending borrower loan facilities.', icon: Landmark, to: '/dashboard/tab/LOANS' },
+        { title: 'Live GPS Collector & Customer Map', desc: 'Track field collectors and locate borrowers or guarantors by phone or GPS.', icon: MapPin, to: '/dashboard/tab/FIELD_OPS' },
+        { title: 'Branch Staff & Daily Attendance', desc: 'Create branch staff accounts and audit daily clock-in/clock-out logs.', icon: Users, to: '/dashboard/tab/HR_PAYROLL' },
+        { title: 'Deletion Approvals & Compliance', desc: `Review ${deletionQueue.length} pending deletion requests and compliance cases.`, icon: ShieldCheck, to: '/dashboard/tab/RISK_AUDIT' },
+      ];
+    }
+    if (['LOAN_OFFICER', 'SENIOR_CREDIT_OFFICER', 'CREDIT_ANALYST', 'LOAN_UNDERWRITER'].includes(roleKey)) {
+      return [
+        { title: 'Originate & Underwrite Loans', desc: 'Create new loan applications, run 5Cs credit scoring, and approve facilities.', icon: Landmark, to: '/dashboard/tab/LOANS' },
+        { title: 'Onboard Borrower & Verify KYC', desc: 'Register borrowers with Ghana Card and mandatory GhanaPost GPS Digital Address.', icon: Users, to: '/dashboard/tab/MEMBERS' },
+        { title: 'Register & Verify Guarantors', desc: 'Attach loan guarantors, record GPS addresses, and verify surety agreements.', icon: ShieldCheck, to: '/dashboard/tab/GUARANTORS' },
+        { title: 'Field Residence Verification Map', desc: 'Locate borrower business/residence coordinates on Google Live Map.', icon: MapPin, to: '/dashboard/tab/FIELD_OPS' },
+      ];
+    }
+    if (['COLLECTIONS', 'FIELD_OFFICER', 'MOBILE_STAFF', 'STAFF', 'COLLECTOR'].includes(roleKey)) {
+      return [
+        { title: 'Live Emergency GPS Locator & Visit Log', desc: 'Locate any borrower or guarantor by phone/GPS and log field collection visits.', icon: MapPin, to: '/dashboard/tab/FIELD_OPS' },
+        { title: 'Record Field Repayment (MoMo / Cash)', desc: 'Log borrower MoMo or cash collections directly into the loan ledger.', icon: CreditCard, to: '/dashboard/tab/PAYMENTS' },
+        { title: 'Search Borrowers & Confidential Records', desc: 'Look up borrower phone contacts, GhanaPost GPS addresses, and overdue schedules.', icon: Search, to: '/dashboard/tab/MEMBERS' },
+        { title: 'Guarantor Recovery Follow-Up', desc: 'Inspect guarantor contacts and surety obligations for overdue accounts.', icon: ShieldCheck, to: '/dashboard/tab/GUARANTORS' },
+      ];
+    }
+    if (['ACCOUNTANT', 'FINANCE_MANAGER', 'TREASURY'].includes(roleKey)) {
+      return [
+        { title: 'Run Ledger Reconciliation & Audit', desc: 'Compute pesewa-accurate ledger totals and submit audit report to Company Owner.', icon: Calculator, to: '/dashboard/tab/ACCOUNTING_AUDIT' },
+        { title: 'Verify & Approve Repayments', desc: 'Reconcile MoMo, Bank Transfer, and Cash repayments across all active loans.', icon: CreditCard, to: '/dashboard/tab/PAYMENTS' },
+        { title: 'Process Monthly Staff Payroll', desc: 'Generate monthly salary runs and disburse staff net salaries.', icon: Briefcase, to: '/dashboard/tab/HR_PAYROLL' },
+        { title: 'Export Financial Ledgers (CSV/XLSX/PDF)', desc: 'Download certified loan, payment, and audit statements.', icon: Download, to: '/dashboard/tab/MEETINGS_REPORTS' },
+      ];
+    }
+    if (roleKey === 'HUMAN_RESOURCE') {
+      return [
+        { title: 'Create Staff & Manage Roster', desc: `Provision staff across all ${ROLES_META.length} roles with GPS Digital Address.`, icon: UserPlus, to: '/dashboard/tab/HR_PAYROLL' },
+        { title: 'Qualification Cross-Check Portal', desc: 'Verify newly registered staff credentials and approve or remove unqualified accounts.', icon: ShieldCheck, to: '/admin/users-crosscheck' },
+        { title: 'Broadcast HR Notice to Staff', desc: 'Send general or targeted policy announcements to institution employees.', icon: Send, to: '/dashboard/tab/STAFF_COMMS' },
+        { title: 'Schedule Staff Online Meeting', desc: 'Create online training or HR review sessions for staff.', icon: Video, to: '/dashboard/tab/MEETINGS_REPORTS' },
+      ];
+    }
+    if (['LEGAL_DEPARTMENT', 'COMPLIANCE', 'INTERNAL_AUDIT', 'RISK_MANAGEMENT', 'FRAUD_INVESTIGATION', 'SECURITY_OPERATIONS'].includes(roleKey)) {
+      return [
+        { title: `Manage ${roleMeta.title} Cases (${cases.length})`, desc: 'Open, investigate, and resolve AML, KYC, fraud, legal, or security cases.', icon: AlertTriangle, to: '/dashboard/tab/RISK_AUDIT' },
+        { title: 'Inspect Ledger Audits & Discrepancies', desc: 'Review accountant reconciliation reports and financial variance flags.', icon: Calculator, to: '/dashboard/tab/ACCOUNTING_AUDIT' },
+        { title: 'Emergency GPS & Field Audit Map', desc: 'Verify borrower, guarantor, and collector locations on the live GPS map.', icon: MapPin, to: '/dashboard/tab/FIELD_OPS' },
+        { title: 'Export Governance Audit Trail', desc: 'Download immutable system activity logs in CSV, XLSX, or PDF.', icon: Download, to: '/dashboard/tab/MEETINGS_REPORTS' },
+      ];
+    }
+    if (['CUSTOMER_SERVICE', 'RECEPTION'].includes(roleKey)) {
+      return [
+        { title: `Front Desk & Support Queue (${tickets.length})`, desc: 'Log walk-in visitor inquiries, repayment questions, and resolve customer tickets.', icon: Bell, to: '/dashboard/tab/SUPPORT' },
+        { title: 'Register Walk-In Borrower KYC', desc: 'Onboard new customers with Ghana Card and mandatory GPS Digital Address.', icon: Users, to: '/dashboard/tab/MEMBERS' },
+        { title: 'Assist Customer Loan Application', desc: 'Help borrowers submit a new loan application or check approval status.', icon: Landmark, to: '/dashboard/tab/LOANS' },
+        { title: 'Check Borrower Repayment Receipt', desc: 'Look up customer MoMo or cash payment status and receipt numbers.', icon: CreditCard, to: '/dashboard/tab/PAYMENTS' },
+      ];
+    }
+    // MARKETING / INVESTOR
+    return [
+      { title: 'Marketing Outreach & Investor Tranches', desc: 'Launch SMS/WhatsApp borrower acquisition campaigns and track investor capital yields.', icon: Megaphone, to: '/dashboard/tab/GROWTH_CAPITAL' },
+      { title: 'Portfolio Performance & Analytics', desc: 'Inspect active loan growth, disbursed capital, and repayment yields.', icon: TrendingUp, to: '/dashboard/tab/LOANS' },
+      { title: 'Customer Growth Directory', desc: 'Review registered borrowers and regional market penetration.', icon: Users, to: '/dashboard/tab/MEMBERS' },
+      { title: 'Export Executive Reports', desc: 'Download wrapped period performance snapshots and financial statements.', icon: Download, to: '/dashboard/tab/MEETINGS_REPORTS' },
+    ];
+  };
+  const roleQuickCommands = buildRoleQuickCommands();
 
   const isTabPage = activeTab !== 'OVERVIEW';
   const currentTabLabel = tabs.find((t) => t.id === activeTab)?.label || activeTab;
@@ -952,32 +1124,68 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
 
       {toast && (
         <div
+          role="status"
+          aria-live="polite"
           style={{
+            position: 'sticky',
+            top: 12,
+            zIndex: 45,
             padding: '12px 16px',
             marginBottom: 18,
             borderRadius: 10,
-            background: toast.isErr ? 'rgba(239,68,68,0.18)' : 'rgba(16,185,129,0.18)',
+            background: toast.isErr ? 'rgba(127, 29, 29, 0.94)' : 'rgba(6, 78, 59, 0.94)',
             border: `1px solid ${toast.isErr ? '#EF4444' : '#10B981'}`,
-            color: toast.isErr ? '#FCA5A5' : '#34D399',
+            color: toast.isErr ? '#FECACA' : '#A7F3D0',
             fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            boxShadow: '0 10px 28px rgba(2, 6, 23, 0.65)',
+            backdropFilter: 'blur(10px)',
           }}
         >
-          {toast.msg}
+          <span>{toast.msg}</span>
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            aria-label="Dismiss notification"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'inherit',
+              cursor: 'pointer',
+              fontWeight: 800,
+              fontSize: '1rem',
+              lineHeight: 1,
+              padding: '2px 6px',
+            }}
+          >
+            ×
+          </button>
         </div>
       )}
 
-      {/* 3. WORKSPACE SUB-NAVIGATION TABS (Every tab opens as a dedicated scrollable page with Back button) */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
-        {tabs.map((t) => (
-          <Link
-            key={t.id}
-            to={t.id === 'OVERVIEW' ? '/dashboard' : `/dashboard/tab/${encodeURIComponent(t.id)}`}
-            className={activeTab === t.id ? 'btn btn-primary' : 'btn btn-secondary'}
-            style={{ textDecoration: 'none' }}
-          >
-            {t.label} <ArrowUpRight size={13} />
-          </Link>
-        ))}
+      {/* 3. WORKSPACE SUB-NAVIGATION TABS (Organized Command Bar with Icons & Live Badge Counts) */}
+      <div className="dashboard-tab-bar" role="navigation" aria-label="Workspace Sections">
+        {tabs.map((t) => {
+          const TabIcon = t.icon || Landmark;
+          const isCurrent = activeTab === t.id;
+          return (
+            <Link
+              key={t.id}
+              to={t.id === 'OVERVIEW' ? '/dashboard' : `/dashboard/tab/${encodeURIComponent(t.id)}`}
+              className={`dashboard-tab-pill ${isCurrent ? 'active' : ''}`}
+              style={{ textDecoration: 'none' }}
+            >
+              <TabIcon size={14} />
+              <span>{t.label}</span>
+              {t.badge !== null && t.badge !== undefined && (
+                <span className="dashboard-tab-badge">{t.badge}</span>
+              )}
+            </Link>
+          );
+        })}
       </div>
 
       {!tabs.some((t) => t.id === activeTab) && (
@@ -1054,6 +1262,51 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
             </div>
           </div>
 
+          {/* Role-Tailored Quick-Action Command Hub (All 29 Canonical Roles) */}
+          <div className="glass-panel" style={{ padding: 20, borderColor: 'rgba(212, 175, 55, 0.35)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
+              <div>
+                <h3 style={{ margin: 0, color: '#D4AF37', fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <ShieldCheck size={18} /> {roleMeta.title} — Quick-Action Command Hub
+                </h3>
+                <div style={{ fontSize: '0.78rem', color: '#94A3B8', marginTop: 2 }}>
+                  Tailored operational commands and direct workspace shortcuts for {roleMeta.category} ({roleMeta.focus?.join(' • ') || 'Live Operations'}).
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {(roleMeta.focus || []).map((f) => (
+                  <span key={f} className="badge badge-gold" style={{ fontSize: '0.68rem' }}>{f}</span>
+                ))}
+              </div>
+            </div>
+            <div className="quick-command-grid">
+              {roleQuickCommands.map((cmd) => {
+                const CmdIcon = cmd.icon || Landmark;
+                return (
+                  <Link
+                    key={cmd.title}
+                    to={cmd.to}
+                    className="quick-command-card"
+                    style={{ textDecoration: 'none' }}
+                  >
+                    <div className="quick-command-icon">
+                      <CmdIcon size={18} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: '0.86rem', color: '#F8FAFC', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+                        <span>{cmd.title}</span>
+                        <ArrowUpRight size={13} color="#D4AF37" />
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#94A3B8', marginTop: 4, lineHeight: 1.4 }}>
+                        {cmd.desc}
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+
           {USER_COUNT_DROPDOWN_ROLES.has(roleKey) && (
             <RegistersCrossCheckPanel
               userRole={roleKey}
@@ -1070,7 +1323,7 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                 </h3>
                 <div style={{ fontSize: '0.78rem', color: '#CBD5E1', marginTop: 2 }}>
                   {isCompanyOwner
-                    ? 'Create staff across all 30 roles and approve branch-submitted staff registrations.'
+                    ? `Create staff across all ${ROLES_META.length} roles and approve branch-submitted staff registrations.`
                     : 'Branch Managers & HR can create new staff with GPS Digital Address; Company Owner approves final portal access.'}
                 </div>
               </div>
@@ -1223,6 +1476,112 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
             </div>
           )}
 
+          {/* Self-Service Summary Cards for Borrower (Member Portal) & Guarantor Portal */}
+          {(isMemberOnly || isGuarantorOnly) && (
+            <div className="gbs-grid-2">
+              <div className="glass-panel" style={{ padding: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <h3 style={{ margin: 0, color: '#D4AF37', fontSize: '1rem' }}>
+                    {isMemberOnly ? `My Loan Facilities (${loans.length})` : `Guaranteed Loan Facilities (${loans.length})`}
+                  </h3>
+                  <Link to="/dashboard/tab/LOANS" className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.76rem', textDecoration: 'none' }}>
+                    {isMemberOnly ? 'Apply / View All' : 'Inspect Loans'} <ArrowUpRight size={12} />
+                  </Link>
+                </div>
+                {loans.length === 0 ? (
+                  <p style={{ color: '#94A3B8', fontSize: '0.84rem' }}>
+                    {isMemberOnly ? 'No active loans yet. Click "Apply / View All" to submit a new loan application.' : 'No guaranteed loans linked to your profile yet.'}
+                  </p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {loans.slice(0, 5).map((l) => (
+                      <div key={l.id} style={{ padding: 12, borderRadius: 10, background: 'rgba(6,12,24,0.8)', border: '1px solid rgba(212,175,55,0.2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                        <div>
+                          <strong style={{ color: '#F8FAFC', fontSize: '0.86rem' }}>{l.loanNumber}</strong>
+                          <div style={{ fontSize: '0.76rem', color: '#94A3B8' }}>
+                            Principal: {formatGHS(l.principalAmount)} • Outstanding: {formatGHS(l.outstandingAmount ?? l.totalOutstanding ?? l.principalAmount)}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                          <span className={`badge ${['APPROVED', 'DISBURSED', 'ONGOING', 'PAID'].includes(l.status) ? 'badge-success' : 'badge-warning'}`}>{l.status}</span>
+                          <button type="button" className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '0.74rem' }} onClick={() => navigate(`/loans/${l.id}`)}>
+                            Schedule
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="glass-panel" style={{ padding: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <h3 style={{ margin: 0, color: '#00F2FE', fontSize: '1rem' }}>
+                    {isGuarantorOnly ? 'My Surety Agreement Standing' : `Recent Repayments (${payments.length})`}
+                  </h3>
+                  <Link
+                    to={isGuarantorOnly ? '/dashboard/tab/GUARANTORS' : '/dashboard/tab/PAYMENTS'}
+                    className="btn btn-secondary"
+                    style={{ padding: '6px 12px', fontSize: '0.76rem', textDecoration: 'none' }}
+                  >
+                    {isGuarantorOnly ? 'Manage Surety' : 'Pay via MoMo'} <ArrowUpRight size={12} />
+                  </Link>
+                </div>
+                {isGuarantorOnly ? (
+                  guarantors.length === 0 ? (
+                    <p style={{ color: '#94A3B8', fontSize: '0.84rem' }}>Your guarantor profile is active and ready for digital surety signing.</p>
+                  ) : (
+                    guarantors.map((g) => (
+                      <div key={g.id} style={{ padding: 14, borderRadius: 10, background: 'rgba(6,12,24,0.8)', border: '1px solid rgba(0,242,254,0.25)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                          <strong>{g.user?.firstName || user?.firstName} {g.user?.lastName || user?.lastName}</strong>
+                          <span className={`badge ${g.agreementSigned ? 'badge-success' : 'badge-warning'}`}>
+                            {g.agreementSigned ? 'SURETY SIGNED' : 'PENDING SIGNATURE'}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.78rem', color: '#CBD5E1', marginBottom: 10 }}>
+                          GPS Digital Address: <strong style={{ color: '#00F2FE' }}>{g.gpsAddress || g.user?.gpsAddress || user?.gpsAddress || 'Verified'}</strong> • Guaranteed Loans: {(g.loanGuarantors || []).length}
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          {!g.agreementSigned && (
+                            <button type="button" className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.76rem' }} onClick={() => handleSignGuarantorAgreement(g.id)}>
+                              <CheckCircle2 size={14} /> Sign Digital Surety Agreement
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            style={{ padding: '6px 12px', fontSize: '0.76rem' }}
+                            onClick={() => handleToggleGuarantorPenalty(g.id, !g.penaltyNotifyEnabled)}
+                          >
+                            <Bell size={14} /> {g.penaltyNotifyEnabled ? 'Penalty Alerts: ON' : 'Enable Penalty Alerts'}
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )
+                ) : payments.length === 0 ? (
+                  <p style={{ color: '#94A3B8', fontSize: '0.84rem' }}>No repayments recorded yet.</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {payments.slice(0, 5).map((p) => (
+                      <div key={p.id} style={{ padding: 10, borderRadius: 8, background: 'rgba(6,12,24,0.8)', border: '1px solid rgba(0,242,254,0.18)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <strong style={{ fontSize: '0.82rem' }}>{p.transactionRef || p.receiptNumber || p.id.slice(0, 8)}</strong>
+                          <div style={{ fontSize: '0.72rem', color: '#94A3B8' }}>{p.method} • {p.loan?.loanNumber || 'Loan'}</div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontWeight: 700, color: '#34D399', fontSize: '0.85rem' }}>{formatGHS(p.amount)}</div>
+                          <span className={`badge ${p.status === 'COMPLETED' ? 'badge-success' : 'badge-warning'}`} style={{ fontSize: '0.62rem' }}>{p.status}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Role-Specific Backend Telemetry Snapshot */}
           {roleMetrics && (
             <div className="glass-panel" style={{ padding: 20 }}>
@@ -1255,10 +1614,14 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
               <Plus size={16} style={{ verticalAlign: 'middle' }} /> New Loan Application
             </h3>
             <form onSubmit={handleApplyLoan} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {!isMemberOnly && (
+              {isMemberOnly ? (
+                <div style={{ padding: '10px 12px', borderRadius: 8, background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', fontSize: '0.8rem', color: '#34D399' }}>
+                  <strong>Borrower Applicant:</strong> {user?.firstName} {user?.lastName} ({user?.phone || user?.email}) — Self-Service Facility Application
+                </div>
+              ) : (
                 <div>
                   <label className="gbs-label">Borrower / Member</label>
-                  <select className="gbs-select" value={newLoan.memberId} onChange={(e) => setNewLoan({ ...newLoan, memberId: e.target.value })}>
+                  <select required className="gbs-select" value={newLoan.memberId} onChange={(e) => setNewLoan({ ...newLoan, memberId: e.target.value })}>
                     <option value="">Select Registered Member...</option>
                     {members.map((m) => (
                       <option key={m.id} value={m.id}>
@@ -1286,6 +1649,20 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                   <input type="number" required min="1" max="60" className="gbs-input" value={newLoan.termMonths} onChange={(e) => setNewLoan({ ...newLoan, termMonths: e.target.value })} />
                 </div>
               </div>
+              {Number(newLoan.principalAmount) > 0 && Number(newLoan.termMonths) > 0 && (() => {
+                const selectedProd = loanProducts.find((p) => p.id === (newLoan.loanProductId || loanProducts[0]?.id)) || loanProducts[0];
+                const ratePct = Number(selectedProd?.interestRate || 15);
+                const principal = Number(newLoan.principalAmount);
+                const term = Math.max(1, Number(newLoan.termMonths));
+                const estTotal = principal + (principal * (ratePct / 100));
+                const estMonthly = estTotal / term;
+                return (
+                  <div style={{ padding: '10px 12px', borderRadius: 8, background: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.3)', fontSize: '0.78rem', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                    <span>Est. Monthly Installment: <strong style={{ color: '#F4E07B' }}>{formatGHS(estMonthly)}/mo</strong></span>
+                    <span>Total Repayable ({ratePct}%): <strong style={{ color: '#00F2FE' }}>{formatGHS(estTotal)}</strong></span>
+                  </div>
+                );
+              })()}
               <div>
                 <label className="gbs-label">Loan Purpose</label>
                 <input type="text" required className="gbs-input" value={newLoan.purpose} onChange={(e) => setNewLoan({ ...newLoan, purpose: e.target.value })} placeholder="Working Capital / Retail Expansion" />
@@ -1324,23 +1701,49 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                     <th>Borrower</th>
                     <th>Principal</th>
                     <th>Status</th>
-                    <th>Detail</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredLoans.map((l) => (
                     <tr key={l.id} onClick={() => navigate(`/loans/${l.id}`)} style={{ cursor: 'pointer' }}>
                       <td><strong>{l.loanNumber}</strong></td>
-                      <td>{l.member?.user?.firstName} {l.member?.user?.lastName}</td>
+                      <td>{l.member?.user?.firstName || user?.firstName} {l.member?.user?.lastName || user?.lastName}</td>
                       <td>{formatGHS(l.principalAmount)}</td>
                       <td><span className={`badge ${['APPROVED', 'DISBURSED', 'ONGOING', 'PAID'].includes(l.status) ? 'badge-success' : ['OVERDUE', 'DEFAULTED', 'REJECTED'].includes(l.status) ? 'badge-danger' : 'badge-warning'}`}>{l.status}</span></td>
-                      <td>
+                      <td style={{ display: 'flex', gap: 6 }}>
                         <button type="button" className="btn btn-secondary" style={{ padding: '4px 9px', fontSize: '0.74rem' }}>
                           Open <ArrowUpRight size={12} />
                         </button>
+                        {['DISBURSED', 'ONGOING', 'OVERDUE', 'APPROVED'].includes(l.status) && (
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            style={{ padding: '4px 9px', fontSize: '0.74rem' }}
+                            onClick={(ev) => {
+                              ev.stopPropagation();
+                              const outBal = Number(l.outstandingAmount ?? l.totalOutstanding ?? l.principalAmount ?? 0);
+                              setNewPayment((prev) => ({
+                                ...prev,
+                                loanId: l.id,
+                                amount: outBal > 0 ? String(Math.min(outBal, Math.round((outBal / Math.max(1, Number(l.termMonths || 12))) * 100) / 100)) : prev.amount,
+                              }));
+                              navigate('/dashboard/tab/PAYMENTS');
+                            }}
+                          >
+                            Pay
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
+                  {filteredLoans.length === 0 && (
+                    <tr>
+                      <td colSpan={5} style={{ textAlign: 'center', color: '#94A3B8', padding: 24 }}>
+                        No loan records match the current filter.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -1361,10 +1764,36 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                 <select className="gbs-select" required value={newPayment.loanId} onChange={(e) => setNewPayment({ ...newPayment, loanId: e.target.value })}>
                   <option value="">Select Active Loan...</option>
                   {loans.map((l) => (
-                    <option key={l.id} value={l.id}>{l.loanNumber} — {l.member?.user?.firstName} ({formatGHS(l.outstandingAmount ?? l.totalOutstanding)})</option>
+                    <option key={l.id} value={l.id}>{l.loanNumber} — {l.member?.user?.firstName || user?.firstName} ({formatGHS(l.outstandingAmount ?? l.totalOutstanding ?? l.principalAmount)})</option>
                   ))}
                 </select>
               </div>
+              {newPayment.loanId && (() => {
+                const selLoan = loans.find((x) => x.id === newPayment.loanId);
+                if (!selLoan) return null;
+                const fullOut = Number(selLoan.outstandingAmount ?? selLoan.totalOutstanding ?? selLoan.principalAmount ?? 0);
+                const estInstallment = Math.max(1, Math.round((fullOut / Math.max(1, Number(selLoan.termMonths || 12))) * 100) / 100);
+                return (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ padding: '5px 10px', fontSize: '0.74rem' }}
+                      onClick={() => setNewPayment((prev) => ({ ...prev, amount: String(estInstallment) }))}
+                    >
+                      Fill Est. Installment ({formatGHS(estInstallment)})
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ padding: '5px 10px', fontSize: '0.74rem' }}
+                      onClick={() => setNewPayment((prev) => ({ ...prev, amount: String(fullOut) }))}
+                    >
+                      Fill Full Balance ({formatGHS(fullOut)})
+                    </button>
+                  </div>
+                );
+              })()}
               <div className="gbs-grid-2" style={{ gap: 10 }}>
                 <div>
                   <label className="gbs-label">Amount (GHS)</label>
@@ -1400,7 +1829,30 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
           </div>
 
           <div className="glass-panel" style={{ padding: 20 }}>
-            <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}>Payment &amp; Receipt Ledger ({payments.length})</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8, flexWrap: 'wrap' }}>
+              <h3 style={{ margin: 0, color: '#00F2FE' }}>Payment &amp; Receipt Ledger ({filteredPayments.length})</h3>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  type="text"
+                  className="gbs-input"
+                  style={{ width: 155, padding: '6px 10px' }}
+                  placeholder="Search receipt / loan..."
+                  value={paymentSearch}
+                  onChange={(e) => setPaymentSearch(e.target.value)}
+                />
+                <select
+                  className="gbs-select"
+                  style={{ width: 130, padding: '6px 10px' }}
+                  value={paymentMethodFilter}
+                  onChange={(e) => setPaymentMethodFilter(e.target.value)}
+                >
+                  <option value="">All Methods</option>
+                  <option value="MOMO">MOMO</option>
+                  <option value="BANK_TRANSFER">BANK_TRANSFER</option>
+                  <option value="CASH">CASH</option>
+                </select>
+              </div>
+            </div>
             <div className="data-table-container" style={{ maxHeight: 420 }}>
               <table className="data-table">
                 <thead>
@@ -1413,15 +1865,37 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                   </tr>
                 </thead>
                 <tbody>
-                  {payments.map((p) => (
+                  {filteredPayments.map((p) => (
                     <tr key={p.id} onClick={() => navigate(`/payments/${p.id}`)} style={{ cursor: 'pointer' }}>
                       <td><strong>{p.transactionRef || p.receiptNumber || p.reference || p.id.slice(0, 8)}</strong></td>
                       <td>{p.method}</td>
                       <td>{formatGHS(p.amount)}</td>
                       <td><span className={`badge ${p.status === 'COMPLETED' ? 'badge-success' : 'badge-warning'}`}>{p.status}</span></td>
-                      <td><button type="button" className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.74rem' }}>Inspect</button></td>
+                      <td style={{ display: 'flex', gap: 6 }}>
+                        <button type="button" className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.74rem' }}>Inspect</button>
+                        {p.method === 'CASH' && p.status !== 'COMPLETED' && (isFinance || isManagement) && (
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            style={{ padding: '4px 8px', fontSize: '0.72rem' }}
+                            onClick={(ev) => {
+                              ev.stopPropagation();
+                              handleApproveCashPayment(p.id);
+                            }}
+                          >
+                            Approve Cash
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))}
+                  {filteredPayments.length === 0 && (
+                    <tr>
+                      <td colSpan={5} style={{ textAlign: 'center', color: '#94A3B8', padding: 24 }}>
+                        No repayments match the current filter.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -1545,8 +2019,96 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
       {/* TAB: GUARANTORS                                                       */}
       {/* ===================================================================== */}
       {activeTab === 'GUARANTORS' && (
-        <div className="gbs-grid-2">
-          {!isGuarantorOnly && (
+        isGuarantorOnly ? (
+          <div className="gbs-grid-2">
+            <div className="glass-panel" style={{ padding: 20 }}>
+              <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>My Digital Surety Profile &amp; Agreement Controls</h3>
+              {guarantors.length === 0 ? (
+                <div style={{ fontSize: '0.84rem', color: '#CBD5E1' }}>
+                  Your Guarantor Portal account (<strong>{user?.firstName} {user?.lastName}</strong>) is active. When a Loan Officer links you as a surety to a borrower facility, your digital agreement and penalty alert controls will appear here.
+                </div>
+              ) : (
+                guarantors.map((g) => (
+                  <div key={g.id} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div style={{ padding: 14, borderRadius: 10, background: 'rgba(6,12,24,0.85)', border: '1px solid rgba(212,175,55,0.28)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <strong style={{ fontSize: '0.96rem', color: '#F8FAFC' }}>{g.user?.firstName || user?.firstName} {g.user?.lastName || user?.lastName}</strong>
+                        <span className={`badge ${g.agreementSigned ? 'badge-success' : 'badge-warning'}`}>
+                          {g.agreementSigned ? 'DIGITAL SURETY SIGNED' : 'SIGNATURE REQUIRED'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: '#CBD5E1', display: 'grid', gap: 4 }}>
+                        <div>Phone Contact: <strong>{g.user?.phone || user?.phone || 'N/A'}</strong></div>
+                        <div>GPS Digital Address: <strong style={{ color: '#00F2FE' }}>{g.gpsAddress || g.user?.gpsAddress || user?.gpsAddress || 'N/A'}</strong></div>
+                        <div>Ghana Card: <strong>{g.ghanaCardNumber || 'Verified on File'}</strong></div>
+                        <div>Relationship: <strong>{g.relationship || 'Business / Family Surety'}</strong></div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      {!g.agreementSigned && (
+                        <button type="button" className="btn btn-primary" onClick={() => handleSignGuarantorAgreement(g.id)}>
+                          <CheckCircle2 size={15} /> Sign Digital Surety Agreement
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => handleToggleGuarantorPenalty(g.id, !g.penaltyNotifyEnabled)}
+                      >
+                        <Bell size={15} /> {g.penaltyNotifyEnabled ? 'Disable Penalty SMS Alerts' : 'Enable Penalty SMS Alerts'}
+                      </button>
+                      <button type="button" className="btn btn-secondary" onClick={() => navigate(`/guarantors/${g.id}`)}>
+                        View Full Surety Dossier <ArrowUpRight size={13} />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="glass-panel" style={{ padding: 20 }}>
+              <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}>
+                Loans I Have Guaranteed ({guarantors.reduce((acc, g) => acc + (g.loanGuarantors?.length || 0), 0)})
+              </h3>
+              <div className="data-table-container">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Loan #</th>
+                      <th>Borrower</th>
+                      <th>Principal</th>
+                      <th>Status</th>
+                      <th>Inspect</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {guarantors.flatMap((g) => g.loanGuarantors || []).map((lg) => (
+                      <tr key={lg.id} onClick={() => lg.loan?.id && navigate(`/loans/${lg.loan.id}`)} style={{ cursor: 'pointer' }}>
+                        <td><strong>{lg.loan?.loanNumber || 'N/A'}</strong></td>
+                        <td>{lg.loan?.member?.user?.firstName} {lg.loan?.member?.user?.lastName}</td>
+                        <td>{formatGHS(lg.loan?.principalAmount)}</td>
+                        <td><span className={`badge ${['APPROVED', 'DISBURSED', 'ONGOING', 'PAID'].includes(lg.loan?.status) ? 'badge-success' : 'badge-warning'}`}>{lg.loan?.status}</span></td>
+                        <td>
+                          <button type="button" className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.74rem' }}>
+                            Inspect <ArrowUpRight size={12} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {guarantors.flatMap((g) => g.loanGuarantors || []).length === 0 && (
+                      <tr>
+                        <td colSpan={5} style={{ textAlign: 'center', color: '#94A3B8', padding: 24 }}>
+                          No guaranteed loan facilities currently linked.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="gbs-grid-2">
             <div className="glass-panel" style={{ padding: 20 }}>
               <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>Register Loan Guarantor (with GPS Address)</h3>
               <form onSubmit={handleCreateGuarantor} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1569,67 +2131,80 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                 <button type="submit" className="btn btn-primary" style={{ justifyContent: 'center' }}>Save Guarantor Profile</button>
               </form>
             </div>
-          )}
 
-          <div className="glass-panel" style={{ padding: 20 }}>
-            <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}>Registered Loan Guarantors ({guarantors.length})</h3>
-            <form onSubmit={(e) => handleSearchGuarantors(e)} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
-              <input
-                type="search"
-                className="gbs-input"
-                style={{ flex: 1, minWidth: 180 }}
-                placeholder="Search guarantor by phone, GPS digital address, name..."
-                value={guarantorSearchInput}
-                onChange={(e) => setGuarantorSearchInput(e.target.value)}
-              />
-              <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.75rem', color: '#CBD5E1', cursor: 'pointer' }}>
-                <input type="checkbox" checked={includeHiddenGuarantors} onChange={(e) => setIncludeHiddenGuarantors(e.target.checked)} />
-                Hidden
-              </label>
-              <button type="submit" className="btn btn-primary" style={{ padding: '8px 14px' }}>Find</button>
-            </form>
-            <div className="data-table-container">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Phone / GPS Address</th>
-                    <th>Agreement</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {guarantors.map((g) => (
-                    <tr key={g.id} onClick={() => navigate(`/guarantors/${g.id}`)} style={{ cursor: 'pointer' }}>
-                      <td>
-                        <strong>{g.user?.firstName} {g.user?.lastName}</strong>
-                        {g.isHidden && <div><span className="badge badge-danger" style={{ fontSize: '0.62rem' }}>HIDDEN</span></div>}
-                      </td>
-                      <td>
-                        <div>{g.user?.phone}</div>
-                        <div style={{ fontSize: '0.72rem', color: '#00F2FE' }}>{g.gpsAddress || g.user?.gpsAddress || 'No GPS Addr'}</div>
-                      </td>
-                      <td><span className={`badge ${g.agreementSigned ? 'badge-success' : 'badge-warning'}`}>{g.agreementSigned ? 'SIGNED' : 'UNSIGNED'}</span></td>
-                      <td style={{ display: 'flex', gap: 6 }}>
-                        <button type="button" className="btn btn-secondary" style={{ padding: '4px 9px', fontSize: '0.75rem' }}>Manage</button>
-                        {(g.user?.phone || g.gpsAddress) && (
-                          <Link
-                            to={`/dashboard/tab/FIELD_OPS?locate=${encodeURIComponent(g.user?.phone || g.gpsAddress || '')}`}
-                            className="btn btn-primary"
-                            style={{ padding: '4px 8px', fontSize: '0.74rem', textDecoration: 'none' }}
-                            onClick={(ev) => ev.stopPropagation()}
-                          >
-                            <MapPin size={12} /> Locate
-                          </Link>
-                        )}
-                      </td>
+            <div className="glass-panel" style={{ padding: 20 }}>
+              <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}>Registered Loan Guarantors ({guarantors.length})</h3>
+              <form onSubmit={(e) => handleSearchGuarantors(e)} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
+                <input
+                  type="search"
+                  className="gbs-input"
+                  style={{ flex: 1, minWidth: 180 }}
+                  placeholder="Search guarantor by phone, GPS digital address, name..."
+                  value={guarantorSearchInput}
+                  onChange={(e) => setGuarantorSearchInput(e.target.value)}
+                />
+                <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.75rem', color: '#CBD5E1', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={includeHiddenGuarantors} onChange={(e) => setIncludeHiddenGuarantors(e.target.checked)} />
+                  Hidden
+                </label>
+                <button type="submit" className="btn btn-primary" style={{ padding: '8px 14px' }}>Find</button>
+              </form>
+              <div className="data-table-container">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Phone / GPS Address</th>
+                      <th>Agreement</th>
+                      <th>Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {guarantors.map((g) => (
+                      <tr key={g.id} onClick={() => navigate(`/guarantors/${g.id}`)} style={{ cursor: 'pointer' }}>
+                        <td>
+                          <strong>{g.user?.firstName} {g.user?.lastName}</strong>
+                          {g.isHidden && <div><span className="badge badge-danger" style={{ fontSize: '0.62rem' }}>HIDDEN</span></div>}
+                        </td>
+                        <td>
+                          <div>{g.user?.phone}</div>
+                          <div style={{ fontSize: '0.72rem', color: '#00F2FE' }}>{g.gpsAddress || g.user?.gpsAddress || 'No GPS Addr'}</div>
+                        </td>
+                        <td><span className={`badge ${g.agreementSigned ? 'badge-success' : 'badge-warning'}`}>{g.agreementSigned ? 'SIGNED' : 'UNSIGNED'}</span></td>
+                        <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          <button type="button" className="btn btn-secondary" style={{ padding: '4px 9px', fontSize: '0.75rem' }}>Manage</button>
+                          {!g.agreementSigned && (
+                            <button
+                              type="button"
+                              className="btn btn-primary"
+                              style={{ padding: '4px 8px', fontSize: '0.74rem' }}
+                              onClick={(ev) => {
+                                ev.stopPropagation();
+                                handleSignGuarantorAgreement(g.id);
+                              }}
+                            >
+                              Sign
+                            </button>
+                          )}
+                          {(g.user?.phone || g.gpsAddress) && (
+                            <Link
+                              to={`/dashboard/tab/FIELD_OPS?locate=${encodeURIComponent(g.user?.phone || g.gpsAddress || '')}`}
+                              className="btn btn-primary"
+                              style={{ padding: '4px 8px', fontSize: '0.74rem', textDecoration: 'none' }}
+                              onClick={(ev) => ev.stopPropagation()}
+                            >
+                              <MapPin size={12} /> Locate
+                            </Link>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
-        </div>
+        )
       )}
 
       {/* ===================================================================== */}
@@ -1763,7 +2338,7 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
           <div className="gbs-grid-2">
             {canCreateStaff && (
               <div className="glass-panel" style={{ padding: 20 }}>
-                <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}><UserPlus size={16} /> Create New Staff Account (All 30 Roles + GPS Address)</h3>
+                <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}><UserPlus size={16} /> Create New Staff Account (All {ROLES_META.length} Roles + GPS Address)</h3>
                 <form onSubmit={handleCreateStaffAccount} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <div className="gbs-grid-2" style={{ gap: 10 }}>
                     <input type="text" required className="gbs-input" placeholder="First Name" value={newStaffForm.firstName} onChange={(e) => setNewStaffForm({ ...newStaffForm, firstName: e.target.value })} />
@@ -2055,7 +2630,7 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                       <span className={`badge ${req.status === 'APPROVED' ? 'badge-success' : req.status === 'REJECTED' ? 'badge-danger' : 'badge-warning'}`}>{req.status}</span>
                     </div>
                     <div style={{ fontSize: '0.8rem', color: '#CBD5E1', marginBottom: 8 }}>{req.reason}</div>
-                    {req.status === 'PENDING' && isManagement && (
+                    {['PENDING', 'PENDING_MANAGER_APPROVAL'].includes(req.status) && isManagement && (
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button type="button" className="btn btn-danger" style={{ padding: '5px 10px', fontSize: '0.74rem' }} onClick={() => handleReviewDeletion(req.id, 'APPROVED')}>Approve Deletion</button>
                         <button type="button" className="btn btn-secondary" style={{ padding: '5px 10px', fontSize: '0.74rem' }} onClick={() => handleReviewDeletion(req.id, 'REJECTED')}>Reject</button>
@@ -2090,11 +2665,31 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
 
           <div className="glass-panel" style={{ padding: 20 }}>
             <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}>Cases ({cases.length}) &amp; Immutable Audit Trail ({auditLogs.length})</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 240, overflowY: 'auto', marginBottom: 16 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 260, overflowY: 'auto', marginBottom: 16 }}>
               {cases.map((c) => (
-                <div key={c.id} style={{ padding: 10, borderRadius: 8, background: 'rgba(6,12,24,0.8)', border: '1px solid rgba(0,242,254,0.2)' }}>
-                  <div style={{ fontWeight: 700, fontSize: '0.84rem', color: '#F4E07B' }}>[{c.caseType}] {c.title}</div>
-                  <div style={{ fontSize: '0.76rem', color: '#CBD5E1' }}>{c.description}</div>
+                <div key={c.id} style={{ padding: 12, borderRadius: 8, background: 'rgba(6,12,24,0.85)', border: '1px solid rgba(0,242,254,0.22)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.84rem', color: '#F4E07B' }}>
+                      [{c.category || c.caseType || 'COMPLIANCE'}] {c.title}
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <span className={`badge ${c.severity === 'CRITICAL' || c.severity === 'HIGH' ? 'badge-danger' : 'badge-gold'}`}>{c.severity}</span>
+                      <span className={`badge ${c.status === 'RESOLVED' ? 'badge-success' : 'badge-cyan'}`}>{c.status || 'OPEN'}</span>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '0.76rem', color: '#CBD5E1', marginBottom: 8 }}>{c.description}</div>
+                  {c.status !== 'RESOLVED' && (
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {c.status !== 'INVESTIGATING' && (
+                        <button type="button" className="btn btn-secondary" style={{ padding: '4px 9px', fontSize: '0.72rem' }} onClick={() => handleUpdateCaseStatus(c.id, 'INVESTIGATING')}>
+                          Mark Investigating
+                        </button>
+                      )}
+                      <button type="button" className="btn btn-primary" style={{ padding: '4px 9px', fontSize: '0.72rem' }} onClick={() => handleUpdateCaseStatus(c.id, 'RESOLVED')}>
+                        <CheckCircle2 size={12} /> Resolve Case
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -2117,6 +2712,10 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
           <div className="glass-panel" style={{ padding: 20 }}>
             <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>Log Borrower Support Inquiry / Front Desk Ticket</h3>
             <form onSubmit={handleCreateTicket} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div className="gbs-grid-2" style={{ gap: 10 }}>
+                <input type="text" required className="gbs-input" placeholder="Customer / Visitor Name" value={newTicket.requesterName} onChange={(e) => setNewTicket({ ...newTicket, requesterName: e.target.value })} />
+                <input type="tel" className="gbs-input" placeholder="Customer Phone (+233...)" value={newTicket.requesterPhone} onChange={(e) => setNewTicket({ ...newTicket, requesterPhone: e.target.value })} />
+              </div>
               <input type="text" required className="gbs-input" placeholder="Ticket Subject" value={newTicket.subject} onChange={(e) => setNewTicket({ ...newTicket, subject: e.target.value })} />
               <div className="gbs-grid-2" style={{ gap: 10 }}>
                 <select className="gbs-select" value={newTicket.category} onChange={(e) => setNewTicket({ ...newTicket, category: e.target.value })}>
@@ -2136,14 +2735,34 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
           </div>
           <div className="glass-panel" style={{ padding: 20 }}>
             <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}>Active Service Queue ({tickets.length})</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 420, overflowY: 'auto' }}>
               {tickets.map((t) => (
-                <div key={t.id} style={{ padding: 12, borderRadius: 8, background: 'rgba(6,12,24,0.8)', border: '1px solid rgba(212,175,55,0.2)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <strong>{t.subject}</strong>
-                    <span className="badge badge-gold">{t.status}</span>
+                <div key={t.id} style={{ padding: 12, borderRadius: 8, background: 'rgba(6,12,24,0.85)', border: '1px solid rgba(212,175,55,0.22)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <strong>{t.ticketNumber ? `${t.ticketNumber} — ` : ''}{t.subject}</strong>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <span className="badge badge-cyan">{t.priority || 'NORMAL'}</span>
+                      <span className={`badge ${t.status === 'RESOLVED' ? 'badge-success' : 'badge-gold'}`}>{t.status}</span>
+                    </div>
                   </div>
-                  <div style={{ fontSize: '0.78rem', color: '#CBD5E1', marginTop: 4 }}>{t.description}</div>
+                  {t.requesterName && (
+                    <div style={{ fontSize: '0.73rem', color: '#94A3B8', marginTop: 2 }}>
+                      Requester: {t.requesterName}{t.requesterPhone ? ` (${t.requesterPhone})` : ''}
+                    </div>
+                  )}
+                  <div style={{ fontSize: '0.78rem', color: '#CBD5E1', marginTop: 4, marginBottom: 8 }}>{t.description}</div>
+                  {t.status !== 'RESOLVED' && (
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {t.status !== 'IN_PROGRESS' && (
+                        <button type="button" className="btn btn-secondary" style={{ padding: '4px 9px', fontSize: '0.72rem' }} onClick={() => handleUpdateTicketStatus(t.id, 'IN_PROGRESS')}>
+                          In Progress
+                        </button>
+                      )}
+                      <button type="button" className="btn btn-primary" style={{ padding: '4px 9px', fontSize: '0.72rem' }} onClick={() => handleUpdateTicketStatus(t.id, 'RESOLVED')}>
+                        <CheckCircle2 size={12} /> Resolve Ticket
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -2172,15 +2791,20 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
               <button type="submit" className="btn btn-primary">Launch Campaign</button>
             </form>
             {campaigns.map((c) => (
-              <div key={c.id} style={{ padding: 10, borderRadius: 8, background: 'rgba(6,12,24,0.8)', marginBottom: 6, fontSize: '0.8rem' }}>
-                <strong>{c.name}</strong> ({c.channel}) • Budget: {formatGHS(c.budget)} • Reach: {c.reachCount}
+              <div key={c.id} style={{ padding: 10, borderRadius: 8, background: 'rgba(6,12,24,0.8)', marginBottom: 6, fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                <div>
+                  <strong>{c.name}</strong> <span className="badge badge-cyan" style={{ fontSize: '0.64rem', marginLeft: 4 }}>{c.channel}</span>
+                </div>
+                <div style={{ color: '#CBD5E1' }}>
+                  Budget: <strong>{formatGHS(c.budget)}</strong> • Leads/Reach: <strong>{c.leadsCount ?? c.reachCount ?? 0}</strong>
+                </div>
               </div>
             ))}
           </div>
 
           <div className="glass-panel" style={{ padding: 20 }}>
             <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}><Briefcase size={16} /> Institutional Investors &amp; Yield ({investors.length})</h3>
-            {isFinance && (
+            {(isFinance || isManagement || roleKey === 'INVESTOR') && (
               <form onSubmit={handleCreateInvestor} style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
                 <div className="gbs-grid-2" style={{ gap: 8 }}>
                   <input type="text" required className="gbs-input" placeholder="Investor Name" value={newInvestor.investorName} onChange={(e) => setNewInvestor({ ...newInvestor, investorName: e.target.value })} />
@@ -2194,8 +2818,14 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
               </form>
             )}
             {investors.map((inv) => (
-              <div key={inv.id} style={{ padding: 10, borderRadius: 8, background: 'rgba(6,12,24,0.8)', marginBottom: 6, fontSize: '0.8rem' }}>
-                <strong>{inv.investorName}</strong> — {formatGHS(inv.investedAmount)} @ {inv.interestRate}% APR
+              <div key={inv.id} style={{ padding: 10, borderRadius: 8, background: 'rgba(6,12,24,0.8)', marginBottom: 6, fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                <div>
+                  <strong>{inv.investorName}</strong>
+                  {inv.investorCode && <span style={{ fontSize: '0.72rem', color: '#94A3B8', marginLeft: 6 }}>({inv.investorCode})</span>}
+                </div>
+                <div>
+                  <strong style={{ color: '#34D399' }}>{formatGHS(inv.committedCapital ?? inv.investedAmount)}</strong> @ <span className="badge badge-gold">{inv.annualYieldRate ?? inv.interestRate ?? 18.5}% APR</span>
+                </div>
               </div>
             ))}
           </div>
@@ -2348,11 +2978,23 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                     Host: {m.hostName || 'Management'} • {m.targetScope || 'ALL_STAFF'} • {new Date(m.startTime || m.scheduledAt).toLocaleString()}
                   </div>
                 </div>
-                {m.joinUrl && (
-                  <a href={m.joinUrl} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ padding: '5px 10px', fontSize: '0.75rem' }}>
-                    Join Room
-                  </a>
-                )}
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {m.joinUrl && (
+                    <a href={m.joinUrl} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ padding: '5px 10px', fontSize: '0.75rem' }}>
+                      Join Room
+                    </a>
+                  )}
+                  {isManagement && (
+                    <button
+                      type="button"
+                      className="btn btn-danger"
+                      style={{ padding: '5px 10px', fontSize: '0.74rem' }}
+                      onClick={() => handleCancelMeeting(m.id)}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>

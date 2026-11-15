@@ -134,7 +134,7 @@ export default function DeveloperControlCenterModal({ isOpen, onClose }) {
             <Terminal className="w-6 h-6 text-amber-400" />
             <div>
               <h2 className="text-lg font-bold text-amber-400 flex items-center gap-2">
-                Developer & SuperAdmin System Command Center
+                Developer Authority System Command Center
                 <span className="text-xs bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded font-mono">
                   LIVE POSTGRESQL 18
                 </span>

@@ -24,7 +24,7 @@ export function RegistersCrossCheckPanel({ userRole, totalCustomers = 0, onUpdat
 
   const normalizedRole = String(userRole || '').toUpperCase().replace(/-/g, '_');
   const isAuthorized = USER_COUNT_DROPDOWN_ROLES.has(normalizedRole);
-  const isOwnerOrSuper = ['SUPER_ADMIN', 'COMPANY_OWNER'].includes(normalizedRole);
+  const isOwnerOrSuper = ['COMPANY_OWNER'].includes(normalizedRole);
 
   if (!isAuthorized) return null;
 

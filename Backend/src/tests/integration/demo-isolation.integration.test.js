@@ -45,13 +45,13 @@ describe('GBS Demo Walkthrough Separation & Self-Service Navigation Integration 
     }
   });
 
-  it('serves walkthrough catalog with 8 feature modules and all 30 canonical roles', async () => {
+  it('serves walkthrough catalog with 8 feature modules and all 29 canonical roles', async () => {
     const res = await request(app).get('/api/v1/demo/walkthrough-catalog');
     expect(res.status).toBe(200);
     expect(res.body.data.dataMode).toBe('DEMO_SANDBOX_ISOLATED');
     expect(res.body.data.sandboxTenantCode).toBe('DEMO-SANDBOX');
     expect(res.body.data.walkthroughModules.length).toBe(8);
-    expect(res.body.data.roles.length).toBe(30);
+    expect(res.body.data.roles.length).toBe(29);
   });
 
   it('strictly blocks Developer Authority escalation through the Demo endpoint', async () => {

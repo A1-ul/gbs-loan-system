@@ -34,9 +34,8 @@ class UserCountService {
         countsMap[entry.role][entry.status] = entry._count.id;
       });
 
-      // 3. 30 Canonical Blueprint Roles Display Names
+      // 3. 29 Canonical Blueprint Roles Display Names
       const roleDisplayNames = {
-        SUPER_ADMIN: 'Super Admin',
         COMPANY_OWNER: 'Company Owner',
         EXECUTIVE_MANAGEMENT: 'Executive Management',
         REGIONAL_MANAGER: 'Regional Manager',
@@ -69,6 +68,7 @@ class UserCountService {
       };
 
       const roleAliases = {
+        COMPANY_OWNER: ['COMPANY_OWNER', 'SUPER_ADMIN'],
         MEMBER_PORTAL: ['MEMBER_PORTAL', 'MEMBER'],
         FIELD_OFFICER: ['FIELD_OFFICER', 'STAFF'],
         COLLECTIONS: ['COLLECTIONS', 'COLLECTOR'],
@@ -84,7 +84,7 @@ class UserCountService {
 
       const rolesSummary = Object.keys(roleDisplayNames).map((roleKey) => {
         const associatedKeys = roleAliases[roleKey] || [roleKey];
-        
+
         let active = 0;
         let pending = 0;
         let suspended = 0;
@@ -153,6 +153,8 @@ class UserCountService {
       const skip = ((parseInt(page, 10) || 1) - 1) * take;
 
       const roleAliases = {
+        COMPANY_OWNER: ['COMPANY_OWNER', 'SUPER_ADMIN'],
+        SUPER_ADMIN: ['COMPANY_OWNER', 'SUPER_ADMIN'],
         MEMBER_PORTAL: ['MEMBER_PORTAL', 'MEMBER'],
         MEMBER: ['MEMBER_PORTAL', 'MEMBER'],
         FIELD_OFFICER: ['FIELD_OFFICER', 'STAFF'],
@@ -173,13 +175,13 @@ class UserCountService {
         ...(status ? { status } : {}),
         ...(search
           ? {
-              OR: [
-                { email: { contains: search, mode: 'insensitive' } },
-                { phone: { contains: search } },
-                { firstName: { contains: search, mode: 'insensitive' } },
-                { lastName: { contains: search, mode: 'insensitive' } },
-              ],
-            }
+            OR: [
+              { email: { contains: search, mode: 'insensitive' } },
+              { phone: { contains: search } },
+              { firstName: { contains: search, mode: 'insensitive' } },
+              { lastName: { contains: search, mode: 'insensitive' } },
+            ],
+          }
           : {}),
       };
 

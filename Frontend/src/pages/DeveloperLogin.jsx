@@ -77,7 +77,7 @@ export default function DeveloperLogin({ onDevAuthenticated }) {
             <div>
               <h2 style={{ margin: 0, fontSize: '1.2rem', color: '#F1F5F9' }}>Developer Landlord Sign In</h2>
               <p style={{ margin: 0, fontSize: '0.76rem', color: '#94A3B8' }}>
-                Tenant Super Admins &amp; Managers are strictly blocked from this plane.
+                Tenant Company Owners &amp; Managers are strictly blocked from this plane.
               </p>
             </div>
           </div>

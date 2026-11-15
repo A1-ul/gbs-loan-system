@@ -9,9 +9,9 @@ function createInMemoryRedisClient() {
   return {
     isInMemoryFallback: true,
     status: 'ready',
-    on: () => {},
+    on: () => { },
     quit: async () => 'OK',
-    disconnect: () => {},
+    disconnect: () => { },
     ping: async () => 'PONG',
     get: async (key) => {
       const entry = memoryStore.get(key);

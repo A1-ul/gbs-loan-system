@@ -164,7 +164,7 @@ function TenantShell({ user, onLogout, lockBanner }) {
               { label: 'Company Owner', role: 'COMPANY_OWNER', tab: 'OVERVIEW' },
               { label: 'Loan Officer', role: 'LOAN_OFFICER', tab: 'LOANS' },
               { label: 'Accountant', role: 'ACCOUNTANT', tab: 'ACCOUNTING_AUDIT' },
-              { label: 'Fraud / GPS Locator', role: 'FRAUD_INVESTIGATION', tab: 'FIELD_OPS' },
+              { label: 'Field & GPS Locator', role: 'COLLECTIONS', tab: 'FIELD_OPS' },
               { label: 'Member Portal', role: 'MEMBER_PORTAL', tab: 'OVERVIEW' },
               { label: 'Guarantor Portal', role: 'GUARANTOR_PORTAL', tab: 'OVERVIEW' },
             ].map((item) => (
@@ -209,6 +209,7 @@ function TenantShell({ user, onLogout, lockBanner }) {
           <Route path="/admin/users-crosscheck" element={<AdminUsersCrossCheckPage />} />
           <Route path="/migrations" element={<DataMigrationPage />} />
           <Route path="/profile" element={<ProfileSecurityPage />} />
+          <Route path="/profile/security" element={<ProfileSecurityPage />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </main>

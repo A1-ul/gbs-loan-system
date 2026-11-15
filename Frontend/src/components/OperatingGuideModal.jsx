@@ -16,7 +16,7 @@ const CORE_SYSTEM_WORKFLOWS = [
     steps: [
       'Company Owner or Branch Manager sets the exact organization name and uploads the company logo inside Company Branding.',
       'The company name and logo immediately reflect across all tenant dashboards, receipts, and headers without renaming the core GBS platform.',
-      'Branch Managers or Company Owner can create staff accounts across all 30 roles, including mandatory GPS Digital Addresses; every new staff member must be approved by the Company Owner before accessing the portal.',
+      'Branch Managers or Company Owner can create staff accounts across all 29 roles, including mandatory GPS Digital Addresses; every new staff member must be approved by the Company Owner before accessing the portal.',
     ],
   },
   {
@@ -68,30 +68,90 @@ const DEVELOPER_GUIDE_SECTIONS = [
 const ROLE_PLAYBOOKS = {
   COMPANY_OWNER: [
     'Review the Company Branding prompt and set your official institution name and logo.',
-    'Approve pending Staff accounts before they can sign in, or create staff across all 30 roles.',
-    'Monitor Total Registered Customers, sign off Accountant Ledger Audits, broadcast Staff Notices, and link Branch CCTV cameras to your mobile device.',
+    'Approve pending Staff accounts before they can sign in, or provision staff across all 29 institutional roles.',
+    'Monitor Total Registered Customers, sign off Accountant Ledger Audits, broadcast Staff Notices, schedule online meetings, and link Branch CCTV cameras to your mobile device.',
   ],
-  SUPER_ADMIN: [
-    'Oversee staff onboarding, 30-role credential verification, and Excel/CSV Data Migration.',
-    'Schedule online management meetings, generate Weekly/Monthly/Yearly wrapped reports, and monitor Emergency GPS Locator.',
+  EXECUTIVE_MANAGEMENT: [
+    'Oversee multi-branch portfolio performance, approve high-value credit facilities, and review Accountant Ledger Audits.',
+    'Generate Weekly, Monthly, and Yearly wrapped reports and broadcast executive directives to staff.',
+  ],
+  BOARD_EXECUTIVE: [
+    'Review institutional capital adequacy, investor commitments, compliance/audit findings, and board-level financial statements.',
+  ],
+  REGIONAL_MANAGER: [
+    'Supervise regional branch disbursements, monitor field collector live GPS telemetry, and resolve regional escalations.',
   ],
   BRANCH_MANAGER: [
     'Update company/branch branding, supervise staff attendance Clock In/Out logs, and create new staff awaiting Company Owner approval.',
     'Verify loan queues, monitor collector GPS movements, and organize branch online meetings.',
   ],
-  ACCOUNTANT: [
-    'Verify CASH repayment receipts, audit loan schedules and interest accuracy, and run Ledger Reconciliation.',
-    'Submit balanced/flagged accounting audits directly to Company Owner for final sign-off.',
+  OPERATIONS_MANAGER: [
+    'Manage daily loan processing throughput, review member deletion requests, oversee Excel/CSV data migrations, and coordinate field dispatches.',
   ],
   LOAN_OFFICER: [
     'Register borrowers with Ghana Card & mandatory GPS Digital Address, attach guarantors with GPS addresses, and originate loans.',
     'Track payment due alerts and follow up with assigned borrowers.',
+  ],
+  SENIOR_CREDIT_OFFICER: [
+    'Perform Tier-2 credit appraisal on pending loan applications, verify collateral items, and recommend or approve facilities.',
+  ],
+  CREDIT_ANALYST: [
+    'Evaluate borrower 5Cs, debt-service coverage, monthly income, and credit scores prior to underwriting sign-off.',
+  ],
+  LOAN_UNDERWRITER: [
+    'Verify collateral valuations, guarantor surety agreements, and risk pricing to issue underwriting approvals.',
   ],
   COLLECTIONS: [
     'Monitor Payment Collection Alerts, log field visits with collected cash/MoMo receipts, and stream live GPS coordinates.',
   ],
   FIELD_OFFICER: [
     'Share Live Device GPS when on route, clock in/out daily, record customer field visits, and verify guarantor/borrower GPS addresses.',
+  ],
+  MOBILE_STAFF: [
+    'Use mobile field check-ins, live GPS sharing, and quick MoMo/Cash repayment posting while on route.',
+  ],
+  CUSTOMER_SERVICE: [
+    'Log and resolve borrower inquiries and support tickets, assist with statement requests, and verify customer profiles.',
+  ],
+  RECEPTION: [
+    'Manage front-desk walk-in inquiries, log visitor and borrower support tickets, and route customers to loan officers.',
+  ],
+  ACCOUNTANT: [
+    'Verify CASH repayment receipts, audit loan schedules and interest accuracy, and run Ledger Reconciliation.',
+    'Submit balanced/flagged accounting audits directly to Company Owner for final sign-off.',
+  ],
+  FINANCE_MANAGER: [
+    'Oversee institutional P&L, cash flow projections, monthly staff payroll generation, and investor capital yields.',
+  ],
+  TREASURY: [
+    'Manage vault liquidity, disburse approved loans, reconcile bank/MoMo float balances, and track investor deployments.',
+  ],
+  HUMAN_RESOURCE: [
+    'Provision staff across all 29 roles with mandatory GPS addresses, manage qualification & salary grade profiles, and audit attendance.',
+  ],
+  LEGAL_DEPARTMENT: [
+    'Manage loan contracts, guarantor liability enforcement, collateral documentation, and legal recovery cases.',
+  ],
+  COMPLIANCE: [
+    'Monitor Bank of Ghana regulatory compliance, AML/CFT cases, KYC verification completeness, and role qualification audits.',
+  ],
+  INTERNAL_AUDIT: [
+    'Inspect immutable system audit trails, run independent ledger reconciliations, and audit role registrations.',
+  ],
+  RISK_MANAGEMENT: [
+    'Track Portfolio at Risk (PAR), overdue/defaulted loan exposure, collateral coverage, and risk mitigation cases.',
+  ],
+  FRAUD_INVESTIGATION: [
+    'Investigate flagged identity/KYC anomalies, duplicate credentials, and suspicious transaction alerts.',
+  ],
+  SECURITY_OPERATIONS: [
+    'Monitor branch/vault CCTV streams, access control logs, 2FA/biometric enrollment, and security incident cases.',
+  ],
+  MARKETING: [
+    'Launch and track SMS/digital acquisition campaigns, monitor lead conversion rates, and grow borrower onboarding.',
+  ],
+  INVESTOR: [
+    'Track committed vs deployed capital, annual yield rates, accrued returns, and institutional portfolio health.',
   ],
   MEMBER_PORTAL: [
     'View your active loan balance, installment schedule, Mobile Money payments, and security settings.',
@@ -149,7 +209,7 @@ export default function OperatingGuideModal({ isOpen, onClose, userRole = 'MEMBE
           <div>
             <h2 className="gold-gradient-text" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
               {isDeveloper ? <Terminal size={22} color="#F87171" /> : <BookOpen size={22} color="#D4AF37" />}
-              {isDeveloper ? 'Lead Developer Operating Guide' : 'GBS Loan System Operating Guide (All 30 User Roles)'}
+              {isDeveloper ? 'Lead Developer Operating Guide' : `GBS Loan System Operating Guide (All ${ROLES_META.length} User Roles)`}
             </h2>
             <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: '#94A3B8' }}>
               {isDeveloper
@@ -208,7 +268,7 @@ export default function OperatingGuideModal({ isOpen, onClose, userRole = 'MEMBE
             {/* Searchable All-30 Roles Manual */}
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 10 }}>
-                <h4 style={{ margin: 0, color: '#D4AF37' }}>All 30 Institutional Roles Directory &amp; Duties</h4>
+                <h4 style={{ margin: 0, color: '#D4AF37' }}>All {ROLES_META.length} Institutional Roles Directory &amp; Duties</h4>
                 <div style={{ position: 'relative', minWidth: 240 }}>
                   <Search size={14} color="#94A3B8" style={{ position: 'absolute', left: 10, top: 11 }} />
                   <input
