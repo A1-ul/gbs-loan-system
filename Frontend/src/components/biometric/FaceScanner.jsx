@@ -26,6 +26,15 @@ export function FaceScanner({ mode = 'both', onVerified, onCapture, title = 'Liv
     setCamActive(false);
   };
 
+  useEffect(() => {
+    if (camActive && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+      if (typeof videoRef.current.play === 'function') {
+        videoRef.current.play().catch(() => {});
+      }
+    }
+  }, [camActive]);
+
   useEffect(() => () => stopCamera(), []);
 
   const startCamera = async () => {
@@ -39,10 +48,8 @@ export function FaceScanner({ mode = 'both', onVerified, onCapture, title = 'Liv
         video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
       });
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
       setCamActive(true);
+      setStatusMsg({ ok: true, text: 'Live camera active. Position face clearly and click Capture Frame.' });
     } catch (err) {
       setStatusMsg({ ok: false, text: `Camera permission/hardware error (${err.message}). Use file upload instead.` });
     }

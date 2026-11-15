@@ -17,5 +17,6 @@ router.post('/logout', authenticate, authController.logout);
 router.post('/2fa/setup', authenticate, authController.setup2FA);
 router.post('/2fa/enable', authenticate, validate(authSchemas.enable2FA), authController.enable2FA);
 router.post('/2fa/disable', authenticate, authController.disable2FA);
+router.post('/profile-picture', authenticate, authController.updateProfilePicture);
 
 module.exports = router;

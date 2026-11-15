@@ -353,7 +353,7 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
             {envMode === 'demo' ? 'DEMO SANDBOX WALKTHROUGH' : roleMeta.category}
           </span>
           <h1 style={{ fontSize: 'clamp(1.6rem, 3vw, 2.3rem)', fontWeight: 800, color: '#FFFFFF', marginBottom: 8 }}>
-            {roleMeta.title} Portal
+            {roleMeta.title.toLowerCase().endsWith('portal') ? roleMeta.title : `${roleMeta.title} Portal`}
           </h1>
           <p style={{ fontSize: '0.94rem', color: '#E2E8F0', maxWidth: 520, marginBottom: 18 }}>
             {roleMeta.subtitle}

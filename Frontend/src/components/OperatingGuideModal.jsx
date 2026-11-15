@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { BookOpen, X, Search, ShieldCheck, CheckCircle2, Terminal } from 'lucide-react';
 import { ROLES_META, resolveRoleMeta } from '../constants/rolesMeta';
+import { sessionStore } from '../services/api';
 
 const CORE_SYSTEM_WORKFLOWS = [
   {
@@ -235,23 +236,42 @@ export default function OperatingGuideModal({ isOpen, onClose, userRole = 'MEMBE
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-            {/* Current Role Highlight */}
-            <div style={{ background: 'rgba(212, 175, 55, 0.1)', border: '1px solid rgba(212, 175, 55, 0.45)', padding: 16, borderRadius: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                <ShieldCheck size={18} color="#D4AF37" />
-                <strong style={{ color: '#F4E07B' }}>Your Role Operating Checklist: {currentRole.title}</strong>
-              </div>
-              <p style={{ margin: '0 0 8px', fontSize: '0.83rem', color: '#E2E8F0' }}>{currentRole.subtitle}</p>
-              <ul style={{ margin: 0, paddingLeft: 18, fontSize: '0.82rem', color: '#CBD5E1', display: 'grid', gap: 4 }}>
-                {(ROLE_PLAYBOOKS[currentRole.key] || [
-                  'Clock in at shift start and clock out upon closing.',
-                  'Capture complete customer/guarantor details including GPS Digital Addresses.',
-                  'Monitor notifications for Company Owner broadcasts, payment alerts, and scheduled online meetings.',
-                ]).map((item, idx) => (
-                  <li key={idx}>{item}</li>
-                ))}
-              </ul>
-            </div>
+            {/* Current Role Highlight (Updates dynamically with live user profile & role changes) */}
+            {(() => {
+              const liveUser = sessionStore.getTenantUser();
+              const liveRole = resolveRoleMeta(liveUser?.role || roleKey);
+              return (
+                <div style={{ background: 'rgba(212, 175, 55, 0.1)', border: '1px solid rgba(212, 175, 55, 0.45)', padding: 16, borderRadius: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <ShieldCheck size={18} color="#D4AF37" />
+                      <strong style={{ color: '#F4E07B' }}>
+                        Your Live Role Operating Checklist: {liveRole.title}
+                        {liveUser?.firstName ? ` (${liveUser.firstName} ${liveUser.lastName || ''})` : ''}
+                      </strong>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <span className={`badge ${liveUser?.profilePicture ? 'badge-success' : 'badge-warning'}`}>
+                        {liveUser?.profilePicture ? 'Photo ID Verified' : 'Upload Profile Photo'}
+                      </span>
+                      <span className={`badge ${liveUser?.twoFactorEnabled ? 'badge-success' : 'badge-cyan'}`}>
+                        {liveUser?.twoFactorEnabled ? '2FA Enabled' : '2FA Optional'}
+                      </span>
+                    </div>
+                  </div>
+                  <p style={{ margin: '0 0 8px', fontSize: '0.86rem', color: '#E2E8F0' }}>{liveRole.subtitle}</p>
+                  <ul style={{ margin: 0, paddingLeft: 18, fontSize: '0.84rem', color: '#CBD5E1', display: 'grid', gap: 4 }}>
+                    {(ROLE_PLAYBOOKS[liveRole.key] || [
+                      'Clock in at shift start and clock out upon closing.',
+                      'Capture complete customer/guarantor details including GPS Digital Addresses.',
+                      'Monitor notifications for Company Owner broadcasts, payment alerts, and scheduled online meetings.',
+                    ]).map((item, idx) => (
+                      <li key={idx}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })()}
 
             {/* Platform Core Workflows */}
             <div className="gbs-grid-2" style={{ gap: 12 }}>

@@ -20,6 +20,18 @@ import { RegistersCrossCheckPanel } from '../components/UserCountDropdownWidget'
 const formatGHS = (n) =>
   `GHS ${Number(n || 0).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+const formatTxDateParts = (rawDate) => {
+  const d = rawDate ? new Date(rawDate) : null;
+  if (!d || Number.isNaN(d.getTime())) {
+    return { day: '—', date: '—', month: '—', full: '—' };
+  }
+  const day = d.toLocaleDateString('en-GB', { weekday: 'long' });
+  const date = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  const month = d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+  const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  return { day, date, month, time, full: `${day}, ${date} (${month}) • ${time}` };
+};
+
 export default function RoleDashboards({ user: propUser, countdown: propCountdown }) {
   const user = propUser || sessionStore.getTenantUser();
   const roleKey = String(user?.role || 'MEMBER_PORTAL').toUpperCase();
@@ -271,6 +283,29 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
   useEffect(() => {
     loadDashboardData();
   }, [loadDashboardData]);
+
+  // Keep user's live device GPS synced to their registered mobile number when permission is granted
+  useEffect(() => {
+    if (!navigator.geolocation || !navigator.permissions?.query) return;
+    let cancelled = false;
+    navigator.permissions.query({ name: 'geolocation' }).then((status) => {
+      if (cancelled || status.state !== 'granted') return;
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          if (cancelled) return;
+          api.post('/gps/share-location', {
+            latitude: Number(pos.coords.latitude.toFixed(6)),
+            longitude: Number(pos.coords.longitude.toFixed(6)),
+            accuracy: pos.coords.accuracy ? Number(pos.coords.accuracy.toFixed(1)) : undefined,
+            status: 'ONLINE',
+          }).catch(() => {});
+        },
+        () => {},
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+      );
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   // Real File Export Downloader (CSV / Excel XLSX / PDF)
   const handleDownloadReport = async (type, format) => {
@@ -994,8 +1029,24 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
               <h1 style={{ fontSize: 'clamp(1.4rem, 2.5vw, 2rem)', fontWeight: 800, margin: 0, color: '#FFFFFF' }}>
                 {roleMeta.title} Command Dashboard
               </h1>
-              <p style={{ margin: '4px 0 0', fontSize: '0.88rem', color: '#E2E8F0', maxWidth: 680 }}>
-                Welcome back, <strong>{user?.firstName} {user?.lastName}</strong> — {roleMeta.subtitle}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
+                <Link to="/profile/security" title="Update profile picture or live camera capture" style={{ display: 'inline-flex', alignItems: 'center', gap: 10, textDecoration: 'none', background: 'rgba(6,12,24,0.68)', padding: '6px 12px', borderRadius: 999, border: '1px solid rgba(212,175,55,0.45)' }}>
+                  {user?.profilePicture ? (
+                    <img src={user.profilePicture} alt={`${user.firstName} ${user.lastName}`} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', border: '1.5px solid #D4AF37' }} />
+                  ) : (
+                    <span style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(212,175,55,0.22)', color: '#F4E07B', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.88rem', border: '1.5px solid #D4AF37' }}>
+                      {(user?.firstName?.[0] || 'U')}{(user?.lastName?.[0] || '')}
+                    </span>
+                  )}
+                  <span style={{ color: '#FFFFFF', fontSize: '0.92rem' }}>
+                    <strong>{user?.firstName} {user?.lastName}</strong>
+                    <span style={{ color: '#94A3B8', marginLeft: 8, fontSize: '0.82rem' }}>{user?.phone || user?.email}</span>
+                    {!user?.profilePicture && <span style={{ color: '#FDE68A', marginLeft: 8, fontSize: '0.78rem' }}>• Upload Photo</span>}
+                  </span>
+                </Link>
+              </div>
+              <p style={{ margin: '6px 0 0', fontSize: '0.92rem', color: '#E2E8F0', maxWidth: 680 }}>
+                {roleMeta.subtitle}
               </p>
             </div>
 
@@ -1564,18 +1615,23 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                   <p style={{ color: '#94A3B8', fontSize: '0.84rem' }}>No repayments recorded yet.</p>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {payments.slice(0, 5).map((p) => (
-                      <div key={p.id} style={{ padding: 10, borderRadius: 8, background: 'rgba(6,12,24,0.8)', border: '1px solid rgba(0,242,254,0.18)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                          <strong style={{ fontSize: '0.82rem' }}>{p.transactionRef || p.receiptNumber || p.id.slice(0, 8)}</strong>
-                          <div style={{ fontSize: '0.72rem', color: '#94A3B8' }}>{p.method} • {p.loan?.loanNumber || 'Loan'}</div>
+                    {payments.slice(0, 5).map((p) => {
+                      const dt = formatTxDateParts(p.paidAt || p.createdAt);
+                      const refName = p.payerName || (p.loan?.member ? `${p.loan.member.firstName} ${p.loan.member.lastName}` : null) || p.loan?.loanNumber || 'Loan Repayment';
+                      return (
+                        <div key={p.id} style={{ padding: 10, borderRadius: 8, background: 'rgba(6,12,24,0.8)', border: '1px solid rgba(0,242,254,0.18)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                          <div>
+                            <strong style={{ fontSize: '0.88rem' }}>{p.transactionRef || p.receiptNumber || p.id.slice(0, 8)} — {refName}</strong>
+                            <div style={{ fontSize: '0.78rem', color: '#CBD5E1' }}>{p.method} • {p.loan?.loanNumber || 'Loan'}</div>
+                            <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>{dt.full}</div>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontWeight: 700, color: '#34D399', fontSize: '0.9rem' }}>{formatGHS(p.amount)}</div>
+                            <span className={`badge ${p.status === 'COMPLETED' ? 'badge-success' : 'badge-warning'}`} style={{ fontSize: '0.68rem' }}>{p.status}</span>
+                          </div>
                         </div>
-                        <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontWeight: 700, color: '#34D399', fontSize: '0.85rem' }}>{formatGHS(p.amount)}</div>
-                          <span className={`badge ${p.status === 'COMPLETED' ? 'badge-success' : 'badge-warning'}`} style={{ fontSize: '0.62rem' }}>{p.status}</span>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1857,7 +1913,8 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Ref</th>
+                    <th>Reference &amp; Name</th>
+                    <th>Day / Date / Month</th>
                     <th>Method</th>
                     <th>Amount</th>
                     <th>Status</th>
@@ -1865,33 +1922,44 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredPayments.map((p) => (
-                    <tr key={p.id} onClick={() => navigate(`/payments/${p.id}`)} style={{ cursor: 'pointer' }}>
-                      <td><strong>{p.transactionRef || p.receiptNumber || p.reference || p.id.slice(0, 8)}</strong></td>
-                      <td>{p.method}</td>
-                      <td>{formatGHS(p.amount)}</td>
-                      <td><span className={`badge ${p.status === 'COMPLETED' ? 'badge-success' : 'badge-warning'}`}>{p.status}</span></td>
-                      <td style={{ display: 'flex', gap: 6 }}>
-                        <button type="button" className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.74rem' }}>Inspect</button>
-                        {p.method === 'CASH' && p.status !== 'COMPLETED' && (isFinance || isManagement) && (
-                          <button
-                            type="button"
-                            className="btn btn-primary"
-                            style={{ padding: '4px 8px', fontSize: '0.72rem' }}
-                            onClick={(ev) => {
-                              ev.stopPropagation();
-                              handleApproveCashPayment(p.id);
-                            }}
-                          >
-                            Approve Cash
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {filteredPayments.map((p) => {
+                    const dt = formatTxDateParts(p.paidAt || p.createdAt);
+                    const refName = p.payerName || (p.loan?.member ? `${p.loan.member.firstName} ${p.loan.member.lastName}` : null) || p.loan?.loanNumber || 'Customer Repayment';
+                    return (
+                      <tr key={p.id} onClick={() => navigate(`/payments/${p.id}`)} style={{ cursor: 'pointer' }}>
+                        <td>
+                          <strong>{p.transactionRef || p.receiptNumber || p.reference || p.id.slice(0, 8)}</strong>
+                          <div style={{ fontSize: '0.78rem', color: '#CBD5E1' }}>{refName}{p.loan?.loanNumber ? ` • ${p.loan.loanNumber}` : ''}</div>
+                        </td>
+                        <td>
+                          <div style={{ fontWeight: 600, color: '#F1F5F9', fontSize: '0.84rem' }}>{dt.day}, {dt.date}</div>
+                          <div style={{ fontSize: '0.76rem', color: '#94A3B8' }}>{dt.month} • {dt.time}</div>
+                        </td>
+                        <td>{p.method}</td>
+                        <td>{formatGHS(p.amount)}</td>
+                        <td><span className={`badge ${p.status === 'COMPLETED' ? 'badge-success' : 'badge-warning'}`}>{p.status}</span></td>
+                        <td style={{ display: 'flex', gap: 6 }}>
+                          <button type="button" className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.78rem' }}>Inspect</button>
+                          {p.method === 'CASH' && p.status !== 'COMPLETED' && (isFinance || isManagement) && (
+                            <button
+                              type="button"
+                              className="btn btn-primary"
+                              style={{ padding: '4px 8px', fontSize: '0.76rem' }}
+                              onClick={(ev) => {
+                                ev.stopPropagation();
+                                handleApproveCashPayment(p.id);
+                              }}
+                            >
+                              Approve Cash
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                   {filteredPayments.length === 0 && (
                     <tr>
-                      <td colSpan={5} style={{ textAlign: 'center', color: '#94A3B8', padding: 24 }}>
+                      <td colSpan={6} style={{ textAlign: 'center', color: '#94A3B8', padding: 24 }}>
                         No repayments match the current filter.
                       </td>
                     </tr>

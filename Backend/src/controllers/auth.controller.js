@@ -99,6 +99,24 @@ async function disable2FA(req, res, next) {
   }
 }
 
+async function updateProfilePicture(req, res, next) {
+  try {
+    const { prisma } = require('../config/database');
+    const pic = String(req.body?.profilePicture || '').trim();
+    if (!pic || pic.length < 10) {
+      return res.status(400).json({ success: false, message: 'Valid profile picture image data is required.' });
+    }
+    const updated = await prisma.user.update({
+      where: { id: req.user.id },
+      data: { profilePicture: pic },
+      select: { id: true, firstName: true, lastName: true, profilePicture: true },
+    });
+    return success(res, updated, 'Profile picture updated successfully');
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   register,
   login,
@@ -110,4 +128,5 @@ module.exports = {
   setup2FA,
   enable2FA,
   disable2FA,
+  updateProfilePicture,
 };

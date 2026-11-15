@@ -829,10 +829,29 @@ export function DataMigrationPage() {
 /* 9. PROFILE, 2FA TOTP, VOICE IDENTITY & FACIAL BIOMETRIC (/profile)         */
 /* ========================================================================== */
 export function ProfileSecurityPage() {
-  const user = sessionStore.getTenantUser();
+  const [user, setUser] = useState(() => sessionStore.getTenantUser());
   const [totpSetup, setTotpSetup] = useState(null);
   const [totpVerify, setTotpVerify] = useState('');
   const [faceMsg, setFaceMsg] = useState(null);
+  const [picSaving, setPicSaving] = useState(false);
+
+  const handleSaveProfilePhoto = async (dataUrl) => {
+    if (!dataUrl) return;
+    setPicSaving(true);
+    try {
+      const res = await api.post('/auth/profile-picture', { profilePicture: dataUrl });
+      const savedUrl = res.data?.data?.profilePicture || dataUrl;
+      const updatedUser = { ...(user || {}), profilePicture: savedUrl };
+      const token = sessionStore.getTenantToken();
+      if (token) sessionStore.setTenantSession(token, updatedUser);
+      setUser(updatedUser);
+      setFaceMsg({ ok: true, text: 'Profile identification photo saved and updated across your dashboard!' });
+    } catch (err) {
+      setFaceMsg({ ok: false, text: err.response?.data?.message || 'Failed to save profile picture' });
+    } finally {
+      setPicSaving(false);
+    }
+  };
 
   const setup2FA = async () => {
     try {
@@ -864,6 +883,38 @@ export function ProfileSecurityPage() {
       />
 
       {faceMsg && <div className="glass-panel" style={{ padding: 12, marginBottom: 16, color: faceMsg.ok ? '#34D399' : '#FCA5A5' }}>{faceMsg.text}</div>}
+
+      <div className="glass-panel" style={{ padding: 20, marginBottom: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          {user?.profilePicture ? (
+            <img
+              src={user.profilePicture}
+              alt={`${user.firstName} ${user.lastName}`}
+              style={{ width: 72, height: 72, borderRadius: '50%', objectFit: 'cover', border: '2px solid #D4AF37' }}
+            />
+          ) : (
+            <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'rgba(212,175,55,0.2)', border: '2px solid #D4AF37', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '1.3rem', color: '#F4E07B' }}>
+              {(user?.firstName?.[0] || 'U')}{(user?.lastName?.[0] || '')}
+            </div>
+          )}
+          <div>
+            <div style={{ fontWeight: 800, fontSize: '1.1rem', color: '#FFFFFF' }}>{user?.firstName} {user?.lastName}</div>
+            <div style={{ fontSize: '0.88rem', color: '#CBD5E1' }}>{user?.role} • {user?.phone || user?.email}</div>
+            <div style={{ fontSize: '0.8rem', color: user?.profilePicture ? '#34D399' : '#FDE68A', marginTop: 2 }}>
+              {picSaving ? 'Saving profile photo...' : user?.profilePicture ? 'Identification photo verified on account' : 'No profile photo uploaded yet — capture or upload below'}
+            </div>
+          </div>
+        </div>
+        <div style={{ flex: '1 1 320px', maxWidth: 480 }}>
+          <FaceScanner
+            mode="capture"
+            title="Profile Photo Upload & Live Camera Capture"
+            onCapture={(dataUrl) => {
+              if (dataUrl) handleSaveProfilePhoto(dataUrl);
+            }}
+          />
+        </div>
+      </div>
 
       <div className="gbs-grid-2">
         <VoiceChallengePanel mode="enroll" expectedNameHint={`${user?.firstName || ''} ${user?.lastName || ''}`.trim()} />
