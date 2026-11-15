@@ -129,6 +129,8 @@ function buildPhoneSearchVariants(rawPhone) {
     variants.add(`0${tail9}`);
     variants.add(`233${tail9}`);
     variants.add(`+233${tail9}`);
+    variants.add(`0${tail9.slice(0, 2)} ${tail9.slice(2, 5)} ${tail9.slice(5)}`);
+    variants.add(`0${tail9.slice(0, 2)}-${tail9.slice(2, 5)}-${tail9.slice(5)}`);
   }
   return Array.from(variants).filter((v) => v.length >= 3);
 }
@@ -223,7 +225,10 @@ async function locateByPhone({ phone, tenantId = null, allowCrossTenant = false 
     return { query: phone || '', totalMatches: 0, primaryMatch: null, matches: [] };
   }
 
-  const phoneOrClauses = variants.map((v) => ({ phone: { contains: v, mode: 'insensitive' } }));
+  const phoneOrClauses = variants.flatMap((v) => ([
+    { phone: { contains: v, mode: 'insensitive' } },
+    { memberProfile: { is: { emergencyPhone: { contains: v, mode: 'insensitive' } } } },
+  ]));
   const userWhere = {
     OR: phoneOrClauses,
     ...(allowCrossTenant || !tenantId ? {} : { tenantId }),
@@ -337,7 +342,10 @@ async function emergencyLocate({ query = '', tenantId = null, roleFilter = null,
     { guarantorProfile: { is: { gpsAddress: { contains: q, mode: 'insensitive' } } } },
     { staffProfile: { is: { gpsAddress: { contains: q, mode: 'insensitive' } } } },
     { staffProfile: { is: { employeeId: { contains: q, mode: 'insensitive' } } } },
-    ...phoneVariants.map((pv) => ({ phone: { contains: pv, mode: 'insensitive' } })),
+    ...phoneVariants.flatMap((pv) => ([
+      { phone: { contains: pv, mode: 'insensitive' } },
+      { memberProfile: { is: { emergencyPhone: { contains: pv, mode: 'insensitive' } } } },
+    ])),
   ];
 
   if (tokens.length > 1) {

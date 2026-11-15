@@ -395,8 +395,9 @@ export default function LiveLocationTrackerMap({
 
       {/* Active Map Viewport */}
       {mapEngine === 'GOOGLE_MAP' ? (
-        <div style={{ height: 430, width: '100%', borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(212,175,55,0.35)', marginBottom: 16, background: '#0B1120' }}>
+        <div style={{ height: 450, width: '100%', borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(212,175,55,0.45)', marginBottom: 16, background: '#0B1120' }}>
           <iframe
+            key={googleMapsEmbedUrl}
             title={`Google Map Pin - ${activePin.label}`}
             src={googleMapsEmbedUrl}
             style={{ width: '100%', height: '100%', border: 0 }}
