@@ -38,6 +38,10 @@ function scheduleJobs() {
   cron.schedule('*/5 * * * *', async () => {
     try {
       const status = await systemService.getSystemStatus();
+      if (!status.database.connected) {
+        logger.warn('Skipping health log write: database is currently disconnected');
+        return;
+      }
       await prisma.systemHealthLog.create({
         data: {
           serverStatus: status.server.status,

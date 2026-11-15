@@ -8,11 +8,19 @@ const { getEnvironmentProfile } = require('../config/environments');
 
 async function getSystemStatus() {
   const envProfile = getEnvironmentProfile();
-  const [dbHealth, redisHealth, lastBackup] = await Promise.all([
+  const [dbHealth, redisHealth] = await Promise.all([
     checkDatabaseHealth(),
     checkRedisHealth(),
-    prisma.systemBackup.findFirst({ orderBy: { createdAt: 'desc' } }),
   ]);
+
+  let lastBackup = null;
+  if (dbHealth.connected) {
+    try {
+      lastBackup = await prisma.systemBackup.findFirst({ orderBy: { createdAt: 'desc' } });
+    } catch {
+      lastBackup = null;
+    }
+  }
 
   return {
     environment: envProfile.nodeEnv,
