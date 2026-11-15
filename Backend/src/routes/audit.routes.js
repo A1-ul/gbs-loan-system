@@ -7,7 +7,6 @@ const { ROLES } = require('../constants');
 const router = express.Router();
 
 const auditViewAuthorized = authorize(
-  ROLES.SUPER_ADMIN,
   ROLES.COMPANY_OWNER,
   ROLES.BOARD_EXECUTIVE,
   ROLES.EXECUTIVE_MANAGEMENT,

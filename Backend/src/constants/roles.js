@@ -36,7 +36,6 @@ const ROLES = {
   MOBILE_STAFF: 'MOBILE_STAFF',
 
   // Backward Compatible Aliases
-  SUPER_ADMIN: 'COMPANY_OWNER',
   MANAGER: 'MANAGER',
   STAFF: 'STAFF',
   COLLECTOR: 'COLLECTOR',

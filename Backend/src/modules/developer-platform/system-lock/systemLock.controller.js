@@ -11,7 +11,7 @@ const getStatus = async (req, res, next) => {
 
 const lock = async (req, res, next) => {
   try {
-    const result = await service.lockSystem(req.body?.reason, req.developer);
+    const result = await service.lockSystem(req.body?.lockReason || req.body?.reason, req.developer);
     res.json({ success: true, message: 'System locked globally across tenant portals', data: result });
   } catch (err) {
     next(err);

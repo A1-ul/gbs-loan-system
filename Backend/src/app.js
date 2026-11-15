@@ -85,6 +85,7 @@ app.use(cors({
     'X-Voice-Biometric',
     'X-Api-Key',
     'X-Device-Fingerprint',
+    'X-Environment-Mode',
   ],
   exposedHeaders: ['X-Request-Id', 'X-Response-Time', 'Content-Disposition'],
   credentials: true,

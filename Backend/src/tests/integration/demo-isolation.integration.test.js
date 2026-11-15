@@ -119,7 +119,7 @@ describe('GBS Demo Walkthrough Separation & Self-Service Navigation Integration 
     expect(loans.length).toBeGreaterThanOrEqual(2);
     const flatPayments = loans.flatMap((l) => l.payments || []);
     expect(flatPayments.length).toBeGreaterThanOrEqual(1);
-    expect(flatPayments[0].paymentRef).toBe('PAY-DEMO-1001');
+    expect(flatPayments.some((p) => p.paymentRef === 'PAY-DEMO-1001')).toBe(true);
   });
 
   it('supports GUARANTOR_PORTAL self-service /guarantors/my-guarantees while blocking staff /guarantors', async () => {

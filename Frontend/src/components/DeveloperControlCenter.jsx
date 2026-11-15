@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Terminal, Cpu, Lock, Unlock, Database, RefreshCw, Activity, Building2,
-  MapPin, ShieldAlert, Send, CheckCircle2, XCircle, Clock, LogOut, Wrench, Trash2, BookOpen, ArrowUpRight, ArrowLeft
+  MapPin, ShieldAlert, Send, CheckCircle2, XCircle, Clock, LogOut, Wrench, Trash2, BookOpen, ArrowUpRight, ArrowLeft, Download
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 import api, { devApi, sessionStore, API_ORIGIN } from '../services/api';
@@ -10,6 +10,7 @@ import { DEVELOPER_PORTAL_META } from '../constants/rolesMeta';
 import { BackButtonBar } from '../context/NavigationContext';
 import LiveLocationTrackerMap from './LiveLocationTrackerMap';
 import OperatingGuideModal from './OperatingGuideModal';
+import GbsBrandLogo from './common/GbsBrandLogo';
 
 const DEV_VALID_TABS = ['TENANTS', 'GIS_MAP', 'DIAGNOSTICS', 'LOCK_SUBS', 'BACKUPS', 'MESSAGES'];
 
@@ -96,8 +97,8 @@ export default function DeveloperControlCenter({ onLogout }) {
       setPendingTenants(pendingRes.data?.data || []);
       setGisData(gisRes.data?.data || { features: [] });
       setLogs(logsRes.data?.logs || []);
-      setCrashes(crashRes.data?.data || []);
-      setAlerts(alertsRes.data?.data || []);
+      setCrashes(Array.isArray(crashRes.data?.data) ? crashRes.data.data : (crashRes.data?.data?.reports || []));
+      setAlerts(Array.isArray(alertsRes.data?.data) ? alertsRes.data.data : (alertsRes.data?.data?.alerts || []));
       setBackups(backupsRes.data?.data || []);
       setMessages(msgsRes.data?.data || []);
       const healthData = resHealth?.data?.data || resHealth?.data;
@@ -375,15 +376,13 @@ export default function DeveloperControlCenter({ onLogout }) {
       {/* Top Isolated Landlord Navigation Bar */}
       <header className="header-bar" style={{ borderColor: 'rgba(239,68,68,0.4)' }}>
         <Link to="/dev-portal" className="logo-section" style={{ textDecoration: 'none' }}>
-          <div className="logo-icon" style={{ background: 'linear-gradient(135deg, #EF4444, #991B1B)', color: '#FFF' }}>
-            <Terminal size={20} />
-          </div>
+          <GbsBrandLogo size={44} borderColor="#EF4444" />
           <div>
             <div style={{ fontWeight: 800, color: '#F87171', fontSize: '1rem' }}>
-              GBS HIDDEN DEVELOPER CONTROL CENTER
+              GBS® HIDDEN DEVELOPER CONTROL CENTER
             </div>
             <div style={{ fontSize: '0.72rem', color: '#94A3B8' }}>
-              Landlord: {devUser?.username || devUser?.email || 'Lead Developer'} • Isolated Security Plane
+              Intelligence Talks To Wisdom • Landlord: {devUser?.username || devUser?.email || 'Lead Developer'}
             </div>
           </div>
         </Link>
@@ -403,6 +402,14 @@ export default function DeveloperControlCenter({ onLogout }) {
           <span className={`badge ${isGlobalLocked ? 'badge-danger' : 'badge-success'}`}>
             {isGlobalLocked ? 'GLOBAL SYSTEM LOCKED' : 'PLATFORM ONLINE'}
           </span>
+          <a
+            href="/images/gbs-official-logo.jpeg"
+            download="GBS-Official-Company-Logo.jpeg"
+            className="btn btn-secondary"
+            style={{ padding: '7px 12px', textDecoration: 'none', borderColor: 'rgba(212,175,55,0.45)', color: '#F4E07B' }}
+          >
+            <Download size={14} /> Official Logo (.jpeg)
+          </a>
           <button type="button" className="btn btn-secondary" onClick={() => setGuideOpen(true)} style={{ padding: '7px 12px' }}>
             <BookOpen size={14} /> Developer Guide
           </button>
@@ -829,8 +836,8 @@ export default function DeveloperControlCenter({ onLogout }) {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 240, overflowY: 'auto' }}>
                 {crashes.map((c) => (
                   <div key={c.id} style={{ padding: 10, borderRadius: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', fontSize: '0.78rem' }}>
-                    <div style={{ fontWeight: 700, color: '#FCA5A5' }}>{c.issueType || c.severity} — {c.component}</div>
-                    <div style={{ color: '#E2E8F0' }}>{c.description}</div>
+                    <div style={{ fontWeight: 700, color: '#FCA5A5' }}>{c.issueType || c.severity} — {c.component || c.severity || 'Core Runtime'}</div>
+                    <div style={{ color: '#E2E8F0' }}>{c.message || c.description}</div>
                   </div>
                 ))}
                 {crashes.length === 0 && <div style={{ fontSize: '0.8rem', color: '#34D399' }}>Zero unhandled crashes recorded.</div>}
@@ -889,9 +896,9 @@ export default function DeveloperControlCenter({ onLogout }) {
                   <div key={a.id} style={{ padding: 12, borderRadius: 8, background: 'rgba(6,12,24,0.85)', border: '1px solid rgba(245,158,11,0.3)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
                     <div>
                       <div style={{ fontWeight: 700, fontSize: '0.84rem', color: a.resolved ? '#34D399' : '#FBBF24' }}>
-                        [{a.severity}] {a.alertType}
+                        [{a.severity}] {a.alertType}{a.title ? ` — ${a.title}` : ''}
                       </div>
-                      <div style={{ fontSize: '0.78rem', color: '#CBD5E1' }}>{a.message}</div>
+                      <div style={{ fontSize: '0.78rem', color: '#CBD5E1' }}>{a.description || a.message || a.title}</div>
                     </div>
                     {!a.resolved && (
                       <button type="button" className="btn btn-secondary" style={{ padding: '5px 10px', fontSize: '0.74rem' }} onClick={() => handleResolveAlert(a.id)}>
@@ -930,10 +937,10 @@ export default function DeveloperControlCenter({ onLogout }) {
                 <tbody>
                   {backups.map((b) => (
                     <tr key={b.id}>
-                      <td>{b.fileName}</td>
-                      <td>{b.backupType}</td>
+                      <td>{b.fileName || b.filePath || b.id}</td>
+                      <td>{b.backupType || 'POSTGRES_SQL_DUMP'}</td>
                       <td><span className="badge badge-success">{b.status}</span></td>
-                      <td>{b.fileSizeBytes ? `${Math.round(Number(b.fileSizeBytes) / 1024)} KB` : 'Verified'}</td>
+                      <td>{(b.fileSizeBytes ?? b.fileSize) ? `${Math.max(1, Math.round(Number(b.fileSizeBytes ?? b.fileSize) / 1024))} KB` : 'Verified'}</td>
                       <td>{new Date(b.createdAt).toLocaleString()}</td>
                       <td>
                         <button type="button" className="btn btn-secondary" style={{ padding: '5px 10px', fontSize: '0.76rem' }} onClick={() => handleRestoreBackup(b.id)}>
@@ -983,7 +990,7 @@ export default function DeveloperControlCenter({ onLogout }) {
                 {messages.map((m) => (
                   <div key={m.id} style={{ padding: 12, borderRadius: 8, background: 'rgba(6,12,24,0.85)', border: '1px solid rgba(0,242,254,0.2)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', fontWeight: 700, color: '#F4E07B' }}>
-                      <span>{m.title}</span>
+                      <span>{m.title || m.subject}</span>
                       <span className="badge badge-cyan">{m.tenant?.name || 'ALL TENANTS'}</span>
                     </div>
                     <p style={{ fontSize: '0.8rem', color: '#CBD5E1', margin: '6px 0 0' }}>{m.body}</p>

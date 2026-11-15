@@ -320,11 +320,10 @@ async function main() {
     data: { tenantId: accraTenant.id, branchId: accraBranch?.id || null, ...prov },
   });
 
-  // Migrate any legacy SUPER_ADMIN user records to COMPANY_OWNER
-  await prisma.user.updateMany({
-    where: { role: 'SUPER_ADMIN' },
-    data: { role: 'COMPANY_OWNER' },
-  });
+  // Clean up any legacy non-canonical SUPER_ADMIN rows safely via raw SQL if present
+  await prisma.$executeRawUnsafe(
+    `UPDATE "users" SET "role" = 'COMPANY_OWNER' WHERE "role"::text = 'SUPER_ADMIN'`
+  ).catch(() => null);
 
   // 3. Upsert core tenant role test accounts across key roles so dashboards can be signed into and audited cleanly
   const defaultPwd = await bcrypt.hash('GbsRole@2026!', 12);

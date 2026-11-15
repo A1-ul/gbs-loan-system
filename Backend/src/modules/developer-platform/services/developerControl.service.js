@@ -4,12 +4,21 @@ const { checkRedisHealth } = require('../../../config/redis');
 const { getNotificationQueue } = require('../../../queues');
 const { getSocketStats, emitToTenant, emitToDeveloper } = require('../../../config/socket');
 const tenantGisService = require('../../tenant/tenantGis.service');
+const { ValidationError } = require('../../../utils/errors');
 const logger = require('../../../utils/logger');
 
 /**
  * Live Developer Monitoring & Control Service (Zero Mocks, Strict Landlord Scope)
  */
 async function getLiveMonitoringMetrics() {
+  const demoTenant = await prisma.tenant.findUnique({
+    where: { code: 'DEMO-SANDBOX' },
+    select: { id: true },
+  }).catch(() => null);
+  const excludeDemoFilter = demoTenant
+    ? { OR: [{ tenantId: null }, { tenantId: { not: demoTenant.id } }] }
+    : {};
+
   const [
     dbHealth,
     redisHealth,
@@ -28,15 +37,15 @@ async function getLiveMonitoringMetrics() {
   ] = await Promise.all([
     checkDatabaseHealth(),
     checkRedisHealth(),
-    prisma.tenant.count().catch(() => 0),
-    prisma.tenant.count({ where: { onboardingStatus: 'PENDING' } }).catch(() => 0),
-    prisma.tenant.count({ where: { status: { in: ['ACTIVE', 'EXPIRING_SOON'] } } }).catch(() => 0),
-    prisma.tenant.count({ where: { status: 'LOCKED_EXPIRED' } }).catch(() => 0),
-    prisma.user.count().catch(() => 0),
-    prisma.member.count().catch(() => 0),
-    prisma.loan.count().catch(() => 0),
-    prisma.payment.count().catch(() => 0),
-    prisma.collector.count({ where: { isActive: true } }).catch(() => 0),
+    prisma.tenant.count({ where: { code: { not: 'DEMO-SANDBOX' } } }).catch(() => 0),
+    prisma.tenant.count({ where: { code: { not: 'DEMO-SANDBOX' }, onboardingStatus: 'PENDING' } }).catch(() => 0),
+    prisma.tenant.count({ where: { code: { not: 'DEMO-SANDBOX' }, status: { in: ['ACTIVE', 'EXPIRING_SOON'] } } }).catch(() => 0),
+    prisma.tenant.count({ where: { code: { not: 'DEMO-SANDBOX' }, status: 'LOCKED_EXPIRED' } }).catch(() => 0),
+    prisma.user.count({ where: excludeDemoFilter }).catch(() => 0),
+    prisma.member.count({ where: excludeDemoFilter }).catch(() => 0),
+    prisma.loan.count({ where: excludeDemoFilter }).catch(() => 0),
+    prisma.payment.count({ where: excludeDemoFilter }).catch(() => 0),
+    prisma.collector.count({ where: { isActive: true, ...excludeDemoFilter } }).catch(() => 0),
     prisma.systemLockState.findFirst({ orderBy: { updatedAt: 'desc' } }).catch(() => null),
     prisma.securityAlert.count({ where: { resolved: false } }).catch(() => 0),
     prisma.aIDiagnosticLog.count({ where: { autoFixed: false } }).catch(() => 0),
@@ -182,31 +191,52 @@ async function getDeveloperLogs(limit = 50) {
   });
 }
 
-async function sendTenantMessage({ tenantId = null, subject, body, priority = 'NORMAL', developerUser = null }) {
+async function sendTenantMessage({ tenantId = null, subject, title, body, priority = 'NORMAL', messageType, developerUser = null }) {
+  const resolvedSubject = String(subject || title || 'System Authority Notice').trim();
+  const resolvedBody = String(body || '').trim();
+  if (!resolvedBody) {
+    throw new ValidationError('Message body is required.');
+  }
+  const resolvedPriority = priority && priority !== 'NORMAL'
+    ? priority
+    : (messageType === 'URGENT_NOTICE' || messageType === 'CRITICAL' ? 'URGENT' : (priority || 'NORMAL'));
+
   const msg = await prisma.tenantMessage.create({
     data: {
       tenantId: tenantId || null,
       senderType: 'DEVELOPER',
       senderName: developerUser?.username || 'GBS Developer Control Authority',
-      subject,
-      body,
-      priority,
+      subject: resolvedSubject,
+      body: resolvedBody,
+      priority: resolvedPriority,
     },
   });
 
   if (tenantId) {
-    emitToTenant(tenantId, 'tenant:developer_message', msg);
+    emitToTenant(tenantId, 'tenant:developer_message', { ...msg, title: msg.subject });
   }
-  await logDeveloperAction(developerUser?.id, 'SEND_TENANT_MESSAGE', tenantId ? `tenant:${tenantId}` : 'BROADCAST_ALL', { subject, priority });
-  return msg;
+  await logDeveloperAction(developerUser?.id, 'SEND_TENANT_MESSAGE', tenantId ? `tenant:${tenantId}` : 'BROADCAST_ALL', {
+    subject: resolvedSubject,
+    priority: resolvedPriority,
+  });
+  return {
+    ...msg,
+    title: msg.subject,
+    messageType: msg.priority,
+  };
 }
 
 async function getTenantMessages(limit = 40) {
-  return prisma.tenantMessage.findMany({
+  const rows = await prisma.tenantMessage.findMany({
     take: limit,
     orderBy: { createdAt: 'desc' },
     include: { tenant: { select: { id: true, code: true, name: true } } },
   });
+  return rows.map((m) => ({
+    ...m,
+    title: m.subject,
+    messageType: m.priority,
+  }));
 }
 
 async function runAiDiagnostics() {

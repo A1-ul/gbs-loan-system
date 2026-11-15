@@ -214,9 +214,8 @@ const ACCESS_MATRIX = {
 };
 
 function hasPermission(role, permission) {
-  const normalizedRole = role === 'SUPER_ADMIN' ? ROLES.COMPANY_OWNER : role;
-  if (!ACCESS_MATRIX[normalizedRole]) return false;
-  return ACCESS_MATRIX[normalizedRole].includes(permission);
+  if (!ACCESS_MATRIX[role]) return false;
+  return ACCESS_MATRIX[role].includes(permission);
 }
 
 module.exports = {

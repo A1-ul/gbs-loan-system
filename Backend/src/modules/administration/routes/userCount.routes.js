@@ -12,7 +12,6 @@ const { ROLES } = require('../../../constants/roles');
 const router = express.Router();
 
 const countViewerRoles = [
-  ROLES.SUPER_ADMIN,
   ROLES.COMPANY_OWNER,
   ROLES.BOARD_EXECUTIVE,
   ROLES.EXECUTIVE_MANAGEMENT,
@@ -42,7 +41,6 @@ router.get(
   '/by-role/:role',
   authenticate,
   authorize([
-    ROLES.SUPER_ADMIN,
     ROLES.COMPANY_OWNER,
     ROLES.BOARD_EXECUTIVE,
     ROLES.EXECUTIVE_MANAGEMENT,
@@ -64,7 +62,6 @@ router.post(
   '/:id/verify-qualification',
   authenticate,
   authorize([
-    ROLES.SUPER_ADMIN,
     ROLES.COMPANY_OWNER,
     ROLES.EXECUTIVE_MANAGEMENT,
     ROLES.BRANCH_MANAGER,
@@ -77,7 +74,6 @@ router.delete(
   '/:id/remove-unqualified',
   authenticate,
   authorize([
-    ROLES.SUPER_ADMIN,
     ROLES.COMPANY_OWNER,
   ]),
   userCountController.removeUnqualifiedUser
@@ -87,7 +83,6 @@ router.get(
   '/registration-alerts',
   authenticate,
   authorize([
-    ROLES.SUPER_ADMIN,
     ROLES.COMPANY_OWNER,
     ROLES.EXECUTIVE_MANAGEMENT,
     ROLES.BRANCH_MANAGER,

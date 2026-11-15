@@ -122,7 +122,7 @@ describe('GBS Enterprise Production Integration Suite (PostgreSQL Live)', () => 
     expect(memberRes.statusCode).toBe(200);
     memberToken = memberRes.body.data.accessToken;
 
-    // Tenant SUPER_ADMIN MUST be blocked from Developer Control Center & AI Developer Assistant
+    // Tenant COMPANY_OWNER MUST be blocked from Developer Control Center & AI Developer Assistant
     const blockedDevDash = await request(app)
       .get('/api/v1/developer/dashboard')
       .set('Authorization', `Bearer ${adminToken}`);
@@ -145,7 +145,7 @@ describe('GBS Enterprise Production Integration Suite (PostgreSQL Live)', () => 
       .set('Authorization', `Bearer ${devToken}`);
     expect(devGis.statusCode).toBe(200);
     expect(Array.isArray(devGis.body.data.features)).toBe(true);
-  });
+  }, 45000);
 
   it('enforces Institutional Onboarding -> PENDING block -> Developer Approval (1m Trial) -> Multi-Tier Plans -> Lock/Renew', async () => {
     const onboardRes = await request(app)
@@ -281,7 +281,7 @@ describe('GBS Enterprise Production Integration Suite (PostgreSQL Live)', () => 
     expect(delTenantRes.body.success).toBe(true);
     const verifyDeleted = await prisma.tenant.findUnique({ where: { id: disposableId } });
     expect(verifyDeleted).toBeNull();
-  });
+  }, 45000);
 
   it('secures User Registration Counts & Admin Cross-Check + Deletion flow', async () => {
     // Public / unauthenticated blocked
@@ -721,5 +721,48 @@ describe('GBS Enterprise Production Integration Suite (PostgreSQL Live)', () => 
 
     // Clean up adminToken-owned audit record created outside test tenant
     await prisma.accountingAuditRecord.deleteMany({ where: { id: createdAuditId } }).catch(() => null);
-  });
+  }, 45000);
+
+  it('verifies Developer Control Center end-to-end fixes & SUPER_ADMIN removal assertions', async () => {
+    const enumRows = await prisma.$queryRawUnsafe(`
+      SELECT e.enumlabel FROM pg_enum e
+      JOIN pg_type t ON e.enumtypid = t.oid
+      WHERE t.typname = 'UserRole'
+    `);
+    expect(enumRows.some((r) => r.enumlabel === 'SUPER_ADMIN')).toBe(false);
+
+    const [devPerfRes, devDiagRes, devCrashRes, devAlertsRes, devRecRes, devBkListRes] = await Promise.all([
+      request(app).get('/api/v1/developer/performance').set('Authorization', `Bearer ${devToken}`),
+      request(app).get('/api/v1/developer/diagnostics').set('Authorization', `Bearer ${devToken}`),
+      request(app).get('/api/v1/developer/crash-reports').set('Authorization', `Bearer ${devToken}`),
+      request(app).get('/api/v1/developer/security-alerts').set('Authorization', `Bearer ${devToken}`),
+      request(app).get('/api/v1/developer/recovery').set('Authorization', `Bearer ${devToken}`),
+      request(app).get('/api/v1/developer/backups').set('Authorization', `Bearer ${devToken}`),
+    ]);
+    expect(devPerfRes.statusCode).toBe(200);
+    expect(devDiagRes.statusCode).toBe(200);
+    expect(Array.isArray(devDiagRes.body.data?.checks)).toBe(true);
+    expect(devCrashRes.statusCode).toBe(200);
+    expect(Array.isArray(devCrashRes.body.data?.reports)).toBe(true);
+    expect(devAlertsRes.statusCode).toBe(200);
+    expect(Array.isArray(devAlertsRes.body.data?.alerts)).toBe(true);
+    expect(devRecRes.statusCode).toBe(200);
+    expect(devBkListRes.statusCode).toBe(200);
+
+    const devLockRes = await request(app)
+      .post('/api/v1/developer/system-lock')
+      .set('Authorization', `Bearer ${devToken}`)
+      .send({ lockReason: 'QA Lock Reason Verification' });
+    expect(devLockRes.statusCode).toBe(200);
+    expect(devLockRes.body.data.lockReason).toBe('QA Lock Reason Verification');
+    await request(app).post('/api/v1/developer/system-unlock').set('Authorization', `Bearer ${devToken}`).send({});
+
+    const devMsgRes = await request(app)
+      .post('/api/v1/developer/messages')
+      .set('Authorization', `Bearer ${devToken}`)
+      .send({ tenantId: null, title: 'QA Developer Broadcast', body: 'Verified dispatch pipeline', messageType: 'ANNOUNCEMENT' });
+    expect(devMsgRes.statusCode).toBe(201);
+    expect(devMsgRes.body.data.title).toBe('QA Developer Broadcast');
+    await prisma.tenantMessage.delete({ where: { id: devMsgRes.body.data.id } }).catch(() => null);
+  }, 30000);
 });

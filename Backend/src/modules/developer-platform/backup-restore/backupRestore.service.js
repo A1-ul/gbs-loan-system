@@ -1,4 +1,5 @@
 const fs = require('fs');
+const path = require('path');
 const { prisma } = require('../../../config/database');
 const backupService = require('../../../services/backup.service');
 const { NotFoundError, AppError } = require('../../../utils/errors');
@@ -9,18 +10,32 @@ class BackupRestoreService {
       orderBy: { createdAt: 'desc' },
       take: 30,
     });
-    return rows.map((b) => ({
-      ...b,
-      fileSize: b.fileSize !== null && b.fileSize !== undefined ? Number(b.fileSize) : 0,
-      sizeMb: b.fileSize ? Number((Number(b.fileSize) / (1024 * 1024)).toFixed(2)) : 0,
-    }));
+    return rows.map((b) => {
+      const sizeBytes = b.fileSize !== null && b.fileSize !== undefined ? Number(b.fileSize) : 0;
+      const fileName = b.filePath ? path.basename(b.filePath) : `snapshot-${b.id}`;
+      const backupType = fileName.endsWith('.json') ? 'LOGICAL_SNAPSHOT' : 'POSTGRES_SQL_DUMP';
+      return {
+        ...b,
+        fileName,
+        backupType,
+        fileSize: sizeBytes,
+        fileSizeBytes: sizeBytes,
+        sizeMb: sizeBytes ? Number((sizeBytes / (1024 * 1024)).toFixed(2)) : 0,
+      };
+    });
   }
 
   async createBackup() {
     const result = await backupService.runBackup();
+    const sizeBytes = Number(result.size || 0);
+    const fileName = result.filePath ? path.basename(result.filePath) : `snapshot-${result.id}`;
     return {
       ...result,
-      sizeMb: result.size ? Number((result.size / (1024 * 1024)).toFixed(2)) : 0,
+      fileName,
+      backupType: fileName.endsWith('.json') ? 'LOGICAL_SNAPSHOT' : 'POSTGRES_SQL_DUMP',
+      fileSize: sizeBytes,
+      fileSizeBytes: sizeBytes,
+      sizeMb: sizeBytes ? Number((sizeBytes / (1024 * 1024)).toFixed(2)) : 0,
       status: 'SUCCESS',
     };
   }
@@ -42,7 +57,7 @@ class BackupRestoreService {
         targetComponent: `backup:${backup.id}`,
         details: { filePath: backup.filePath, bytes: stat.size },
       },
-    }).catch(() => {});
+    }).catch(() => { });
 
     return {
       status: 'RESTORE_POINT_VERIFIED',

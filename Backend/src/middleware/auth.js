@@ -119,9 +119,33 @@ async function authenticate(req, res, next) {
       });
     }
 
-    // Enforce Tenant Onboarding Approval & 90-day Subscription Countdown Lock
+    // Strict separation between Demo Learning Sandbox (DEMO-SANDBOX) and Real-Life Production
+    const userIsDemoTenant = user.tenant?.code === 'DEMO-SANDBOX';
+    if ((decoded.isDemo === true && !userIsDemoTenant) || (decoded.isDemo === false && userIsDemoTenant)) {
+      return next(new AuthenticationError('Session token does not match its environment partition.'));
+    }
+
+    const declaredEnv = req.headers['x-environment-mode']
+      ? String(req.headers['x-environment-mode']).toUpperCase()
+      : null;
+    if (declaredEnv === 'PRODUCTION_LIVE' && userIsDemoTenant) {
+      return res.status(403).json({
+        success: false,
+        code: 'ENVIRONMENT_ISOLATION_VIOLATION',
+        message: 'Demo Learning & Observation session cannot execute requests inside Real-Life Production mode.',
+      });
+    }
+    if (declaredEnv === 'DEMO_SANDBOX' && !userIsDemoTenant) {
+      return res.status(403).json({
+        success: false,
+        code: 'ENVIRONMENT_ISOLATION_VIOLATION',
+        message: 'Real-Life Production account cannot execute inside Demo Learning Sandbox mode.',
+      });
+    }
+
+    // Enforce Tenant Onboarding Approval & Subscription Countdown Lock (Real Production Tenants)
     const isSafeRoute = SAFE_LOCKED_PATHS.some((p) => req.originalUrl.includes(p));
-    if (user.tenant && !isSafeRoute) {
+    if (user.tenant && !userIsDemoTenant && !isSafeRoute) {
       if (['PENDING', 'VERIFICATION_REQUIRED', 'REJECTED'].includes(user.tenant.onboardingStatus)) {
         return res.status(403).json({
           success: false,
@@ -143,7 +167,7 @@ async function authenticate(req, res, next) {
           await prisma.tenant.update({
             where: { id: user.tenant.id },
             data: { status: 'LOCKED_EXPIRED', onboardingStatus: 'TRIAL_EXPIRED', daysLeft: 0 },
-          }).catch(() => {});
+          }).catch(() => { });
         }
         return res.status(402).json({
           success: false,
@@ -163,6 +187,8 @@ async function authenticate(req, res, next) {
     req.tenantId = user.tenantId || null;
     req.branchId = user.branchId || null;
     req.tenant = user.tenant || null;
+    req.isDemo = userIsDemoTenant;
+    req.environmentMode = userIsDemoTenant ? 'DEMO_SANDBOX' : 'PRODUCTION_LIVE';
     return next();
   } catch (err) {
     return next(err instanceof AppError ? err : new AuthenticationError(err.message));

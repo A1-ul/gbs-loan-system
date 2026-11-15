@@ -339,7 +339,7 @@ class BlueprintAnalyzerService {
         {
           id: 'REQ-04-USER-REG-COUNT',
           section: 'User Administration',
-          userRole: 'SUPER_ADMIN, OPERATIONS_MANAGER, BRANCH_MANAGER',
+          userRole: 'COMPANY_OWNER, OPERATIONS_MANAGER, BRANCH_MANAGER',
           purpose: 'Real-time SQL query of registered users per role with zero hardcoding',
           module: 'administration',
           feature: 'User Registration Count Subsystem',
@@ -358,7 +358,7 @@ class BlueprintAnalyzerService {
         {
           id: 'REQ-05-ADMIN-CROSS-CHECK',
           section: 'User Administration',
-          userRole: 'SUPER_ADMIN, BRANCH_MANAGER',
+          userRole: 'COMPANY_OWNER, BRANCH_MANAGER',
           purpose: 'Authorized admin audit modal to verify user credentials and mark qualifications',
           module: 'administration',
           feature: 'Admin Qualification Cross-Check Subsystem',
@@ -548,7 +548,7 @@ class BlueprintAnalyzerService {
         {
           id: 'REQ-15-MIGRATION-ENGINE',
           section: 'Data Operations',
-          userRole: 'SUPER_ADMIN, LEAD_DEVELOPER',
+          userRole: 'COMPANY_OWNER, LEAD_DEVELOPER',
           purpose: 'Enterprise migration engine supporting Excel, CSV, JSON ingestion with validation, BullMQ queue, and rollback',
           module: 'migration',
           feature: 'Enterprise Migration Engine with Rollback',
@@ -605,7 +605,7 @@ class BlueprintAnalyzerService {
         {
           id: 'REQ-18-REPORTING-ENGINE',
           section: 'Analytics & Compliance',
-          userRole: 'ACCOUNTANT, FINANCE_MANAGER, COMPLIANCE, SUPER_ADMIN',
+          userRole: 'ACCOUNTANT, FINANCE_MANAGER, COMPLIANCE, COMPANY_OWNER',
           purpose: 'Financial, operational, and regulatory reporting (Trial Balance, P&L, PAR aging, Bank of Ghana return)',
           module: 'reports',
           feature: 'Multi-Format Reporting Engine (PDF, Excel, CSV)',

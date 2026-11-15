@@ -21,7 +21,7 @@ async function runBackup() {
       fs.mkdirSync(backupDir, { recursive: true });
     }
 
-    const filePath = path.join(backupDir, `gbs_loan_${timestamp}.sql`);
+    let filePath = path.join(backupDir, `gbs_loan_${timestamp}.sql`);
     const cleanDbUrl = (process.env.DATABASE_URL || '').split('?')[0];
 
     // Resolve pg_dump binary (including standard Windows PostgreSQL 18 path)
@@ -35,7 +35,44 @@ async function runBackup() {
 
     const pgDumpCmd = `${pgDumpBin} "${cleanDbUrl}" -n public -f "${filePath}"`;
 
-    await execAsync(pgDumpCmd);
+    try {
+      if (!cleanDbUrl) {
+        throw new Error('DATABASE_URL not set for pg_dump; using logical snapshot');
+      }
+      await execAsync(pgDumpCmd);
+    } catch (pgErr) {
+      logger.warn(`pg_dump unavailable or exited early (${pgErr.message}); writing logical PostgreSQL JSON snapshot instead.`);
+      if (fs.existsSync(filePath)) {
+        try { fs.unlinkSync(filePath); } catch (_) { /* ignore partial sql */ }
+      }
+      filePath = path.join(backupDir, `gbs_loan_${timestamp}.json`);
+      const [tenants, users, members, loans, payments, systemLock] = await Promise.all([
+        prisma.tenant.findMany(),
+        prisma.user.findMany({
+          select: {
+            id: true, tenantId: true, branchId: true, email: true, username: true, phone: true,
+            role: true, status: true, firstName: true, lastName: true, gpsAddress: true, createdAt: true,
+          },
+        }),
+        prisma.member.findMany(),
+        prisma.loan.findMany(),
+        prisma.payment.findMany(),
+        prisma.systemLockState.findMany(),
+      ]);
+      const snapshotPayload = {
+        snapshotFormat: 'GBS_POSTGRES_LOGICAL_SNAPSHOT_V1',
+        createdAt: new Date().toISOString(),
+        recordCounts: {
+          tenants: tenants.length,
+          users: users.length,
+          members: members.length,
+          loans: loans.length,
+          payments: payments.length,
+        },
+        data: { tenants, users, members, loans, payments, systemLock },
+      };
+      fs.writeFileSync(filePath, JSON.stringify(snapshotPayload, null, 2), 'utf8');
+    }
 
     const stats = fs.statSync(filePath);
 

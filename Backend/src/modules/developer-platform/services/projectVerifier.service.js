@@ -118,7 +118,7 @@ class ProjectVerifierService {
       {
         type: 'DASHBOARD_DUPLICATE_FOLDERS',
         pairs: [
-          ['Frontend/src/dashboards/SuperAdmin', 'Frontend/src/dashboards/SystemAdmin'],
+          ['Frontend/src/dashboards/CompanyOwner', 'Frontend/src/dashboards/SystemAdmin'],
           ['Frontend/src/dashboards/Compliance', 'Frontend/src/dashboards/ComplianceOfficer'],
           ['Frontend/src/dashboards/CustomerOwner', 'Frontend/src/dashboards/Executive'],
           ['Frontend/src/dashboards/FraudInvestigation', 'Frontend/src/dashboards/FraudInvestigator'],

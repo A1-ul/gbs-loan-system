@@ -6,6 +6,7 @@ class SubscriptionControlService {
   async listSubscriptions() {
     await countdownEngine.sweepAllTenants();
     return prisma.tenant.findMany({
+      where: { code: { not: 'DEMO-SANDBOX' } },
       include: {
         subscriptions: { orderBy: { createdAt: 'desc' }, take: 1 },
         _count: { select: { users: true, members: true, loans: true, branches: true } },

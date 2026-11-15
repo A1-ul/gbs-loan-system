@@ -4,7 +4,7 @@ const { AuthenticationError, AuthorizationError } = require('../utils/errors');
 
 /**
  * Isolated Developer Landlord Authentication Middleware
- * Completely separated from tenant JWTs, SUPER_ADMIN, and MANAGER roles.
+ * Completely separated from tenant JWTs, COMPANY_OWNER, and MANAGER roles.
  */
 async function authenticateDeveloper(req, res, next) {
   try {

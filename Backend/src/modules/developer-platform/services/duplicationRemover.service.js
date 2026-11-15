@@ -41,7 +41,7 @@ class DuplicationRemoverService {
             { duplicate: 'Legal', canonical: 'LegalDepartment' },
             { duplicate: 'Underwriter', canonical: 'LoanUnderwriter' },
             { duplicate: 'RiskManager', canonical: 'RiskManagement' },
-            { duplicate: 'SystemAdmin', canonical: 'SuperAdmin' },
+            { duplicate: 'SystemAdmin', canonical: 'CompanyOwner' },
             { duplicate: 'executive-board', canonical: 'BoardExecutive' },
             { duplicate: 'mobile-staff', canonical: 'MobileStaff' },
             { duplicate: 'Collector', canonical: 'Collections' },

@@ -43,7 +43,7 @@ async function registerStaffUser(creatorUser, payload = {}) {
 
   const creatorRole = String(creatorUser?.role || '').toUpperCase();
   const canCreateStaff = [
-    'SUPER_ADMIN', 'COMPANY_OWNER', 'EXECUTIVE_MANAGEMENT', 'BOARD_EXECUTIVE',
+    'COMPANY_OWNER', 'EXECUTIVE_MANAGEMENT', 'BOARD_EXECUTIVE',
     'REGIONAL_MANAGER', 'BRANCH_MANAGER', 'OPERATIONS_MANAGER', 'MANAGER', 'HUMAN_RESOURCE',
   ].includes(creatorRole);
   if (!canCreateStaff) {
@@ -90,7 +90,7 @@ async function registerStaffUser(creatorUser, payload = {}) {
   }
 
   const passwordHash = await bcrypt.hash(password, 12);
-  const isOwnerCreator = ['SUPER_ADMIN', 'COMPANY_OWNER'].includes(creatorRole);
+  const isOwnerCreator = ['COMPANY_OWNER'].includes(creatorRole);
   const shouldActivateImmediately = isOwnerCreator && payload.autoApprove !== false;
   const userStatus = shouldActivateImmediately ? 'ACTIVE' : 'AWAITING_APPROVAL';
   const count = await prisma.staff.count();
@@ -218,7 +218,7 @@ async function getPendingStaffApprovals(tenantId) {
 
 async function approveStaffAccount(approverUser, targetId, { approve = true, notes = '' } = {}) {
   const role = String(approverUser?.role || '').toUpperCase();
-  if (!['SUPER_ADMIN', 'COMPANY_OWNER', 'EXECUTIVE_MANAGEMENT', 'BOARD_EXECUTIVE', 'BRANCH_MANAGER'].includes(role)) {
+  if (!['COMPANY_OWNER', 'EXECUTIVE_MANAGEMENT', 'BOARD_EXECUTIVE', 'BRANCH_MANAGER'].includes(role)) {
     throw new AuthorizationError('Only Company Owner or Executive Authority can approve staff portal access.');
   }
 

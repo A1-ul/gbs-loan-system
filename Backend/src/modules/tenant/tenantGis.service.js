@@ -13,6 +13,7 @@ class TenantGisService {
   async getAllTenantGisLocations() {
     const [tenants, collectors, visits] = await Promise.all([
       prisma.tenant.findMany({
+        where: { code: { not: 'DEMO-SANDBOX' } },
         include: {
           branches: true,
           locations: true,
@@ -20,13 +21,14 @@ class TenantGisService {
         orderBy: { createdAt: 'desc' },
       }),
       prisma.collector.findMany({
-        where: { isActive: true },
+        where: { isActive: true, tenant: { code: { not: 'DEMO-SANDBOX' } } },
         include: {
           tenant: { select: { id: true, code: true, name: true } },
           user: { select: { firstName: true, lastName: true, phone: true } },
         },
       }),
       prisma.customerVisit.findMany({
+        where: { collector: { tenant: { code: { not: 'DEMO-SANDBOX' } } } },
         orderBy: { visitedAt: 'desc' },
         take: 40,
         include: {

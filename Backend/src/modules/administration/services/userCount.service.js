@@ -68,7 +68,7 @@ class UserCountService {
       };
 
       const roleAliases = {
-        COMPANY_OWNER: ['COMPANY_OWNER', 'SUPER_ADMIN'],
+        COMPANY_OWNER: ['COMPANY_OWNER'],
         MEMBER_PORTAL: ['MEMBER_PORTAL', 'MEMBER'],
         FIELD_OFFICER: ['FIELD_OFFICER', 'STAFF'],
         COLLECTIONS: ['COLLECTIONS', 'COLLECTOR'],
@@ -153,8 +153,7 @@ class UserCountService {
       const skip = ((parseInt(page, 10) || 1) - 1) * take;
 
       const roleAliases = {
-        COMPANY_OWNER: ['COMPANY_OWNER', 'SUPER_ADMIN'],
-        SUPER_ADMIN: ['COMPANY_OWNER', 'SUPER_ADMIN'],
+        COMPANY_OWNER: ['COMPANY_OWNER'],
         MEMBER_PORTAL: ['MEMBER_PORTAL', 'MEMBER'],
         MEMBER: ['MEMBER_PORTAL', 'MEMBER'],
         FIELD_OFFICER: ['FIELD_OFFICER', 'STAFF'],

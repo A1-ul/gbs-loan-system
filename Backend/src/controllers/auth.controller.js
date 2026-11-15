@@ -6,6 +6,7 @@ function extractReqMeta(req) {
     ipAddress: req.ip || req.headers['x-forwarded-for'] || req.connection?.remoteAddress || null,
     userAgent: req.headers['user-agent'] || null,
     deviceFingerprint: req.body?.deviceFingerprint || req.headers['x-device-fingerprint'] || null,
+    environmentMode: req.headers['x-environment-mode'] ? String(req.headers['x-environment-mode']).toUpperCase() : null,
   };
 }
 

@@ -211,8 +211,7 @@ async function getRoleDashboardMetrics(role, userId, tenantId = null) {
   const overview = await getOverview(tenantId);
   const where = buildTenantFilter(tenantId);
 
-  const rawNormalized = String(role || 'MEMBER_PORTAL').toUpperCase().replace(/-/g, '_');
-  const normalized = rawNormalized === 'SUPER_ADMIN' ? 'COMPANY_OWNER' : rawNormalized;
+  const normalized = String(role || 'MEMBER_PORTAL').toUpperCase().replace(/-/g, '_');
 
   const [
     recentLoans,

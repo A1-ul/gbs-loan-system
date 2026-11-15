@@ -27,7 +27,7 @@ function authorize(...allowedRoles) {
 
     const userRole = normalizeRole(req.user.role);
 
-    if (userRole === 'SUPER_ADMIN' || userRole === 'COMPANY_OWNER') {
+    if (userRole === 'COMPANY_OWNER') {
       return next();
     }
 
@@ -54,7 +54,7 @@ function requirePermission(...requiredPermissions) {
       return next(new AuthorizationError('Authentication required'));
     }
     const role = normalizeRole(req.user.role);
-    if (role === 'SUPER_ADMIN' || role === 'COMPANY_OWNER') return next();
+    if (role === 'COMPANY_OWNER') return next();
 
     const granted = ROLE_PERMISSIONS?.[role] || [];
     const allowed = permsNeeded.some((p) => granted.includes(p));
@@ -65,24 +65,24 @@ function requirePermission(...requiredPermissions) {
   };
 }
 
-const superAdminOnly = authorize(ROLES.SUPER_ADMIN, ROLES.COMPANY_OWNER);
-const executiveOnly = authorize(ROLES.SUPER_ADMIN, ROLES.COMPANY_OWNER, ROLES.BOARD_EXECUTIVE, ROLES.EXECUTIVE_MANAGEMENT);
+const companyOwnerOnly = authorize(ROLES.COMPANY_OWNER);
+const executiveOnly = authorize(ROLES.COMPANY_OWNER, ROLES.BOARD_EXECUTIVE, ROLES.EXECUTIVE_MANAGEMENT);
 const managementAndAbove = authorize(
-  ROLES.SUPER_ADMIN, ROLES.COMPANY_OWNER, ROLES.BOARD_EXECUTIVE, ROLES.EXECUTIVE_MANAGEMENT,
+  ROLES.COMPANY_OWNER, ROLES.BOARD_EXECUTIVE, ROLES.EXECUTIVE_MANAGEMENT,
   ROLES.REGIONAL_MANAGER, ROLES.BRANCH_MANAGER, ROLES.OPERATIONS_MANAGER, ROLES.MANAGER
 );
 const creditTeam = authorize(
-  ROLES.SUPER_ADMIN, ROLES.OPERATIONS_MANAGER, ROLES.MANAGER, ROLES.SENIOR_CREDIT_OFFICER,
+  ROLES.COMPANY_OWNER, ROLES.OPERATIONS_MANAGER, ROLES.MANAGER, ROLES.SENIOR_CREDIT_OFFICER,
   ROLES.LOAN_UNDERWRITER, ROLES.CREDIT_ANALYST, ROLES.LOAN_OFFICER
 );
 const financeTeam = authorize(
-  ROLES.SUPER_ADMIN, ROLES.COMPANY_OWNER, ROLES.FINANCE_MANAGER, ROLES.TREASURY, ROLES.ACCOUNTANT
+  ROLES.COMPANY_OWNER, ROLES.FINANCE_MANAGER, ROLES.TREASURY, ROLES.ACCOUNTANT
 );
 const fieldTeam = authorize(
-  ROLES.SUPER_ADMIN, ROLES.COLLECTIONS, ROLES.FIELD_OFFICER, ROLES.STAFF, ROLES.MOBILE_STAFF, ROLES.COLLECTOR
+  ROLES.COMPANY_OWNER, ROLES.COLLECTIONS, ROLES.FIELD_OFFICER, ROLES.STAFF, ROLES.MOBILE_STAFF, ROLES.COLLECTOR
 );
 const securityAndAudit = authorize(
-  ROLES.SUPER_ADMIN, ROLES.INTERNAL_AUDIT, ROLES.COMPLIANCE, ROLES.FRAUD_INVESTIGATION,
+  ROLES.COMPANY_OWNER, ROLES.INTERNAL_AUDIT, ROLES.COMPLIANCE, ROLES.FRAUD_INVESTIGATION,
   ROLES.SECURITY_OPERATIONS, ROLES.RISK_MANAGEMENT, ROLES.LEGAL_DEPARTMENT
 );
 const memberOnly = authorize(ROLES.MEMBER_PORTAL, ROLES.MEMBER);
@@ -93,7 +93,7 @@ module.exports = {
   requireRole: authorize,
   requirePermission,
   normalizeRole,
-  superAdminOnly,
+  companyOwnerOnly,
   executiveOnly,
   managementAndAbove,
   creditTeam,
@@ -104,7 +104,7 @@ module.exports = {
   guarantorOnly,
   managerOnly: managementAndAbove,
   staffAndAbove: authorize(
-    ROLES.SUPER_ADMIN, ROLES.COMPANY_OWNER, ROLES.EXECUTIVE_MANAGEMENT, ROLES.REGIONAL_MANAGER,
+    ROLES.COMPANY_OWNER, ROLES.EXECUTIVE_MANAGEMENT, ROLES.REGIONAL_MANAGER,
     ROLES.MANAGER, ROLES.OPERATIONS_MANAGER, ROLES.BRANCH_MANAGER, ROLES.ACCOUNTANT,
     ROLES.FINANCE_MANAGER, ROLES.TREASURY, ROLES.STAFF, ROLES.FIELD_OFFICER,
     ROLES.LOAN_OFFICER, ROLES.SENIOR_CREDIT_OFFICER, ROLES.CREDIT_ANALYST, ROLES.LOAN_UNDERWRITER,

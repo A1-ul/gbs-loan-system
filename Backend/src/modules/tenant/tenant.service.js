@@ -172,7 +172,7 @@ class TenantService {
             entityId: adminUser.id,
             metadata: { event: 'ONBOARDING_ADMIN_FACE_CAPTURED' },
           },
-        }).catch(() => {});
+        }).catch(() => { });
       }
 
       await tx.securityAlert.create({
@@ -277,6 +277,7 @@ class TenantService {
   async getAllTenants() {
     const now = new Date();
     const tenants = await prisma.tenant.findMany({
+      where: { code: { not: 'DEMO-SANDBOX' } },
       include: {
         branches: true,
         subscriptions: {
@@ -571,7 +572,7 @@ class TenantService {
   async updateBranding(tenantId, user, data = {}, uploadedFile = null) {
     if (!tenantId) throw new ValidationError('Active institutional tenant context is required.');
     const role = String(user?.role || '').toUpperCase();
-    const allowed = ['SUPER_ADMIN', 'COMPANY_OWNER', 'BRANCH_MANAGER', 'OPERATIONS_MANAGER', 'MANAGER', 'EXECUTIVE_MANAGEMENT'];
+    const allowed = ['COMPANY_OWNER', 'BRANCH_MANAGER', 'OPERATIONS_MANAGER', 'MANAGER', 'EXECUTIVE_MANAGEMENT'];
     if (!allowed.includes(role)) {
       throw new AuthorizationError('Only Company Owner or Branch Manager may update company branding and logo.');
     }
@@ -643,7 +644,7 @@ class TenantService {
   async chooseSubscriptionPlan(tenantId, user, { planCode } = {}) {
     if (!tenantId) throw new ValidationError('Tenant context required');
     const role = String(user?.role || '').toUpperCase();
-    const allowed = ['SUPER_ADMIN', 'COMPANY_OWNER', 'BRANCH_MANAGER', 'FINANCE_MANAGER', 'EXECUTIVE_MANAGEMENT'];
+    const allowed = ['COMPANY_OWNER', 'BRANCH_MANAGER', 'FINANCE_MANAGER', 'EXECUTIVE_MANAGEMENT'];
     if (!allowed.includes(role)) {
       throw new AuthorizationError('Only Company Owner or Executive/Branch Manager can choose the institutional subscription plan.');
     }

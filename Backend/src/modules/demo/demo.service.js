@@ -11,6 +11,51 @@ const DEMO_PROV = {
   isProductionRecord: false,
 };
 
+async function resolveAvailableDemoPhone(preferredPhone, seedOffset = 0) {
+  const candidates = [
+    preferredPhone,
+    `+233598000${String(seedOffset + 100).padStart(3, '0')}`,
+    `+233598100${String(seedOffset + 100).padStart(3, '0')}`,
+  ];
+  for (const candidate of candidates) {
+    const existing = await prisma.user.findUnique({ where: { phone: candidate }, select: { id: true } });
+    if (!existing) return candidate;
+  }
+  for (let i = 0; i < 20; i += 1) {
+    const fallback = `+233598${crypto.randomInt(200000, 999999)}`;
+    const existing = await prisma.user.findUnique({ where: { phone: fallback }, select: { id: true } });
+    if (!existing) return fallback;
+  }
+  return `+233598${String(Date.now()).slice(-6)}`;
+}
+
+async function resolveAvailableDemoUsername(preferredUsername, seedOffset = 0) {
+  const base = String(preferredUsername || `demo_role_${seedOffset + 1}`).replace(/[^a-zA-Z0-9_]/g, '_');
+  const existingPreferred = await prisma.user.findFirst({ where: { username: base }, select: { id: true } });
+  if (!existingPreferred) return base;
+  for (let attempt = 1; attempt <= 20; attempt += 1) {
+    const candidate = `${base}_${attempt}`;
+    const existing = await prisma.user.findFirst({ where: { username: candidate }, select: { id: true } });
+    if (!existing) return candidate;
+  }
+  return `${base}_${Date.now().toString(36)}`;
+}
+
+async function resolveDemoUserCredentials(email, preferredUsername, preferredPhone, seedOffset = 0) {
+  const existing = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, phone: true, username: true },
+  });
+  if (existing) {
+    return { username: existing.username, phone: existing.phone };
+  }
+  const [username, phone] = await Promise.all([
+    resolveAvailableDemoUsername(preferredUsername, seedOffset),
+    resolveAvailableDemoPhone(preferredPhone, seedOffset),
+  ]);
+  return { username, phone };
+}
+
 const CANONICAL_DEMO_ROLES = [
   { key: 'COMPANY_OWNER', slug: 'company-owner', title: 'Company Owner', category: 'Executive & Governance', dept: 'EXECUTIVE' },
   { key: 'EXECUTIVE_MANAGEMENT', slug: 'executive-management', title: 'Executive Management', category: 'Executive & Governance', dept: 'EXECUTIVE' },
@@ -495,6 +540,7 @@ async function ensureDemoSandboxEnvironment() {
 
   // Ensure an unsigned Demo Guarantor exists so users can test Digital Surety Agreement signing
   const demoUnsignedGuarantorEmail = 'demo.guarantor.pending@demo.gbsloan.com';
+  const unsignedCreds = await resolveDemoUserCredentials(demoUnsignedGuarantorEmail, 'demo_guarantor_pending', '+233591000099', 99);
   const demoUnsignedGuarantorUser = await prisma.user.upsert({
     where: { email: demoUnsignedGuarantorEmail },
     update: { tenantId: demoTenant.id, branchId: demoBranch.id, gpsAddress: 'GA-301-8840', ...DEMO_PROV },
@@ -502,8 +548,8 @@ async function ensureDemoSandboxEnvironment() {
       tenantId: demoTenant.id,
       branchId: demoBranch.id,
       email: demoUnsignedGuarantorEmail,
-      username: 'demo_guarantor_pending',
-      phone: '+233591000099',
+      username: unsignedCreds.username,
+      phone: unsignedCreds.phone,
       passwordHash: demoPasswordHash,
       role: 'GUARANTOR_PORTAL',
       status: 'ACTIVE',
@@ -540,6 +586,7 @@ async function ensureDemoSandboxEnvironment() {
 
   // Ensure Demo Collector exists on map
   const demoCollectorEmail = 'demo.collections@demo.gbsloan.com';
+  const demoCollectorCreds = await resolveDemoUserCredentials(demoCollectorEmail, 'demo_collections', '+233591000011', 91);
   const demoCollectorUser = await prisma.user.upsert({
     where: { email: demoCollectorEmail },
     update: { tenantId: demoTenant.id, branchId: demoBranch.id, gpsAddress: 'GA-185-2211', ...DEMO_PROV },
@@ -547,8 +594,8 @@ async function ensureDemoSandboxEnvironment() {
       tenantId: demoTenant.id,
       branchId: demoBranch.id,
       email: demoCollectorEmail,
-      username: 'demo_collections',
-      phone: '+233591000011',
+      username: demoCollectorCreds.username,
+      phone: demoCollectorCreds.phone,
       passwordHash: demoPasswordHash,
       role: 'COLLECTIONS',
       status: 'ACTIVE',
@@ -595,6 +642,7 @@ async function ensureDemoSandboxEnvironment() {
 
   if (caseCount === 0) {
     await prisma.complianceCase.createMany({
+      skipDuplicates: true,
       data: [
         {
           tenantId: demoTenant.id,
@@ -620,6 +668,7 @@ async function ensureDemoSandboxEnvironment() {
 
   if (ticketCount === 0) {
     await prisma.supportTicket.createMany({
+      skipDuplicates: true,
       data: [
         {
           tenantId: demoTenant.id,
@@ -648,34 +697,40 @@ async function ensureDemoSandboxEnvironment() {
   }
 
   if (investorCount === 0) {
-    await prisma.investorAccount.create({
-      data: {
-        tenantId: demoTenant.id,
-        investorCode: 'INV-DEMO-001',
-        investorName: 'Accra Growth Capital Partners (Demo)',
-        email: 'investments@accragrowth.demo',
-        committedCapital: 250000,
-        deployedCapital: 185000,
-        annualYieldRate: 18.5,
-        returnsAccrued: 14250,
-        status: 'ACTIVE',
-      },
-    }).catch(() => { });
+    const invExists = await prisma.investorAccount.findUnique({ where: { investorCode: 'INV-DEMO-001' } });
+    if (!invExists) {
+      await prisma.investorAccount.create({
+        data: {
+          tenantId: demoTenant.id,
+          investorCode: 'INV-DEMO-001',
+          investorName: 'Accra Growth Capital Partners (Demo)',
+          email: 'investments@accragrowth.demo',
+          committedCapital: 250000,
+          deployedCapital: 185000,
+          annualYieldRate: 18.5,
+          returnsAccrued: 14250,
+          status: 'ACTIVE',
+        },
+      }).catch(() => { });
+    }
   }
 
   if (campaignCount === 0) {
-    await prisma.marketingCampaign.create({
-      data: {
-        tenantId: demoTenant.id,
-        campaignCode: 'MKT-DEMO-001',
-        name: 'Osu Market Traders SME Drive (Demo)',
-        channel: 'SMS',
-        budget: 4500,
-        leadsCount: 148,
-        conversions: 34,
-        status: 'ACTIVE',
-      },
-    }).catch(() => { });
+    const campExists = await prisma.marketingCampaign.findUnique({ where: { campaignCode: 'MKT-DEMO-001' } });
+    if (!campExists) {
+      await prisma.marketingCampaign.create({
+        data: {
+          tenantId: demoTenant.id,
+          campaignCode: 'MKT-DEMO-001',
+          name: 'Osu Market Traders SME Drive (Demo)',
+          channel: 'SMS',
+          budget: 4500,
+          leadsCount: 148,
+          conversions: 34,
+          status: 'ACTIVE',
+        },
+      }).catch(() => { });
+    }
   }
 
   if (meetingCount === 0) {
@@ -722,8 +777,7 @@ function getWalkthroughCatalog() {
 }
 
 async function issueDemoWalkthroughSession(roleInput = 'COMPANY_OWNER', reqMeta = {}) {
-  const rawNormalizedRole = String(roleInput || 'COMPANY_OWNER').toUpperCase().replace(/-/g, '_').trim();
-  const normalizedRole = rawNormalizedRole === 'SUPER_ADMIN' ? 'COMPANY_OWNER' : rawNormalizedRole;
+  const normalizedRole = String(roleInput || 'COMPANY_OWNER').toUpperCase().replace(/-/g, '_').trim();
   if (['DEVELOPER', 'DEVELOPER_LANDLORD', 'LEAD_DEVELOPER'].includes(normalizedRole)) {
     throw new AuthorizationError('Developer Authority Control Center is never accessible via Demo Walkthrough.');
   }
@@ -737,7 +791,12 @@ async function issueDemoWalkthroughSession(roleInput = 'COMPANY_OWNER', reqMeta 
   const { demoTenant, demoBranch, demoPasswordHash } = await ensureDemoSandboxEnvironment();
 
   const demoEmail = `demo.${roleMeta.slug}@demo.gbsloan.com`;
-  const demoPhone = `+233591000${String(roleIdx + 1).padStart(3, '0')}`;
+  const demoCreds = await resolveDemoUserCredentials(
+    demoEmail,
+    `demo_${roleMeta.slug.replace(/-/g, '_')}`,
+    `+233591000${String(roleIdx + 1).padStart(3, '0')}`,
+    roleIdx
+  );
 
   const demoUser = await prisma.user.upsert({
     where: { email: demoEmail },
@@ -758,8 +817,8 @@ async function issueDemoWalkthroughSession(roleInput = 'COMPANY_OWNER', reqMeta 
       tenantId: demoTenant.id,
       branchId: demoBranch.id,
       email: demoEmail,
-      username: `demo_${roleMeta.slug.replace(/-/g, '_')}`,
-      phone: demoPhone,
+      username: demoCreds.username,
+      phone: demoCreds.phone,
       passwordHash: demoPasswordHash,
       role: roleMeta.key,
       status: 'ACTIVE',
@@ -821,7 +880,13 @@ async function issueDemoWalkthroughSession(roleInput = 'COMPANY_OWNER', reqMeta 
     }
   }
 
-  const jwtPayload = { userId: demoUser.id, role: demoUser.role, tenantId: demoTenant.id, isDemo: true };
+  const jwtPayload = {
+    userId: demoUser.id,
+    role: demoUser.role,
+    tenantId: demoTenant.id,
+    isDemo: true,
+    environmentMode: 'DEMO_SANDBOX',
+  };
   const accessToken = signAccessToken(jwtPayload);
   const refreshToken = signRefreshToken(jwtPayload);
 

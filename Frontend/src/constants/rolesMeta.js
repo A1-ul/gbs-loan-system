@@ -327,8 +327,6 @@ export const ROLES_META = [
 export const ROLE_META_MAP = Object.fromEntries(ROLES_META.map((r) => [r.key, r]));
 
 export const CANONICAL_ROLE_ALIASES = {
-  SUPER_ADMIN: 'COMPANY_OWNER',
-  'SUPER-ADMIN': 'COMPANY_OWNER',
   MANAGER: 'BRANCH_MANAGER',
   STAFF: 'FIELD_OFFICER',
   COLLECTOR: 'COLLECTIONS',

@@ -7,6 +7,7 @@ import {
 import api from '../services/api';
 import { ONBOARDING_META } from '../constants/rolesMeta';
 import { FaceScanner } from '../components/biometric/FaceScanner';
+import GbsBrandLogo from '../components/common/GbsBrandLogo';
 
 /**
  * Multi-Tenant Institutional Onboarding Form (Default Entry Page) + Application Tracker
@@ -124,10 +125,10 @@ export default function TenantOnboarding() {
 
         <div style={{ position: 'relative', zIndex: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div className="logo-icon">GBS</div>
+            <GbsBrandLogo size={46} />
             <div>
-              <div style={{ fontWeight: 800, color: '#F4E07B', fontSize: '1.02rem' }}>GBS LOAN SYSTEM</div>
-              <div style={{ fontSize: '0.72rem', color: '#E2E8F0' }}>Enterprise Multi-Tenant Platform</div>
+              <div style={{ fontWeight: 800, color: '#F4E07B', fontSize: '1.02rem' }}>GBS® LOAN SYSTEM</div>
+              <div style={{ fontSize: '0.72rem', color: '#E2E8F0' }}>Intelligence Talks To Wisdom • Enterprise Multi-Tenant Platform</div>
             </div>
           </div>
 
@@ -468,17 +469,7 @@ export default function TenantOnboarding() {
                 to="/login?env=production&switch=1"
                 style={{ color: '#F4E07B', fontWeight: 700, textDecoration: 'underline' }}
               >
-                Sign in to any of the 30 GBS Role Portals
-              </Link>
-            </span>
-            <span>•</span>
-            <span>
-              System Developer?{' '}
-              <Link
-                to="/login?env=production&dev=1&switch=1"
-                style={{ color: '#FCA5A5', fontWeight: 700, textDecoration: 'underline' }}
-              >
-                Developer Dashboard Sign In (Approve Institutions)
+                Sign in to any of the 29 GBS Role Portals
               </Link>
             </span>
           </div>

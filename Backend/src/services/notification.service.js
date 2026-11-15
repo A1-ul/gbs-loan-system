@@ -48,7 +48,23 @@ async function deliverNow(notification) {
   let deliveryResult = { delivered: false, provider: 'NONE' };
 
   try {
-    if (notification.type === 'SMS') {
+    let isDemoNotification = Boolean(notification.metadata?.isDemo);
+    if (!isDemoNotification && notification.tenantId) {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: notification.tenantId },
+        select: { code: true },
+      }).catch(() => null);
+      isDemoNotification = tenant?.code === 'DEMO-SANDBOX';
+    }
+
+    if (isDemoNotification && (notification.type === 'SMS' || notification.type === 'EMAIL')) {
+      deliveryResult = {
+        delivered: true,
+        simulated: true,
+        provider: 'DEMO_SANDBOX_SIMULATED',
+        note: 'External carrier SMS/Email skipped cleanly inside Demo Learning Mode.',
+      };
+    } else if (notification.type === 'SMS') {
       deliveryResult = await smsService.send(notification.recipient, notification.message);
     } else if (notification.type === 'EMAIL') {
       const res = await emailService.send(notification.recipient, notification.title, notification.message);
@@ -84,7 +100,7 @@ async function deliverNow(notification) {
           deliveryResult,
         },
       },
-    }).catch(() => {});
+    }).catch(() => { });
   }
 
   return deliveryResult;
@@ -219,7 +235,7 @@ async function broadcastToStaff(senderUser, { tenantId = null, recipientUserIds 
   if (!scopeTenantId) throw new ValidationError('Institutional tenant context is required for staff messaging.');
 
   const allowedRoles = new Set([
-    'SUPER_ADMIN', 'COMPANY_OWNER', 'BOARD_EXECUTIVE', 'EXECUTIVE_MANAGEMENT',
+    'COMPANY_OWNER', 'BOARD_EXECUTIVE', 'EXECUTIVE_MANAGEMENT',
     'REGIONAL_MANAGER', 'BRANCH_MANAGER', 'OPERATIONS_MANAGER', 'MANAGER', 'HUMAN_RESOURCE',
   ]);
   if (!allowedRoles.has(String(senderUser?.role || '').toUpperCase())) {
@@ -320,7 +336,7 @@ async function getBroadcastInbox(user) {
     take: 50,
   });
 
-  const isOwnerOrAdmin = ['SUPER_ADMIN', 'COMPANY_OWNER', 'EXECUTIVE_MANAGEMENT', 'BRANCH_MANAGER'].includes(
+  const isOwnerOrAdmin = ['COMPANY_OWNER', 'EXECUTIVE_MANAGEMENT', 'BRANCH_MANAGER'].includes(
     String(user?.role || '').toUpperCase()
   );
 
@@ -401,7 +417,7 @@ async function dispatchStaffCollectionReminders(senderUser, tenantId = null) {
       role: {
         in: [
           'LOAN_OFFICER', 'SENIOR_CREDIT_OFFICER', 'COLLECTIONS', 'FIELD_OFFICER',
-          'COLLECTOR', 'MOBILE_STAFF', 'STAFF', 'BRANCH_MANAGER', 'OPERATIONS_MANAGER', 'COMPANY_OWNER', 'SUPER_ADMIN',
+          'COLLECTOR', 'MOBILE_STAFF', 'STAFF', 'BRANCH_MANAGER', 'OPERATIONS_MANAGER', 'COMPANY_OWNER',
         ],
       },
     },

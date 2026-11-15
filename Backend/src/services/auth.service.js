@@ -11,7 +11,6 @@ const notificationService = require('./notification.service');
 const PRIVILEGED_SELF_REG_BLOCKLIST = new Set([
   'DEVELOPER',
   'DEVELOPER_LANDLORD',
-  'SUPER_ADMIN',
   'COMPANY_OWNER',
   'BOARD_EXECUTIVE',
   'EXECUTIVE_MANAGEMENT',
@@ -41,6 +40,9 @@ async function register(data, reqMeta = {}) {
       where: { OR: [{ id: data.tenantId || '' }, { code: data.tenantCode || '' }] },
     });
     if (!t) throw new NotFoundError('Target tenant organization');
+    if (t.code === 'DEMO-SANDBOX') {
+      throw new AuthorizationError('DEMO-SANDBOX is reserved exclusively for Demo Learning & Observation. Register real staff and members under an approved production institution.');
+    }
     if (['PENDING', 'VERIFICATION_REQUIRED', 'REJECTED'].includes(t.onboardingStatus)) {
       throw new AuthorizationError(`Organization '${t.name}' must be approved by Developer Authority before users or staff can register.`);
     }
@@ -155,6 +157,18 @@ async function login({ email, password, totpToken, deviceFingerprint }, reqMeta 
     throw new AuthenticationError('Invalid email or password');
   }
 
+  // Enforce strict separation between Demo Learning Mode (DEMO-SANDBOX) and Real-Life Production Login
+  if (user.tenant?.code === 'DEMO-SANDBOX') {
+    throw new AuthorizationError(
+      'Demo Learning & Observation accounts can only be accessed via Demo Walkthrough Sandbox, never via Real-Life Production Sign In.'
+    );
+  }
+  if (reqMeta.environmentMode === 'DEMO_SANDBOX') {
+    throw new AuthorizationError(
+      'Real-Life Production accounts cannot sign in while Demo Learning Sandbox mode is active. Switch to Real-Life Production Sign In.'
+    );
+  }
+
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) {
     throw new AuthenticationError('Invalid email or password');
@@ -202,7 +216,13 @@ async function login({ email, password, totpToken, deviceFingerprint }, reqMeta 
     }
   }
 
-  const payload = { userId: user.id, role: user.role, tenantId: user.tenantId || null };
+  const payload = {
+    userId: user.id,
+    role: user.role,
+    tenantId: user.tenantId || null,
+    isDemo: false,
+    environmentMode: 'PRODUCTION_LIVE',
+  };
   const accessToken = signAccessToken(payload);
   const refreshToken = signRefreshToken(payload);
 
@@ -320,7 +340,13 @@ async function verifyOtp({ phone, otp }) {
     };
   }
 
-  const payload = { userId: user.id, role: user.role, tenantId: user.tenantId || null };
+  const payload = {
+    userId: user.id,
+    role: user.role,
+    tenantId: user.tenantId || null,
+    isDemo: false,
+    environmentMode: 'PRODUCTION_LIVE',
+  };
   const accessToken = signAccessToken(payload);
   const refreshToken = signRefreshToken(payload);
 
@@ -398,12 +424,22 @@ async function refreshToken(token) {
     throw new AuthenticationError('Invalid or expired refresh token');
   }
 
-  const user = await prisma.user.findUnique({ where: { id: decoded.userId } });
+  const user = await prisma.user.findUnique({
+    where: { id: decoded.userId },
+    include: { tenant: { select: { code: true } } },
+  });
   if (!user || user.status !== 'ACTIVE') {
     throw new AuthenticationError('User account is not active');
   }
 
-  const accessToken = signAccessToken({ userId: user.id, role: user.role, tenantId: user.tenantId || null });
+  const isDemo = user.tenant?.code === 'DEMO-SANDBOX';
+  const accessToken = signAccessToken({
+    userId: user.id,
+    role: user.role,
+    tenantId: user.tenantId || null,
+    isDemo,
+    environmentMode: isDemo ? 'DEMO_SANDBOX' : 'PRODUCTION_LIVE',
+  });
   return { accessToken };
 }
 

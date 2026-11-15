@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Terminal, ShieldAlert, Lock, AlertTriangle } from 'lucide-react';
 import { devApi, sessionStore, getDeviceFingerprint } from '../services/api';
 import { DEVELOPER_PORTAL_META } from '../constants/rolesMeta';
+import GbsBrandLogo from '../components/common/GbsBrandLogo';
 
 /**
  * Isolated Hidden Developer Authority Authentication Page (/dev-portal/login)
@@ -71,9 +72,7 @@ export default function DeveloperLogin({ onDevAuthenticated }) {
       <div className="split-login-form-pane">
         <div className="glass-panel" style={{ maxWidth: 440, width: '100%', margin: '0 auto', padding: 30, borderColor: 'rgba(239,68,68,0.45)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
-            <div style={{ width: 42, height: 42, borderRadius: 10, background: 'rgba(239,68,68,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F87171' }}>
-              <Terminal size={22} />
-            </div>
+            <GbsBrandLogo size={46} borderColor="#EF4444" />
             <div>
               <h2 style={{ margin: 0, fontSize: '1.2rem', color: '#F1F5F9' }}>Developer Landlord Sign In</h2>
               <p style={{ margin: 0, fontSize: '0.76rem', color: '#94A3B8' }}>

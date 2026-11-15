@@ -216,7 +216,7 @@ const PHASES = [
         validation: 'None',
         businessLogic: 'Queries PostgreSQL for exact real user counts for all 30 canonical roles',
         databaseInteraction: 'prisma.user.groupBy({ by: ["role", "status"], _count: { id: true } })',
-        response: '{ success: true, grandTotal: 12, roles: { SUPER_ADMIN: { total: 1, active: 1 }... } }',
+        response: '{ success: true, grandTotal: 12, roles: { COMPANY_OWNER: { total: 1, active: 1 }... } }',
         errorResponse: '{ success: false, error: "Database error", code: 500 }',
         auditEvent: 'Audit log on admin viewing aggregate user count summary',
         tests: ['Summary returns exact match to raw database COUNT(*)', 'Zero placeholder roles returned']
@@ -766,7 +766,7 @@ const PHASES = [
     frontend: {
       pages: ['30 Canonical Role Dashboard Views in Frontend/src/dashboards/RoleDashboards.jsx'],
       dashboards: [
-        'SuperAdminDashboard', 'CompanyOwnerDashboard', 'ExecutiveManagementDashboard', 'RegionalManagerDashboard',
+        'CompanyOwnerDashboard', 'ExecutiveManagementDashboard', 'RegionalManagerDashboard',
         'BranchManagerDashboard', 'OperationsManagerDashboard', 'LoanOfficerDashboard', 'SeniorCreditOfficerDashboard',
         'CreditAnalystDashboard', 'LoanUnderwriterDashboard', 'CollectionsDashboard', 'FieldOfficerDashboard',
         'CustomerServiceDashboard', 'ReceptionDashboard', 'GuarantorPortalDashboard', 'MemberPortalDashboard',

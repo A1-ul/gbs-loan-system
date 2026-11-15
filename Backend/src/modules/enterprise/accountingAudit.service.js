@@ -290,7 +290,7 @@ class AccountingAuditService {
   }
 
   async reviewAudit(auditId, ownerUser, { action = 'APPROVE', reviewNotes = '' } = {}) {
-    const allowedRoles = ['SUPER_ADMIN', 'COMPANY_OWNER', 'BOARD_EXECUTIVE', 'EXECUTIVE_MANAGEMENT'];
+    const allowedRoles = ['COMPANY_OWNER', 'BOARD_EXECUTIVE', 'EXECUTIVE_MANAGEMENT'];
     if (!allowedRoles.includes(String(ownerUser.role || '').toUpperCase())) {
       throw new AuthorizationError('Only Company Owner or Executive Management can sign off accounting audits.');
     }

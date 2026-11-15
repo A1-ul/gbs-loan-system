@@ -9,7 +9,7 @@ const { paymentSchemas } = require('../validators');
 const router = express.Router();
 
 const cashApprovers = authorize(
-  'SUPER_ADMIN', 'COMPANY_OWNER', 'FINANCE_MANAGER', 'TREASURY', 'ACCOUNTANT',
+  'COMPANY_OWNER', 'FINANCE_MANAGER', 'TREASURY', 'ACCOUNTANT',
   'BRANCH_MANAGER', 'OPERATIONS_MANAGER', 'REGIONAL_MANAGER', 'MANAGER'
 );
 

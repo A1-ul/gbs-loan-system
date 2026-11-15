@@ -6,7 +6,7 @@ const { managerOnly, staffAndAbove, authorize } = require('../middleware/rbac');
 const router = express.Router();
 
 const staffManagers = authorize(
-  'SUPER_ADMIN', 'COMPANY_OWNER', 'EXECUTIVE_MANAGEMENT', 'BOARD_EXECUTIVE',
+  'COMPANY_OWNER', 'EXECUTIVE_MANAGEMENT', 'BOARD_EXECUTIVE',
   'REGIONAL_MANAGER', 'BRANCH_MANAGER', 'OPERATIONS_MANAGER', 'MANAGER', 'HUMAN_RESOURCE'
 );
 

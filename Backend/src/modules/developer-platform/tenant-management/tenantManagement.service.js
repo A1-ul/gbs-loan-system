@@ -21,8 +21,12 @@ async function recordDeveloperTenantAudit(developerId, action, details = {}) {
 
 class TenantManagementService {
   async getTenants(statusFilter = null) {
+    const whereClause = {
+      code: { not: 'DEMO-SANDBOX' },
+      ...(statusFilter ? { onboardingStatus: statusFilter } : {}),
+    };
     const tenants = await prisma.tenant.findMany({
-      where: statusFilter ? { onboardingStatus: statusFilter } : undefined,
+      where: whereClause,
       include: {
         branches: true,
         subscriptions: { orderBy: { createdAt: 'desc' }, take: 1 },

@@ -8,6 +8,7 @@ import {
 import api, { devApi, sessionStore, getDeviceFingerprint } from '../services/api';
 import { ROLES_META, resolveRoleMeta } from '../constants/rolesMeta';
 import VoiceChallengePanel from '../components/VoiceChallengePanel';
+import GbsBrandLogo from '../components/common/GbsBrandLogo';
 
 /**
  * GBS Loan Management System — Dedicated Role-Specific Login & All-30-Role Account Registration
@@ -43,8 +44,8 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
   const [showLoginPwd, setShowLoginPwd] = useState(false);
   const [totpToken, setTotpToken] = useState('');
 
-  // Hidden Developer Gate State (strictly masked password, NO reveal toggle)
-  const [devEmail, setDevEmail] = useState('gabosei48@gmail.com');
+  // Hidden Developer Gate State (strictly masked password, NO reveal toggle, never prefilled)
+  const [devEmail, setDevEmail] = useState('');
   const [devPassword, setDevPassword] = useState('');
   const [devTotp, setDevTotp] = useState('');
 
@@ -91,7 +92,7 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
     setDemoLoading(true);
     setError('');
     api
-      .get('/demo/walkthrough-catalog')
+      .get('/demo/walkthrough-catalog', { headers: { 'X-Environment-Mode': 'DEMO_SANDBOX' } })
       .then((res) => {
         const steps = res.data?.data?.walkthroughModules || res.data?.data?.walkthroughSteps;
         if (Array.isArray(steps)) setDemoCatalog(steps);
@@ -191,7 +192,9 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
       };
       if (totpToken.trim()) payload.totpToken = totpToken.trim();
 
-      const res = await api.post('/auth/login', payload);
+      const res = await api.post('/auth/login', payload, {
+        headers: { 'X-Environment-Mode': 'PRODUCTION_LIVE' },
+      });
       const data = res.data?.data || {};
       const token = data.accessToken || data.token;
       const user = data.user;
@@ -325,12 +328,12 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
 
         <div style={{ position: 'relative', zIndex: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
           <div className="logo-section">
-            <div className="logo-icon">GBS</div>
+            <GbsBrandLogo size={46} />
             <div>
               <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#F4E07B', letterSpacing: 0.4 }}>
-                GBS LOAN MANAGEMENT SYSTEM
+                GBS® LOAN MANAGEMENT SYSTEM
               </div>
-              <div style={{ fontSize: '0.74rem', color: '#CBD5E1' }}>Smart Loans. Secure Future.</div>
+              <div style={{ fontSize: '0.74rem', color: '#CBD5E1' }}>Intelligence Talks To Wisdom • Smart Loans. Secure Future.</div>
             </div>
           </div>
 
@@ -406,9 +409,9 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', color: '#CBD5E1', flexWrap: 'wrap', gap: 6 }}>
-              <span>ENVIRONMENT MODE (EVERY TAB OPENS IN ITS OWN PAGE):</span>
+              <span>SEPARATED SYSTEM ENVIRONMENTS (LEARNING VS REAL PRODUCTION):</span>
               <span className={`badge ${envMode === 'demo' ? 'badge-warning' : 'badge-success'}`}>
-                {envMode === 'demo' ? 'DEMO_SANDBOX ACTIVE' : 'PRODUCTION_LIVE ACTIVE'}
+                {envMode === 'demo' ? 'LEARNING SANDBOX ACTIVE' : 'REAL-LIFE PRODUCTION ACTIVE'}
               </span>
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -417,7 +420,7 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
                 className={envMode === 'production' ? 'btn btn-primary' : 'btn btn-secondary'}
                 style={{ flex: '1 1 210px', justifyContent: 'center', fontSize: '0.82rem', textDecoration: 'none' }}
               >
-                <Shield size={15} /> Real-Life Production Login
+                <Shield size={15} /> Real-Life Production (Live Roles)
               </Link>
               <Link
                 to={`/login/${roleMeta.slug}?env=demo&switch=1`}
@@ -432,7 +435,7 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
                     : { borderColor: 'rgba(245,158,11,0.5)', color: '#FDE68A' }),
                 }}
               >
-                <PlayCircle size={15} /> Demo Walkthrough Sandbox
+                <PlayCircle size={15} /> Learning &amp; Observing (Demo)
               </Link>
             </div>
           </div>
@@ -517,7 +520,7 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
               </div>
             </div>
           ) : envMode === 'demo' && mode !== 'dev-hidden' ? (
-            <div className="glass-panel" style={{ padding: 24, borderColor: 'rgba(245, 158, 11, 0.5)' }}>
+            <div className="glass-panel gbs-watermark-banner" style={{ padding: 24, borderColor: 'rgba(245, 158, 11, 0.5)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
                 <div>
                   <span className="badge badge-warning" style={{ marginBottom: 6 }}>ISOLATED SANDBOX (DEMO-SANDBOX)</span>
@@ -661,19 +664,6 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
                   style={{ flex: '1 1 130px', justifyContent: 'center', textDecoration: 'none' }}
                 >
                   <UserCheck size={15} /> Register ({ROLES_META.length} Roles)
-                </Link>
-                <Link
-                  to={`/login/${roleMeta.slug}?env=production&mode=dev-hidden&switch=1`}
-                  className={mode === 'dev-hidden' ? 'btn btn-primary' : 'btn btn-secondary'}
-                  style={{
-                    flex: '1 1 140px',
-                    justifyContent: 'center',
-                    textDecoration: 'none',
-                    borderColor: mode === 'dev-hidden' ? '#DC2626' : 'rgba(220,38,38,0.45)',
-                    color: mode === 'dev-hidden' ? '#FFFFFF' : '#FCA5A5',
-                  }}
-                >
-                  <Lock size={15} /> Developer Portal
                 </Link>
               </div>
 
@@ -939,7 +929,7 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
                       className="gbs-input"
                       value={devEmail}
                       onChange={(e) => setDevEmail(e.target.value)}
-                      placeholder="gabosei48@gmail.com"
+                      placeholder="Authorized developer email"
                       autoComplete="username"
                     />
                   </div>
@@ -1021,31 +1011,23 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
                 <div
                   style={{
                     paddingTop: 10,
-                    borderTop: '1px dashed rgba(220,38,38,0.28)',
+                    borderTop: '1px dashed rgba(148,163,184,0.18)',
                     display: 'flex',
-                    justifyContent: 'space-between',
+                    justifyContent: 'flex-end',
                     alignItems: 'center',
-                    flexWrap: 'wrap',
-                    gap: 10,
                   }}
                 >
-                  <span style={{ fontSize: '0.78rem', color: '#CBD5E1' }}>
-                    System Developer? Approve new institutions &amp; manage tenant locks:
-                  </span>
                   <Link
                     to={mode === 'dev-hidden'
                       ? `/login/${roleMeta.slug}?env=production&mode=login&switch=1`
                       : `/login/${roleMeta.slug}?env=production&dev=1&switch=1`}
-                    className="btn btn-secondary"
                     style={{
-                      padding: '7px 12px',
-                      fontSize: '0.78rem',
-                      borderColor: 'rgba(220,38,38,0.55)',
-                      color: '#FCA5A5',
+                      fontSize: '0.72rem',
+                      color: 'rgba(148, 163, 184, 0.72)',
                       textDecoration: 'none',
                     }}
                   >
-                    <Lock size={13} /> {mode === 'dev-hidden' ? 'Open Role Sign In' : 'Developer Dashboard Sign In'}
+                    {mode === 'dev-hidden' ? 'Return to Standard Sign In' : 'System Maintainer Gate'}
                   </Link>
                 </div>
               </div>

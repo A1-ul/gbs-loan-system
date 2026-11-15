@@ -7,9 +7,9 @@ module.exports = {
   app: {
     name: process.env.APP_NAME || 'GBS Loan Management System',
     env: envProfile.nodeEnv,
-    port: parseInt(process.env.PORT, 10) || 5000,
+    port: parseInt(process.env.PORT, 10) || 5005,
     apiVersion: process.env.API_VERSION || 'v1',
-    url: process.env.APP_URL || 'http://localhost:5000',
+    url: process.env.APP_URL || 'http://localhost:5005',
   },
   envProfile,
   cors: {
@@ -85,7 +85,7 @@ module.exports = {
   },
   metrics: {
     enabled: process.env.METRICS_ENABLED !== 'false',
-    port: parseInt(process.env.METRICS_PORT, 10) || 9090,
+    port: parseInt(process.env.METRICS_PORT, 10) || 9095,
   },
   rateLimit: {
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) || 900000,

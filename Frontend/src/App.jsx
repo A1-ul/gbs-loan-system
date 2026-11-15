@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ShieldCheck, LogOut, AlertTriangle, Menu, X, BookOpen, PlayCircle, ExternalLink } from 'lucide-react';
+import { ShieldCheck, LogOut, AlertTriangle, Menu, X, BookOpen, PlayCircle, ExternalLink, Download } from 'lucide-react';
 import api, { sessionStore } from './services/api';
 import { NavigationProvider } from './context/NavigationContext';
 import { resolveRoleMeta } from './constants/rolesMeta';
 import UserCountDropdownWidget from './components/UserCountDropdownWidget';
 import OperatingGuideModal from './components/OperatingGuideModal';
 import { CctvMobileWatchPage } from './components/CctvMobilePanel';
+import GbsBrandLogo from './components/common/GbsBrandLogo';
 import Login from './pages/Login';
 import DemoLaunch from './pages/DemoLaunch';
 import TenantOnboarding from './pages/TenantOnboarding';
@@ -71,7 +72,7 @@ function TenantShell({ user, onLogout, lockBanner }) {
 
   const handleExitDemoToProduction = async () => {
     await onLogout();
-    navigate('/login?env=production&switch=1');
+    navigate('/login?env=production&mode=login&switch=1');
   };
 
   return (
@@ -79,15 +80,11 @@ function TenantShell({ user, onLogout, lockBanner }) {
       {/* Tenant Operational Top Header — ZERO Developer links, custom institution name + logo */}
       <header className="header-bar">
         <Link to="/dashboard?tab=OVERVIEW" className="logo-section" style={{ cursor: 'pointer', flex: 1, minWidth: 200, textDecoration: 'none' }}>
-          {branding.tenantLogoUrl ? (
-            <img
-              src={branding.tenantLogoUrl}
-              alt={branding.tenantName}
-              style={{ width: 42, height: 42, borderRadius: 10, objectFit: 'cover', border: '1px solid #D4AF37', background: '#0F1B31' }}
-            />
-          ) : (
-            <div className="logo-icon">GBS</div>
-          )}
+          <GbsBrandLogo
+            src={branding.tenantLogoUrl || undefined}
+            alt={branding.tenantName || 'GBS® Corporate Crest'}
+            size={44}
+          />
           <div>
             <div style={{ fontWeight: 800, color: '#F4E07B', fontSize: '0.98rem', letterSpacing: 0.4 }}>
               {branding.tenantName}
@@ -143,20 +140,23 @@ function TenantShell({ user, onLogout, lockBanner }) {
       <OperatingGuideModal isOpen={guideOpen} onClose={() => setGuideOpen(false)} userRole={user?.role} isDeveloper={false} />
 
       {isDemo && (
-        <div style={{
-          background: 'linear-gradient(90deg, rgba(120,53,15,0.45), rgba(30,41,59,0.85))',
-          borderBottom: '1px solid rgba(245, 158, 11, 0.45)',
-          padding: '10px 24px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 12,
-          flexWrap: 'wrap',
-        }}>
+        <div
+          className="gbs-watermark-banner"
+          style={{
+            borderBottom: '1px solid rgba(245, 158, 11, 0.45)',
+            padding: '10px 24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            flexWrap: 'wrap',
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: '0.8rem', color: '#FEF3C7' }}>
             <PlayCircle size={17} color="#FBBF24" />
             <span>
-              <strong>DEMO WALKTHROUGH SANDBOX ({user?.tenantCode || 'DEMO-SANDBOX'}):</strong> Strictly separated from Real-Life Production institutions &amp; Developer Control Center.
+              <strong>GBS® COMPANY NOTICE • LEARNING &amp; OBSERVING SANDBOX ({user?.tenantCode || 'DEMO-SANDBOX'}):</strong>{' '}
+              Isolated per tab from Real-Life Production institutions &amp; Developer Control Center.
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -177,6 +177,14 @@ function TenantShell({ user, onLogout, lockBanner }) {
                 {item.label}
               </Link>
             ))}
+            <a
+              href="/images/gbs-official-logo.jpeg"
+              download="GBS-Official-Company-Logo.jpeg"
+              className="btn btn-secondary"
+              style={{ padding: '4px 10px', fontSize: '0.72rem', textDecoration: 'none', borderColor: 'rgba(212,175,55,0.45)', color: '#F4E07B' }}
+            >
+              <Download size={12} /> Crest (.jpeg)
+            </a>
             <button
               type="button"
               onClick={handleExitDemoToProduction}
@@ -257,15 +265,27 @@ export default function App() {
   const [lockBanner, setLockBanner] = useState('');
 
   useEffect(() => {
-    const onExpired = () => {
-      setUser(null);
+    const onExpired = (e) => {
+      if (e?.detail?.isDemo) {
+        sessionStore.clearDemoSession();
+      } else {
+        sessionStore.clearTenantSession();
+      }
+      setUser(sessionStore.getTenantUser());
       setLockBanner('');
+    };
+    const onSessionChanged = () => {
+      const nextUser = sessionStore.getTenantToken() ? sessionStore.getTenantUser() : null;
+      setUser(nextUser);
+      const nextDev = sessionStore.getDevToken() ? sessionStore.getDevUser() : null;
+      setDevUser(nextDev);
     };
     const onLocked = (e) => setLockBanner(e.detail?.message || 'Institution access locked or subscription expired.');
     const onSystemLocked = (e) => setLockBanner(e.detail?.message || 'Platform under Lead Developer maintenance lock.');
     const onDevExpired = () => setDevUser(null);
     const onStorageSync = (e) => {
-      if (!e.key || e.key.startsWith('gbs_tenant_')) {
+      // Never allow cross-tab Production localStorage events to overwrite a tab running Demo Learning Mode
+      if (!sessionStore.isDemoSessionActive() && (!e.key || e.key.startsWith('gbs_tenant_'))) {
         const nextUser = sessionStore.getTenantToken() ? sessionStore.getTenantUser() : null;
         setUser(nextUser);
       }
@@ -276,6 +296,7 @@ export default function App() {
     };
 
     window.addEventListener('gbs:session-expired', onExpired);
+    window.addEventListener('gbs:session-changed', onSessionChanged);
     window.addEventListener('gbs:tenant-locked', onLocked);
     window.addEventListener('gbs:tenant-pending', onLocked);
     window.addEventListener('gbs:system-locked', onSystemLocked);
@@ -284,6 +305,7 @@ export default function App() {
 
     return () => {
       window.removeEventListener('gbs:session-expired', onExpired);
+      window.removeEventListener('gbs:session-changed', onSessionChanged);
       window.removeEventListener('gbs:tenant-locked', onLocked);
       window.removeEventListener('gbs:tenant-pending', onLocked);
       window.removeEventListener('gbs:system-locked', onSystemLocked);
@@ -293,9 +315,14 @@ export default function App() {
   }, []);
 
   const handleTenantLogout = async () => {
+    const wasDemo = sessionStore.isDemoSessionActive();
     await api.post('/auth/logout').catch(() => null);
-    sessionStore.clearTenantSession();
-    setUser(null);
+    if (wasDemo) {
+      sessionStore.clearDemoSession();
+    } else {
+      sessionStore.clearTenantSession();
+    }
+    setUser(sessionStore.getTenantUser());
     setLockBanner('');
   };
 
