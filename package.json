@@ -1,0 +1,19 @@
+{
+  "name": "gbs-loan-system",
+  "version": "2.0.0",
+  "description": "GBS Loan Management System - Enterprise Fintech Platform",
+  "private": true,
+  "main": "Backend/src/server.js",
+  "scripts": {
+    "build": "npm --prefix Backend install --include=dev && npm --prefix Backend run db:generate && npm --prefix Frontend install --include=dev && npm --prefix Frontend run build",
+    "start": "node Backend/scripts/start-production.js",
+    "start:backend": "npm --prefix Backend start",
+    "start:frontend": "npm --prefix Frontend run dev",
+    "dev": "npm --prefix Backend run dev",
+    "db:migrate": "npm --prefix Backend run db:migrate",
+    "db:seed": "npm --prefix Backend run db:seed"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

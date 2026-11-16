@@ -5,6 +5,7 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
+    "start:prod": "node scripts/start-production.js",
     "dev": "nodemon src/server.js",
     "pm2:start": "pm2 start ecosystem.config.js",
     "pm2:stop": "pm2 stop ecosystem.config.js",
@@ -31,7 +32,7 @@
   "author": "GBS",
   "license": "UNLICENSED",
   "engines": {
-    "node": "20.x"
+    "node": ">=20.0.0"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

@@ -10,11 +10,13 @@ services:
     runtime: node
     region: frankfurt
     plan: free
-    buildCommand: npm --prefix Backend install --include=dev && npm --prefix Backend run db:generate && npm --prefix Frontend install --include=dev && npm --prefix Frontend run build
-    startCommand: npm --prefix Backend run db:migrate:prod && npm --prefix Backend run db:seed && npm --prefix Backend start
+    buildCommand: npm run build
+    startCommand: npm start
     healthCheckPath: /api/v1/health
     autoDeploy: true
     envVars:
+      - key: NODE_VERSION
+        value: 20.18.0
       - key: NODE_ENV
         value: production
       - key: PORT
@@ -41,5 +43,3 @@ services:
         value: gabosei48@gmail.com
       - key: CORS_ORIGIN
         value: https://*.onrender.com
-
-
