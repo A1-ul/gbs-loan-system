@@ -10,6 +10,7 @@ services:
     runtime: node
     region: frankfurt
     plan: free
+    branch: main
     buildCommand: npm run build
     startCommand: npm start
     healthCheckPath: /api/v1/health
@@ -23,6 +24,8 @@ services:
         value: 10000
       - key: METRICS_ENABLED
         value: "false"
+      - key: SEED_BASELINE_INSTITUTIONS
+        value: "true"
       - key: DATABASE_URL
         sync: false
       - key: JWT_SECRET

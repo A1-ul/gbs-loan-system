@@ -61,8 +61,11 @@ async function main() {
   });
   console.log(`[Seed] Synchronized Lead Developer authority: ${devAccount.email}`);
 
-  if (!envProfile.allowSeeders) {
-    console.log('[Seed] Production mode detected — skipping development seeders.');
+  const tenantCount = await prisma.tenant.count().catch(() => 0);
+  const shouldSeedTenants = envProfile.allowSeeders || tenantCount === 0 || process.env.SEED_BASELINE_INSTITUTIONS === 'true';
+
+  if (!shouldSeedTenants) {
+    console.log('[Seed] Production mode detected with existing tenants — skipping development seeders.');
     return;
   }
 

@@ -24,7 +24,7 @@ async function prepareAndStart() {
       execSync('npx prisma migrate deploy', {
         cwd: path.resolve(__dirname, '..'),
         stdio: 'inherit',
-        env: process.env,
+        env: { ...process.env, SEED_BASELINE_INSTITUTIONS: 'true' },
         timeout: 60000,
       });
       logger.info('Database migrations deployed successfully.');
@@ -71,7 +71,7 @@ async function prepareAndStart() {
       execSync('node prisma/seed.js', {
         cwd: path.resolve(__dirname, '..'),
         stdio: 'inherit',
-        env: process.env,
+        env: { ...process.env, SEED_BASELINE_INSTITUTIONS: 'true' },
         timeout: 60000,
       });
       logger.info('Baseline seed check completed.');
