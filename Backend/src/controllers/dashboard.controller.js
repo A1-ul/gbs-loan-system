@@ -1,5 +1,7 @@
 const dashboardService = require('../services/dashboard.service');
 const { success } = require('../utils/response');
+const { AuthorizationError } = require('../utils/errors');
+const { normalizeCapabilityRole } = require('../constants/roleCapabilities');
 
 async function getOverview(req, res, next) {
   try {
@@ -21,8 +23,16 @@ async function getMetrics(req, res, next) {
 
 async function getRoleMetrics(req, res, next) {
   try {
-    const targetRole = req.params.role || req.user?.role;
-    const data = await dashboardService.getRoleDashboardMetrics(targetRole, req.user?.id, req.tenantId || null);
+    const callerRole = normalizeCapabilityRole(req.user?.role);
+    const requestedRole = req.params.role ? normalizeCapabilityRole(req.params.role) : callerRole;
+    if (
+      req.params.role
+      && requestedRole !== callerRole
+      && !['COMPANY_OWNER', 'EXECUTIVE_MANAGEMENT'].includes(callerRole)
+    ) {
+      return next(new AuthorizationError(`Role '${req.user?.role}' cannot inspect '${req.params.role}' dashboard telemetry.`));
+    }
+    const data = await dashboardService.getRoleDashboardMetrics(requestedRole, req.user?.id, req.tenantId || null);
     return success(res, data);
   } catch (err) {
     next(err);
@@ -49,7 +59,7 @@ async function getPaymentChart(req, res, next) {
 
 async function getRecentActivity(req, res, next) {
   try {
-    const activity = await dashboardService.getRecentActivity(req.tenantId || null);
+    const activity = await dashboardService.getRecentActivity(req.tenantId || null, 20, req.user || null);
     return success(res, activity);
   } catch (err) {
     next(err);

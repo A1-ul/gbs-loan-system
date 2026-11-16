@@ -75,6 +75,7 @@ async function apply(userId, data, tenantId = null) {
   const calc = loanEngine.calculateLoan({ principal, interestRate: rate, termMonths, penaltyRate });
   const loanNumber = `LN-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`;
   const guarantorIds = Array.isArray(data.guarantorIds) ? data.guarantorIds : [];
+  const actorMeta = await getActorAuditMeta(prisma, userId);
 
   const loan = await prisma.$transaction(async (tx) => {
     const created = await tx.loan.create({
@@ -109,7 +110,6 @@ async function apply(userId, data, tenantId = null) {
       }
     }
 
-    const actorMeta = await getActorAuditMeta(tx, userId);
     const snapshot = buildAuditSnapshot(created, 'LOAN_APPLICATION_SUBMITTED', {
       borrowerName: `${member.user?.firstName || ''} ${member.user?.lastName || ''}`.trim(),
       memberNumber: member.memberNumber,
@@ -137,10 +137,10 @@ async function apply(userId, data, tenantId = null) {
         entityId: created.id,
         newValues: snapshot,
       },
-    }).catch(() => {});
+    }).catch(() => { });
 
     return created;
-  });
+  }, { maxWait: 10000, timeout: 25000 });
 
   logger.info(`Loan application submitted: ${loan.loanNumber}`);
   return loan;
@@ -158,14 +158,14 @@ async function getAll({ page = 1, limit = 20, status, memberId, search, tenantId
     ...(memberId ? { memberId } : {}),
     ...(search
       ? {
-          OR: [
-            { loanNumber: { contains: search, mode: 'insensitive' } },
-            { purpose: { contains: search, mode: 'insensitive' } },
-            { member: { memberNumber: { contains: search, mode: 'insensitive' } } },
-            { member: { user: { firstName: { contains: search, mode: 'insensitive' } } } },
-            { member: { user: { lastName: { contains: search, mode: 'insensitive' } } } },
-          ],
-        }
+        OR: [
+          { loanNumber: { contains: search, mode: 'insensitive' } },
+          { purpose: { contains: search, mode: 'insensitive' } },
+          { member: { memberNumber: { contains: search, mode: 'insensitive' } } },
+          { member: { user: { firstName: { contains: search, mode: 'insensitive' } } } },
+          { member: { user: { lastName: { contains: search, mode: 'insensitive' } } } },
+        ],
+      }
       : {}),
   };
 
@@ -200,6 +200,31 @@ async function getByUserId(userId) {
       payments: { orderBy: { createdAt: 'desc' } },
       workflowLogs: { orderBy: { createdAt: 'asc' } },
       penalties: true,
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
+async function getGuaranteedLoansByUserId(userId, tenantId = null) {
+  const guarantor = await prisma.guarantor.findFirst({
+    where: { userId, ...(tenantId ? { tenantId } : {}) },
+    select: { id: true },
+  });
+  if (!guarantor) return [];
+  return prisma.loan.findMany({
+    where: {
+      ...(tenantId ? { tenantId } : {}),
+      loanGuarantors: { some: { guarantorId: guarantor.id } },
+    },
+    include: {
+      member: { include: { user: { select: { id: true, firstName: true, lastName: true, phone: true } } } },
+      schedule: { orderBy: { installmentNo: 'asc' } },
+      payments: { orderBy: { createdAt: 'desc' } },
+      penalties: true,
+      loanGuarantors: {
+        where: { guarantorId: guarantor.id },
+        include: { guarantor: { include: { user: { select: { id: true, firstName: true, lastName: true } } } } },
+      },
     },
     orderBy: { createdAt: 'desc' },
   });
@@ -282,7 +307,7 @@ async function review(id, reviewerId, { action, notes, rejectionReason }) {
         oldValues: { status: loan.status },
         newValues: snapshot,
       },
-    }).catch(() => {});
+    }).catch(() => { });
 
     return updated;
   });
@@ -330,7 +355,7 @@ async function approve(id, approvedById) {
         oldValues: { status: loan.status },
         newValues: snapshot,
       },
-    }).catch(() => {});
+    }).catch(() => { });
 
     return res;
   });
@@ -422,7 +447,7 @@ async function disburse(id, disbursedById, { notes } = {}) {
         oldValues: { status: loan.status },
         newValues: snapshot,
       },
-    }).catch(() => {});
+    }).catch(() => { });
 
     return res;
   });
@@ -478,7 +503,7 @@ async function close(id, closedById) {
         oldValues: { status: loan.status },
         newValues: snapshot,
       },
-    }).catch(() => {});
+    }).catch(() => { });
     return res;
   });
 }
@@ -505,6 +530,7 @@ module.exports = {
   create,
   getAll,
   getByUserId,
+  getGuaranteedLoansByUserId,
   getById,
   getRepaymentSchedule,
   getWorkflowHistory,

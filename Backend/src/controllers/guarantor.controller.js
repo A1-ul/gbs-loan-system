@@ -1,5 +1,26 @@
 const guarantorService = require('../services/guarantor.service');
 const { success, created, paginated } = require('../utils/response');
+const { AuthorizationError } = require('../utils/errors');
+const { normalizeCapabilityRole } = require('../constants/roleCapabilities');
+
+async function assertGuarantorAccess(req, targetId, requireSelfOrStaff = true) {
+  const guarantor = await guarantorService.getById(targetId);
+  const callerTenantId = req.tenantId || req.user?.tenantId || null;
+  if (callerTenantId && guarantor.tenantId && guarantor.tenantId !== callerTenantId) {
+    throw new AuthorizationError('Cross-tenant guarantor access forbidden.');
+  }
+  const canonicalRole = normalizeCapabilityRole(req.user?.role);
+  if (canonicalRole === 'MEMBER_PORTAL') {
+    throw new AuthorizationError('Borrower accounts cannot inspect guarantor dossiers.');
+  }
+  if (canonicalRole === 'GUARANTOR_PORTAL' && guarantor.userId !== req.user?.id) {
+    throw new AuthorizationError('Guarantors may only view and sign their own surety dossier.');
+  }
+  if (requireSelfOrStaff && canonicalRole === 'GUARANTOR_PORTAL' && guarantor.userId !== req.user?.id) {
+    throw new AuthorizationError('Unauthorized guarantor modification.');
+  }
+  return guarantor;
+}
 
 async function create(req, res, next) {
   try {
@@ -33,28 +54,31 @@ async function getMyGuarantees(req, res, next) {
 
 async function getById(req, res, next) {
   try {
-    const guarantor = await guarantorService.getById(req.params.id);
+    const guarantor = await assertGuarantorAccess(req, req.params.id);
     return success(res, guarantor);
   } catch (err) { next(err); }
 }
 
 async function getLoansByGuarantor(req, res, next) {
   try {
-    const loans = await guarantorService.getLoans(req.params.id);
+    const guarantor = await assertGuarantorAccess(req, req.params.id);
+    const loans = await guarantorService.getLoans(guarantor.id);
     return success(res, loans);
   } catch (err) { next(err); }
 }
 
 async function signAgreement(req, res, next) {
   try {
-    const result = await guarantorService.signAgreement(req.params.id);
+    const guarantor = await assertGuarantorAccess(req, req.params.id);
+    const result = await guarantorService.signAgreement(guarantor.id);
     return success(res, result, 'Agreement signed');
   } catch (err) { next(err); }
 }
 
 async function togglePenaltyNotifications(req, res, next) {
   try {
-    const result = await guarantorService.togglePenaltyNotifications(req.params.id, req.body.enabled);
+    const guarantor = await assertGuarantorAccess(req, req.params.id);
+    const result = await guarantorService.togglePenaltyNotifications(guarantor.id, req.body.enabled);
     return success(res, result);
   } catch (err) { next(err); }
 }

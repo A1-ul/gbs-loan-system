@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Terminal, Cpu, Lock, Unlock, Database, RefreshCw, Activity, Building2,
-  MapPin, ShieldAlert, Send, CheckCircle2, XCircle, Clock, LogOut, Wrench, Trash2, BookOpen, ArrowUpRight, ArrowLeft, Download
+  MapPin, ShieldAlert, Send, CheckCircle2, XCircle, Clock, LogOut, Wrench, Trash2, BookOpen, ArrowUpRight, ArrowLeft, Download, Video,
+  MessageSquare, Star
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 import api, { devApi, sessionStore, API_ORIGIN } from '../services/api';
@@ -10,9 +11,10 @@ import { DEVELOPER_PORTAL_META } from '../constants/rolesMeta';
 import { BackButtonBar } from '../context/NavigationContext';
 import LiveLocationTrackerMap from './LiveLocationTrackerMap';
 import OperatingGuideModal from './OperatingGuideModal';
+import RoleVideoPresentationModal from './RoleVideoPresentationModal';
 import GbsBrandLogo from './common/GbsBrandLogo';
 
-const DEV_VALID_TABS = ['TENANTS', 'GIS_MAP', 'DIAGNOSTICS', 'LOCK_SUBS', 'BACKUPS', 'MESSAGES'];
+const DEV_VALID_TABS = ['TENANTS', 'GIS_MAP', 'DIAGNOSTICS', 'LOCK_SUBS', 'BACKUPS', 'MESSAGES', 'FEEDBACKS'];
 
 /**
  * Hidden Developer Control Center (Step 5 Master Blueprint + Multi-Tenant SaaS Landlord)
@@ -41,6 +43,9 @@ export default function DeveloperControlCenter({ onLogout }) {
   const [backups, setBackups] = useState([]);
   const [aiDiag, setAiDiag] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [feedbacks, setFeedbacks] = useState([]);
+  const [devFeedbackReply, setDevFeedbackReply] = useState({});
+  const [respondingDevFbId, setRespondingDevFbId] = useState(null);
 
   const [msgForm, setMsgForm] = useState({ tenantId: '', title: '', body: '', messageType: 'ANNOUNCEMENT' });
   const [lockReason, setLockReason] = useState('');
@@ -51,6 +56,7 @@ export default function DeveloperControlCenter({ onLogout }) {
   const [tenantSearch, setTenantSearch] = useState('');
   const [tenantStatusFilter, setTenantStatusFilter] = useState('');
   const [guideOpen, setGuideOpen] = useState(false);
+  const [videoOpen, setVideoOpen] = useState(false);
   const [envInfo, setEnvInfo] = useState({ environment: 'production', dataMode: 'PRODUCTION_LIVE' });
   const [toast, setToast] = useState(null);
   const [busyAction, setBusyAction] = useState('');
@@ -76,6 +82,7 @@ export default function DeveloperControlCenter({ onLogout }) {
         alertsRes,
         backupsRes,
         msgsRes,
+        feedbacksRes,
         resHealth,
       ] = await Promise.all([
         devApi.get('/developer/dashboard'),
@@ -88,6 +95,7 @@ export default function DeveloperControlCenter({ onLogout }) {
         devApi.get('/developer/security-alerts'),
         devApi.get('/developer/backups'),
         devApi.get('/developer/messages'),
+        devApi.get('/developer/feedbacks').catch(() => ({ data: { data: [] } })),
         api.get('/health').catch(() => ({ data: { data: null } })),
       ]);
 
@@ -101,6 +109,7 @@ export default function DeveloperControlCenter({ onLogout }) {
       setAlerts(Array.isArray(alertsRes.data?.data) ? alertsRes.data.data : (alertsRes.data?.data?.alerts || []));
       setBackups(backupsRes.data?.data || []);
       setMessages(msgsRes.data?.data || []);
+      setFeedbacks(feedbacksRes.data?.data || []);
       const healthData = resHealth?.data?.data || resHealth?.data;
       if (healthData?.dataMode) {
         setEnvInfo({ environment: healthData.environment, dataMode: healthData.dataMode });
@@ -114,6 +123,25 @@ export default function DeveloperControlCenter({ onLogout }) {
       }
     }
   }, [navigate]);
+
+  const handleDevRespondFeedback = async (id) => {
+    const text = (devFeedbackReply[id] || '').trim();
+    if (!text) {
+      notify('Please enter a response for the user feedback.', true);
+      return;
+    }
+    setRespondingDevFbId(id);
+    try {
+      await devApi.post(`/developer/feedbacks/${id}/respond`, { response: text });
+      notify('Developer response submitted successfully.');
+      setDevFeedbackReply((prev) => ({ ...prev, [id]: '' }));
+      fetchAll();
+    } catch (err) {
+      notify(err.response?.data?.message || 'Failed to submit response', true);
+    } finally {
+      setRespondingDevFbId(null);
+    }
+  };
 
   useEffect(() => {
     fetchAll();
@@ -410,6 +438,9 @@ export default function DeveloperControlCenter({ onLogout }) {
           >
             <Download size={14} /> Official Logo (.jpeg)
           </a>
+          <button type="button" className="btn btn-primary" onClick={() => setVideoOpen(true)} style={{ padding: '7px 12px' }}>
+            <Video size={14} /> Role Walkthrough Video
+          </button>
           <button type="button" className="btn btn-secondary" onClick={() => setGuideOpen(true)} style={{ padding: '7px 12px' }}>
             <BookOpen size={14} /> Developer Guide
           </button>
@@ -508,6 +539,61 @@ export default function DeveloperControlCenter({ onLogout }) {
           </div>
         </div>
 
+        {/* Developer Authority Commands, Permitted Actions & Recent Developer Activities */}
+        <div className="gbs-grid-2" style={{ marginBottom: 20 }}>
+          <div className="glass-panel" style={{ padding: 18, borderColor: 'rgba(239, 68, 68, 0.35)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+              <div>
+                <h3 style={{ margin: 0, color: '#F87171', fontSize: '0.98rem' }}>
+                  Developer Authority — Exact Commands &amp; Permitted Actions
+                </h3>
+                <div style={{ fontSize: '0.74rem', color: '#94A3B8', marginTop: 2 }}>
+                  Exclusive Landlord Scope ({devUser?.accessLevel || 'LEAD_DEVELOPER'}): Only Developer approves onboarding tenants.
+                </div>
+              </div>
+              <span className="badge badge-danger" style={{ fontSize: '0.68rem' }}>DEVELOPER-ONLY APPROVAL GATE</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
+              {(DEVELOPER_PORTAL_META.allowedCommands || []).map((cmd) => (
+                <Link
+                  key={cmd.key}
+                  to={`/dev-portal/tab/${encodeURIComponent(cmd.tab)}`}
+                  className="quick-command-card"
+                  style={{ textDecoration: 'none', padding: 10 }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.8rem', color: '#F8FAFC', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>{cmd.label}</span>
+                      <ArrowUpRight size={13} color="#F87171" />
+                    </div>
+                    <div style={{ fontSize: '0.71rem', color: '#94A3B8', marginTop: 3, lineHeight: 1.35 }}>{cmd.desc}</div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          <div className="glass-panel" style={{ padding: 18, borderColor: 'rgba(212, 175, 55, 0.3)' }}>
+            <h3 style={{ margin: '0 0 10px', color: '#D4AF37', fontSize: '0.98rem' }}>
+              Recent Developer Platform Activities ({logs.length})
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7, maxHeight: 240, overflowY: 'auto' }}>
+              {logs.slice(0, 6).map((l) => (
+                <div key={l.id} style={{ padding: 9, borderRadius: 8, background: 'rgba(6,12,24,0.85)', border: '1px solid rgba(212,175,55,0.2)', fontSize: '0.75rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#F4E07B', fontWeight: 700 }}>
+                    <span>{l.type}</span>
+                    <span style={{ color: '#64748B', fontWeight: 400 }}>{l.time ? new Date(l.time).toLocaleString() : ''}</span>
+                  </div>
+                  <div style={{ color: '#CBD5E1', marginTop: 2 }}>{l.msg}</div>
+                </div>
+              ))}
+              {logs.length === 0 && (
+                <div style={{ fontSize: '0.8rem', color: '#94A3B8' }}>No Developer audit actions logged yet.</div>
+              )}
+            </div>
+          </div>
+        </div>
+
         {routeTabId && (
           <BackButtonBar
             title={(() => {
@@ -518,6 +604,7 @@ export default function DeveloperControlCenter({ onLogout }) {
                 { id: 'LOCK_SUBS', label: 'System Lock/Unlock & Security Alerts' },
                 { id: 'BACKUPS', label: 'PgDump Backups & Recovery' },
                 { id: 'MESSAGES', label: 'Broadcast to Tenants' },
+                { id: 'FEEDBACKS', label: 'Feedbacks & Inquiries' },
               ].find((x) => x.id === activeTab);
               return found ? found.label : activeTab;
             })()}
@@ -536,6 +623,7 @@ export default function DeveloperControlCenter({ onLogout }) {
             { id: 'LOCK_SUBS', label: 'System Lock/Unlock & Alerts', icon: ShieldAlert, badge: alerts.length },
             { id: 'BACKUPS', label: 'PgDump Backups & Recovery', icon: Database, badge: backups.length },
             { id: 'MESSAGES', label: 'Broadcast to Tenants', icon: Send, badge: messages.length },
+            { id: 'FEEDBACKS', label: 'Feedbacks & Inquiries', icon: MessageSquare, badge: feedbacks.length },
           ].map((t) => {
             const Icon = t.icon;
             const isCurrent = activeTab === t.id;
@@ -572,10 +660,10 @@ export default function DeveloperControlCenter({ onLogout }) {
                       <div>
                         <div style={{ fontWeight: 700, fontSize: '1rem', color: '#FFF' }}>{t.name} ({t.code})</div>
                         <div style={{ fontSize: '0.8rem', color: '#CBD5E1' }}>
-                          {t.institutionType} • {t.city}, {t.country} • Rep: {t.representativeName} ({t.representativeEmail})
+                          {t.institutionType} • {t.city}, {t.region}, {t.country} • Rep: {t.representativeName} ({t.representativeEmail}{t.representativePhone ? ` • ${t.representativePhone}` : ''})
                         </div>
                         <div style={{ fontSize: '0.74rem', color: '#94A3B8' }}>
-                          Reg: {t.registrationNumber || 'N/A'} • License: {t.businessLicenseNumber || 'N/A'}
+                          Reg: {t.registrationNumber || 'N/A'} • License: {t.businessLicenseNumber || 'N/A'} • TIN: {t.tinNumber || 'N/A'} • GPS: {t.gpsAddress || t.address || 'N/A'}
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1000,8 +1088,104 @@ export default function DeveloperControlCenter({ onLogout }) {
             </div>
           </div>
         )}
+
+        {/* TAB 7: USER COMPLAINTS & SYSTEM FEEDBACKS */}
+        {activeTab === 'FEEDBACKS' && (
+          <div className="glass-panel" style={{ padding: 22 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
+              <div>
+                <h3 style={{ margin: 0, color: '#D4AF37', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <MessageSquare size={18} /> Global System Feedbacks, User Complaints &amp; Inquiries ({feedbacks.length})
+                </h3>
+                <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#94A3B8' }}>
+                  Inspect real-time user ratings, issues, bug reports, and complaints submitted across all tenants and portals. Deliver instant developer responses.
+                </p>
+              </div>
+              <button type="button" className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.78rem' }} onClick={fetchAll}>
+                <RefreshCw size={13} /> Refresh Feedbacks
+              </button>
+            </div>
+
+            {feedbacks.length === 0 ? (
+              <p style={{ color: '#94A3B8', fontSize: '0.85rem', margin: '20px 0' }}>
+                No user feedbacks or complaints received across the system.
+              </p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {feedbacks.map((fb) => {
+                  const isResponded = fb.status === 'RESPONDED' || Boolean(fb.response);
+                  return (
+                    <div key={fb.id} style={{ padding: 16, borderRadius: 10, background: 'rgba(6,12,24,0.85)', border: '1px solid rgba(212,175,55,0.25)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <strong style={{ color: '#F1F5F9', fontSize: '0.92rem' }}>{fb.name || 'Anonymous User'}</strong>
+                            {fb.userRole && <span className="badge badge-gold">{fb.userRole}</span>}
+                            <span className="badge badge-cyan">{fb.category || 'GENERAL'}</span>
+                            {fb.tenant && <span className="badge badge-outline" style={{ color: '#38BDF8', borderColor: 'rgba(56,189,248,0.4)' }}>Tenant: {fb.tenant.name || fb.tenantId}</span>}
+                          </div>
+                          <div style={{ fontSize: '0.76rem', color: '#94A3B8', marginTop: 4 }}>
+                            {fb.contactEmail && `${fb.contactEmail} • `}{fb.contactPhone && `${fb.contactPhone} • `}{new Date(fb.createdAt).toLocaleString()}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          {fb.rating && (
+                            <div style={{ display: 'flex', gap: 2, color: '#FBBF24' }}>
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <Star key={star} size={13} fill={star <= fb.rating ? '#FBBF24' : 'none'} color="#FBBF24" />
+                              ))}
+                            </div>
+                          )}
+                          <span className={`badge ${isResponded ? 'badge-success' : 'badge-warning'}`}>
+                            {fb.status || 'PENDING'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div style={{ fontSize: '0.84rem', color: '#CBD5E1', marginBottom: 12, lineHeight: 1.45, background: 'rgba(255,255,255,0.03)', padding: 12, borderRadius: 8 }}>
+                        {fb.message}
+                      </div>
+
+                      {isResponded ? (
+                        <div style={{ padding: 10, borderRadius: 8, background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', fontSize: '0.8rem' }}>
+                          <div style={{ color: '#34D399', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                            <CheckCircle2 size={13} /> Developer / Management Response
+                            {fb.respondedAt && <span style={{ color: '#94A3B8', fontWeight: 400 }}>({new Date(fb.respondedAt).toLocaleString()})</span>}
+                          </div>
+                          <div style={{ color: '#F1F5F9' }}>{fb.response}</div>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+                          <input
+                            type="text"
+                            className="gbs-input"
+                            placeholder="Type developer response to user..."
+                            style={{ flex: 1, fontSize: '0.82rem' }}
+                            value={devFeedbackReply[fb.id] || ''}
+                            onChange={(e) => setDevFeedbackReply((prev) => ({ ...prev, [fb.id]: e.target.value }))}
+                            onKeyDown={(e) => { if (e.key === 'Enter') handleDevRespondFeedback(fb.id); }}
+                          />
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            disabled={respondingDevFbId === fb.id}
+                            style={{ padding: '8px 16px', fontSize: '0.8rem', whiteSpace: 'nowrap' }}
+                            onClick={() => handleDevRespondFeedback(fb.id)}
+                          >
+                            {respondingDevFbId === fb.id ? 'Sending...' : 'Send Response'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </main>
       <OperatingGuideModal isOpen={guideOpen} onClose={() => setGuideOpen(false)} isDeveloper />
+      <RoleVideoPresentationModal isOpen={videoOpen} onClose={() => setVideoOpen(false)} userRole="DEVELOPER_LANDLORD" isDeveloper />
     </div>
   );
 }

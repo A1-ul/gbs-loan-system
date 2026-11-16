@@ -343,10 +343,20 @@ export function resolveRoleMeta(roleKey) {
 export const DEVELOPER_PORTAL_META = {
   key: 'DEVELOPER_LANDLORD',
   title: 'GBS Developer Control Center',
-  subtitle: 'Isolated Landlord Platform • System Lock/Unlock, Tenant Approvals & Live GIS',
+  subtitle: 'Isolated Landlord Authority • Tenant Onboarding Approvals, Subscription Control, Live GIS & Platform Integrity',
   loginImage: '/images/roles/login-developer-portal.jpg',
   dashboardImage: '/images/roles/dash-developer-portal.jpg',
+  allowedCommands: [
+    { key: 'APPROVE_TENANTS', label: 'Approve / Reject New Registered Tenants', tab: 'TENANTS', desc: 'Only GBS Developer Authority can verify institutional KYB records and activate new organizations.' },
+    { key: 'SUBSCRIPTION_CTRL', label: 'Manage Trials, Paid Plans & Locks', tab: 'TENANTS', desc: 'Extend plans (+30d / +90d / +365d / Lifetime) or lock/unlock non-compliant organizations.' },
+    { key: 'LIVE_GIS', label: 'Platform-Wide GIS Surveillance', tab: 'GIS_MAP', desc: 'Inspect verified institutional headquarters and real-time field collector coordinates.' },
+    { key: 'DIAGNOSTICS', label: 'Live Diagnostics & Crash Reports', tab: 'DIAGNOSTICS', desc: 'Run live DB/API blueprint audits and review immutable Developer audit logs.' },
+    { key: 'KILL_SWITCH', label: 'Global Platform Lock & Security Alerts', tab: 'LOCK_SUBS', desc: 'Enforce global maintenance lockdown or resolve active security alerts.' },
+    { key: 'BACKUPS', label: 'PgDump Snapshots & Official Notices', tab: 'BACKUPS', desc: 'Create PostgreSQL backups, verify recovery, and broadcast official notices to tenants.' },
+  ],
 };
+
+export { FRONTEND_ROLE_CAPABILITIES, normalizeRoleKey, resolveRoleCapabilities } from './roleCapabilities';
 
 export const ONBOARDING_META = {
   loginImage: '/images/roles/login-tenant-onboard.jpg',

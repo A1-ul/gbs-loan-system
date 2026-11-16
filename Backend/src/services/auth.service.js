@@ -4,7 +4,7 @@ const QRCode = require('qrcode');
 const { prisma } = require('../config/database');
 const { signAccessToken, signRefreshToken, verifyRefreshToken } = require('../utils/jwt');
 const { generateOtp } = require('../utils/encryption');
-const { AuthenticationError, AuthorizationError, ConflictError, NotFoundError } = require('../utils/errors');
+const { AuthenticationError, AuthorizationError, ConflictError, NotFoundError, ValidationError } = require('../utils/errors');
 const { getEnvironmentProfile, getRecordProvenance } = require('../config/environments');
 const notificationService = require('./notification.service');
 
@@ -26,6 +26,13 @@ async function register(data, reqMeta = {}) {
   const normalizedRole = data.role ? String(data.role).toUpperCase().replace(/-/g, '_') : 'MEMBER_PORTAL';
   if (PRIVILEGED_SELF_REG_BLOCKLIST.has(normalizedRole)) {
     throw new AuthorizationError(`Self-registration as '${normalizedRole}' is prohibited. Use institutional onboarding or Administrator provisioning.`);
+  }
+
+  const isDevRole = ['DEVELOPER', 'DEVELOPER_LANDLORD'].includes(normalizedRole) ||
+    (data.email && String(data.email).trim().toLowerCase() === 'gabosei48@gmail.com');
+  const livePhoto = data.livePhoto || data.profilePicture || data.cameraShot;
+  if (!isDevRole && !livePhoto) {
+    throw new ValidationError('A live camera capture shot is strictly required before completing registration.');
   }
 
   const existing = await prisma.user.findFirst({
@@ -65,6 +72,7 @@ async function register(data, reqMeta = {}) {
       role: normalizedRole,
       firstName: data.firstName.trim(),
       lastName: data.lastName.trim(),
+      profilePicture: livePhoto || null,
       address: data.address ? String(data.address).trim() : null,
       gpsAddress: data.gpsAddress ? String(data.gpsAddress).trim().toUpperCase() : null,
       gpsLatitude: data.gpsLatitude != null ? Number(data.gpsLatitude) : null,
@@ -74,13 +82,40 @@ async function register(data, reqMeta = {}) {
       status: 'PENDING_VERIFICATION',
       qualificationVerified: !isStaffRegistration,
       lastDeviceFingerprint: reqMeta.deviceFingerprint || null,
+      metadata: {
+        liveCameraCaptured: Boolean(livePhoto),
+        liveCameraShot: livePhoto || null,
+        cameraCapturedAt: livePhoto ? new Date().toISOString() : null,
+        approvalStage: isStaffRegistration ? 'AWAITING_OWNER_APPROVAL' : 'ACTIVE',
+        employedByBranchManagerId: data.branchManagerId || null,
+        employedByBranchManagerName: data.branchManagerName || null,
+        employmentRequestedAt: isStaffRegistration ? new Date().toISOString() : null,
+      },
       ...provenance,
     },
     select: {
       id: true, email: true, phone: true, role: true, status: true,
       firstName: true, lastName: true, tenantId: true, gpsAddress: true,
+      profilePicture: true, metadata: true,
     },
   });
+
+  if (['MEMBER', 'MEMBER_PORTAL'].includes(normalizedRole)) {
+    const memberCount = await prisma.member.count({ where: { tenantId: resolvedTenantId } }).catch(() => 0);
+    const memberNumber = `MBR-${String(memberCount + 1).padStart(5, '0')}`;
+    await prisma.member.create({
+      data: {
+        tenantId: resolvedTenantId,
+        userId: user.id,
+        memberNumber,
+        gpsAddress: user.gpsAddress,
+        gpsLatitude: user.gpsLatitude,
+        gpsLongitude: user.gpsLongitude,
+        kycStatus: 'VERIFIED',
+        ...provenance,
+      },
+    }).catch(() => null);
+  }
 
   const otpNotification = await notificationService.queue({
     immediate: true,

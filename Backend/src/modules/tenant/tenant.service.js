@@ -186,7 +186,7 @@ class TenantService {
       });
 
       return { tenant, adminUserId: adminUser.id };
-    });
+    }, { maxWait: 10000, timeout: 25000 });
 
     logger.info(`[TenantService] Pending institutional onboarding registered: ${created.tenant.code}`);
     return {
@@ -384,6 +384,7 @@ class TenantService {
     const diffMs = expiryDate ? expiryDate.getTime() - Date.now() : 0;
     const daysLeft = resolvedPlan.isLifetime ? 36500 : Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
 
+    const isDeveloperApproved = Boolean(data.approvedByDeveloperId);
     const tenant = await prisma.tenant.create({
       data: {
         code,
@@ -391,7 +392,10 @@ class TenantService {
         domain: data.domain || null,
         logoUrl: data.logoUrl || null,
         companyNameUpdated: Boolean(data.companyNameUpdated),
-        status: data.status || 'ACTIVE',
+        status: isDeveloperApproved ? (data.status || 'ACTIVE') : 'PENDING',
+        onboardingStatus: isDeveloperApproved ? (data.onboardingStatus || 'ACTIVE_TRIAL') : 'PENDING',
+        approvedByDeveloperId: data.approvedByDeveloperId || null,
+        approvedAt: isDeveloperApproved ? new Date() : null,
         planTier: data.plan || data.planTier || resolvedPlan.tier || 'Enterprise',
         subscriptionPlan: resolvedPlan.code,
         subscriptionMonths: resolvedPlan.months,
@@ -448,7 +452,10 @@ class TenantService {
    * Update tenant organization details
    */
   async updateTenant(id, data) {
-    await this.getTenantById(id);
+    const existing = await this.getTenantById(id);
+    if (['PENDING', 'VERIFICATION_REQUIRED', 'REJECTED'].includes(existing.onboardingStatus)) {
+      throw new AuthorizationError('Only GBS Developer Authority may approve or activate pending tenant organizations.');
+    }
 
     const updated = await prisma.tenant.update({
       where: { id },
@@ -456,10 +463,8 @@ class TenantService {
         name: data.name,
         domain: data.domain,
         location: data.location,
-        planTier: data.plan || data.planTier,
         contactEmail: data.contactEmail,
         contactPhone: data.contactPhone,
-        status: data.status,
       },
     });
 
@@ -643,6 +648,13 @@ class TenantService {
 
   async chooseSubscriptionPlan(tenantId, user, { planCode } = {}) {
     if (!tenantId) throw new ValidationError('Tenant context required');
+    const existing = await this.getTenantById(tenantId);
+    if (
+      ['PENDING', 'VERIFICATION_REQUIRED', 'REJECTED', 'SUSPENDED', 'CANCELLED', 'LOCKED'].includes(existing.onboardingStatus)
+      || ['PENDING', 'REJECTED', 'SUSPENDED', 'LOCKED_EXPIRED'].includes(existing.status)
+    ) {
+      throw new AuthorizationError('Only GBS Developer Authority may approve, activate, or unlock tenant organizations.');
+    }
     const role = String(user?.role || '').toUpperCase();
     const allowed = ['COMPANY_OWNER', 'BRANCH_MANAGER', 'FINANCE_MANAGER', 'EXECUTIVE_MANAGEMENT'];
     if (!allowed.includes(role)) {

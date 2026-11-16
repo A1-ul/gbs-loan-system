@@ -22,20 +22,24 @@ router.get('/visits', staffAndAbove, ctrl.getCustomerVisits);
 router.post('/visits', authorize('COMPANY_OWNER', 'COLLECTIONS', 'FIELD_OFFICER', 'STAFF', 'MOBILE_STAFF', 'COLLECTOR', 'LOAN_OFFICER', 'BRANCH_MANAGER', 'OPERATIONS_MANAGER', 'MANAGER'), ctrl.recordCustomerVisit);
 
 // Compliance, Audit, Fraud, Risk & Legal Cases
-router.get('/compliance-cases', staffAndAbove, ctrl.getComplianceCases);
-router.post('/compliance-cases', authorize('COMPANY_OWNER', 'INTERNAL_AUDIT', 'COMPLIANCE', 'FRAUD_INVESTIGATION', 'SECURITY_OPERATIONS', 'RISK_MANAGEMENT', 'LEGAL_DEPARTMENT', 'OPERATIONS_MANAGER', 'BRANCH_MANAGER', 'REGIONAL_MANAGER', 'EXECUTIVE_MANAGEMENT', 'BOARD_EXECUTIVE'), ctrl.createComplianceCase);
-router.put('/compliance-cases/:id', authorize('COMPANY_OWNER', 'INTERNAL_AUDIT', 'COMPLIANCE', 'FRAUD_INVESTIGATION', 'SECURITY_OPERATIONS', 'RISK_MANAGEMENT', 'LEGAL_DEPARTMENT', 'OPERATIONS_MANAGER', 'BRANCH_MANAGER', 'REGIONAL_MANAGER', 'EXECUTIVE_MANAGEMENT', 'BOARD_EXECUTIVE'), ctrl.updateComplianceCase);
+const caseViewAndWriteRoles = authorize('COMPANY_OWNER', 'BOARD_EXECUTIVE', 'EXECUTIVE_MANAGEMENT', 'REGIONAL_MANAGER', 'OPERATIONS_MANAGER', 'BRANCH_MANAGER', 'MANAGER', 'INTERNAL_AUDIT', 'COMPLIANCE', 'FRAUD_INVESTIGATION', 'SECURITY_OPERATIONS', 'RISK_MANAGEMENT', 'LEGAL_DEPARTMENT');
+router.get('/compliance-cases', caseViewAndWriteRoles, ctrl.getComplianceCases);
+router.post('/compliance-cases', caseViewAndWriteRoles, ctrl.createComplianceCase);
+router.put('/compliance-cases/:id', caseViewAndWriteRoles, ctrl.updateComplianceCase);
 
 // Customer Service & Reception Tickets
-router.get('/support-tickets', staffAndAbove, ctrl.getSupportTickets);
-router.post('/support-tickets', staffAndAbove, ctrl.createSupportTicket);
-router.put('/support-tickets/:id', staffAndAbove, ctrl.updateSupportTicket);
+const supportTicketRoles = authorize('COMPANY_OWNER', 'EXECUTIVE_MANAGEMENT', 'REGIONAL_MANAGER', 'BRANCH_MANAGER', 'OPERATIONS_MANAGER', 'MANAGER', 'CUSTOMER_SERVICE', 'RECEPTION', 'LOAN_OFFICER', 'COLLECTIONS');
+router.get('/support-tickets', supportTicketRoles, ctrl.getSupportTickets);
+router.post('/support-tickets', supportTicketRoles, ctrl.createSupportTicket);
+router.put('/support-tickets/:id', supportTicketRoles, ctrl.updateSupportTicket);
 
 // Investors & Marketing
-router.get('/investors', staffAndAbove, ctrl.getInvestors);
-router.post('/investors', financeTeam, ctrl.createInvestor);
-router.get('/campaigns', staffAndAbove, ctrl.getCampaigns);
-router.post('/campaigns', staffAndAbove, ctrl.createCampaign);
+const investorViewRoles = authorize('COMPANY_OWNER', 'BOARD_EXECUTIVE', 'EXECUTIVE_MANAGEMENT', 'FINANCE_MANAGER', 'TREASURY', 'ACCOUNTANT', 'INVESTOR');
+const campaignRoles = authorize('COMPANY_OWNER', 'BOARD_EXECUTIVE', 'EXECUTIVE_MANAGEMENT', 'MARKETING');
+router.get('/investors', investorViewRoles, ctrl.getInvestors);
+router.post('/investors', authorize('COMPANY_OWNER', 'EXECUTIVE_MANAGEMENT', 'FINANCE_MANAGER', 'TREASURY', 'ACCOUNTANT', 'INVESTOR'), ctrl.createInvestor);
+router.get('/campaigns', campaignRoles, ctrl.getCampaigns);
+router.post('/campaigns', campaignRoles, ctrl.createCampaign);
 
 // KYC / Contract Document Vault
 router.get('/documents', staffAndAbove, ctrl.getDocuments);

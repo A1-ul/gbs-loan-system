@@ -141,6 +141,71 @@ describe('GBS Demo Walkthrough Separation & Self-Service Navigation Integration 
       .get('/api/v1/guarantors')
       .set('Authorization', `Bearer ${guarantorDemoToken}`);
     expect(staffOnlyRes.status).toBe(403);
+
+    // Guarantor role-scoped /dashboard/my-role & /loans/my-loans & /payments/my-payments, no borrower origination
+    const gurRoleRes = await request(app)
+      .get('/api/v1/dashboard/my-role')
+      .set('Authorization', `Bearer ${guarantorDemoToken}`);
+    expect(gurRoleRes.status).toBe(200);
+    expect(gurRoleRes.body.data.capabilities.role).toBe('GUARANTOR_PORTAL');
+    expect(gurRoleRes.body.data.capabilities.actions.canApplyLoan).toBe(false);
+    expect(gurRoleRes.body.data.capabilities.allowedTabs).toEqual(['OVERVIEW', 'GUARANTORS', 'LOANS', 'PAYMENTS']);
+    expect(gurRoleRes.body.data.summary.totalMembers).toBeUndefined();
+    expect(gurRoleRes.body.data.datasets.salaries).toBeUndefined();
+    expect(gurRoleRes.body.data.environmentProvenance.isProductionRecord).toBe(false);
+
+    const gurLoansRes = await request(app)
+      .get('/api/v1/loans/my-loans')
+      .set('Authorization', `Bearer ${guarantorDemoToken}`);
+    expect(gurLoansRes.status).toBe(200);
+
+    const gurPaymentsRes = await request(app)
+      .get('/api/v1/payments/my-payments')
+      .set('Authorization', `Bearer ${guarantorDemoToken}`);
+    expect(gurPaymentsRes.status).toBe(200);
+
+    const gurBlockedApply = await request(app)
+      .post('/api/v1/loans/apply')
+      .set('Authorization', `Bearer ${guarantorDemoToken}`)
+      .send({ principalAmount: 2000, termMonths: 6, purpose: 'Blocked Guarantor Origination' });
+    expect(gurBlockedApply.status).toBe(403);
+  });
+
+  it('enforces exact role-scoped dashboards and blocks unauthorized HR/Marketing/Member endpoints', async () => {
+    const memberRoleRes = await request(app)
+      .get('/api/v1/dashboard/my-role')
+      .set('Authorization', `Bearer ${memberDemoToken}`);
+    expect(memberRoleRes.status).toBe(200);
+    expect(memberRoleRes.body.data.summary.totalStaff).toBeUndefined();
+    expect(memberRoleRes.body.data.datasets.staff).toBeUndefined();
+    expect(memberRoleRes.body.data.datasets.complianceCases).toBeUndefined();
+
+    const hrSess = await request(app).post('/api/v1/demo/walkthrough-session').send({ role: 'HUMAN_RESOURCE' });
+    expect(hrSess.status).toBe(200);
+    const hrToken = hrSess.body.data.accessToken;
+    const hrRoleRes = await request(app).get('/api/v1/dashboard/my-role').set('Authorization', `Bearer ${hrToken}`);
+    expect(hrRoleRes.status).toBe(200);
+    expect(hrRoleRes.body.data.capabilities.allowedTabs).toEqual(['OVERVIEW', 'HR_PAYROLL', 'STAFF_COMMS', 'MEETINGS_REPORTS']);
+    expect(hrRoleRes.body.data.datasets.recentLoans).toBeUndefined();
+
+    const hrMembersBlocked = await request(app).get('/api/v1/members').set('Authorization', `Bearer ${hrToken}`);
+    expect(hrMembersBlocked.status).toBe(403);
+    const hrCasesBlocked = await request(app).get('/api/v1/enterprise/compliance-cases').set('Authorization', `Bearer ${hrToken}`);
+    expect(hrCasesBlocked.status).toBe(403);
+
+    const mktSess = await request(app).post('/api/v1/demo/walkthrough-session').send({ role: 'MARKETING' });
+    expect(mktSess.status).toBe(200);
+    const mktToken = mktSess.body.data.accessToken;
+    const mktSalariesBlocked = await request(app).get('/api/v1/salaries').set('Authorization', `Bearer ${mktToken}`);
+    expect(mktSalariesBlocked.status).toBe(403);
+    const mktInvestorsBlocked = await request(app).get('/api/v1/enterprise/investors').set('Authorization', `Bearer ${mktToken}`);
+    expect(mktInvestorsBlocked.status).toBe(403);
+
+    // Company Owner sees executive capabilities inside tenant, never Developer tenant-approval authority
+    const ownerRoleRes = await request(app).get('/api/v1/dashboard/my-role').set('Authorization', `Bearer ${ownerDemoToken}`);
+    expect(ownerRoleRes.status).toBe(200);
+    expect(ownerRoleRes.body.data.capabilities.actions.canApproveTenants).toBe(false);
+    expect(ownerRoleRes.body.data.capabilities.allowedTabs).toContain('BRANDING_CCTV');
   });
 });
 

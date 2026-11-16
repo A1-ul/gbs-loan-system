@@ -274,6 +274,8 @@ export default function OperatingGuideModal({ isOpen, onClose, userRole = 'MEMBE
             })()}
 
             {/* Platform Core Workflows */}
+            {['COMPANY_OWNER', 'EXECUTIVE_MANAGEMENT', 'BRANCH_MANAGER', 'OPERATIONS_MANAGER', 'REGIONAL_MANAGER', 'BOARD_EXECUTIVE'].includes(currentRole.key) && (
+            <>
             <div className="gbs-grid-2" style={{ gap: 12 }}>
               {CORE_SYSTEM_WORKFLOWS.map((wf) => (
                 <div key={wf.title} style={{ background: 'rgba(15, 27, 49, 0.72)', padding: 14, borderRadius: 10, border: '1px solid rgba(212,175,55,0.2)' }}>
@@ -285,7 +287,7 @@ export default function OperatingGuideModal({ isOpen, onClose, userRole = 'MEMBE
               ))}
             </div>
 
-            {/* Searchable All-30 Roles Manual */}
+            {/* Searchable Institutional Roles Directory (Management/Owner oversight only) */}
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 10 }}>
                 <h4 style={{ margin: 0, color: '#D4AF37' }}>All {ROLES_META.length} Institutional Roles Directory &amp; Duties</h4>
@@ -328,6 +330,8 @@ export default function OperatingGuideModal({ isOpen, onClose, userRole = 'MEMBE
                 ))}
               </div>
             </div>
+            </>
+            )}
           </div>
         )}
       </div>

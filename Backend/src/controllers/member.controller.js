@@ -1,5 +1,23 @@
 const memberService = require('../services/member.service');
 const { success, created, paginated } = require('../utils/response');
+const { AuthorizationError } = require('../utils/errors');
+const { normalizeCapabilityRole, hasRoleAction } = require('../constants/roleCapabilities');
+
+function assertMemberAccess(req, member) {
+  const canonicalRole = normalizeCapabilityRole(req.user?.role);
+  if (canonicalRole === 'GUARANTOR_PORTAL') {
+    throw new AuthorizationError('Guarantor portals cannot inspect arbitrary borrower files.');
+  }
+  if (canonicalRole === 'MEMBER_PORTAL') {
+    if (member.userId !== req.user?.id) {
+      throw new AuthorizationError('Borrowers may only view or update their own profile.');
+    }
+    return;
+  }
+  if (!hasRoleAction(req.user?.role, 'canViewCustomerDirectory')) {
+    throw new AuthorizationError(`Role '${req.user?.role}' cannot inspect borrower directory records.`);
+  }
+}
 
 async function create(req, res, next) {
   try {
@@ -33,6 +51,7 @@ async function getById(req, res, next) {
   try {
     const tenantId = req.tenantId || req.user?.tenantId;
     const member = await memberService.getById(req.params.id, tenantId);
+    assertMemberAccess(req, member);
     return success(res, member);
   } catch (err) {
     next(err);
@@ -41,7 +60,10 @@ async function getById(req, res, next) {
 
 async function update(req, res, next) {
   try {
-    const member = await memberService.update(req.params.id, req.body);
+    const tenantId = req.tenantId || req.user?.tenantId;
+    const existing = await memberService.getById(req.params.id, tenantId);
+    assertMemberAccess(req, existing);
+    const member = await memberService.update(existing.id, req.body);
     return success(res, member, 'Member updated');
   } catch (err) {
     next(err);

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Terminal, ShieldAlert, Lock, AlertTriangle } from 'lucide-react';
+import { RoleVideoTrigger } from '../components/RoleVideoPresentationModal';
 import { devApi, sessionStore, getDeviceFingerprint } from '../services/api';
 import { DEVELOPER_PORTAL_META } from '../constants/rolesMeta';
 import GbsBrandLogo from '../components/common/GbsBrandLogo';
@@ -132,7 +133,19 @@ export default function DeveloperLogin({ onDevAuthenticated }) {
             </button>
           </form>
 
-          <div style={{ marginTop: 18, fontSize: '0.74rem', color: '#64748B', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+            <span style={{ fontSize: '0.76rem', color: '#94A3B8' }}>
+              Review Developer commands &amp; tenant approval workflow:
+            </span>
+            <RoleVideoTrigger
+              isDeveloper
+              label="Watch Developer Video"
+              className="btn btn-secondary"
+              style={{ padding: '7px 12px', fontSize: '0.78rem', borderColor: 'rgba(212,175,55,0.55)', color: '#FDE68A' }}
+            />
+          </div>
+
+          <div style={{ marginTop: 14, fontSize: '0.74rem', color: '#64748B', display: 'flex', alignItems: 'center', gap: 6 }}>
             <ShieldAlert size={14} color="#F87171" /> All actions recorded in immutable DeveloperAuditLog.
           </div>
         </div>

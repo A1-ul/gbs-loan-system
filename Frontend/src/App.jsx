@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ShieldCheck, LogOut, AlertTriangle, Menu, X, BookOpen, PlayCircle, ExternalLink, Download } from 'lucide-react';
+import { ShieldCheck, LogOut, AlertTriangle, Menu, X, BookOpen, PlayCircle, ExternalLink, Download, Video } from 'lucide-react';
 import api, { sessionStore } from './services/api';
 import { NavigationProvider } from './context/NavigationContext';
 import { resolveRoleMeta } from './constants/rolesMeta';
 import UserCountDropdownWidget from './components/UserCountDropdownWidget';
 import OperatingGuideModal from './components/OperatingGuideModal';
+import RoleVideoPresentationModal from './components/RoleVideoPresentationModal';
 import { CctvMobileWatchPage } from './components/CctvMobilePanel';
 import GbsBrandLogo from './components/common/GbsBrandLogo';
 import Login from './pages/Login';
@@ -31,6 +32,7 @@ function TenantShell({ user, onLogout, lockBanner }) {
   const roleMeta = resolveRoleMeta(user?.role);
   const [dataMode, setDataMode] = useState(null);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [videoOpen, setVideoOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [branding, setBranding] = useState({
     tenantName: user?.tenantName || 'GBS LOAN SYSTEM',
@@ -117,6 +119,14 @@ function TenantShell({ user, onLogout, lockBanner }) {
           <UserCountDropdownWidget userRole={user?.role} />
           <button
             type="button"
+            onClick={() => setVideoOpen(true)}
+            className="btn btn-primary"
+            style={{ padding: '7px 12px', fontSize: '0.8rem' }}
+          >
+            <Video size={14} /> Role Walkthrough Video
+          </button>
+          <button
+            type="button"
             onClick={() => setGuideOpen(true)}
             className="btn btn-secondary"
             style={{ padding: '7px 12px', fontSize: '0.8rem' }}
@@ -138,6 +148,7 @@ function TenantShell({ user, onLogout, lockBanner }) {
       </header>
 
       <OperatingGuideModal isOpen={guideOpen} onClose={() => setGuideOpen(false)} userRole={user?.role} isDeveloper={false} />
+      <RoleVideoPresentationModal isOpen={videoOpen} onClose={() => setVideoOpen(false)} userRole={user?.role} isDeveloper={false} />
 
       {isDemo && (
         <div

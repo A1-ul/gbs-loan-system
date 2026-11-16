@@ -8,6 +8,7 @@ import api from '../services/api';
 import { ONBOARDING_META } from '../constants/rolesMeta';
 import { FaceScanner } from '../components/biometric/FaceScanner';
 import GbsBrandLogo from '../components/common/GbsBrandLogo';
+import { RoleVideoTrigger } from '../components/RoleVideoPresentationModal';
 
 /**
  * Multi-Tenant Institutional Onboarding Form (Default Entry Page) + Application Tracker
@@ -133,6 +134,20 @@ export default function TenantOnboarding() {
           </div>
 
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <RoleVideoTrigger
+              userRole="COMPANY_OWNER"
+              allowRoleSwitch
+              label="Watch Video Guide"
+              className="btn btn-primary"
+              style={{
+                padding: '8px 14px',
+                fontSize: '0.82rem',
+                background: 'linear-gradient(135deg, #F4E07B 0%, #D4AF37 55%, #B45309 100%)',
+                color: '#060C18',
+                borderColor: '#FDE68A',
+                fontWeight: 700,
+              }}
+            />
             <Link
               to="/login?env=demo&switch=1"
               className="btn btn-secondary"
@@ -190,6 +205,45 @@ export default function TenantOnboarding() {
               </Link>
             </div>
           )}
+
+          <div
+            className="onboarding-gold-wine-glass"
+            style={{
+              padding: '14px 16px',
+              marginBottom: 14,
+              borderRadius: 12,
+              border: '1px solid rgba(212,175,55,0.55)',
+              background: 'linear-gradient(135deg, rgba(30,22,12,0.86) 0%, rgba(15,23,42,0.9) 100%)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 12,
+            }}
+          >
+            <div>
+              <div style={{ fontSize: '0.86rem', fontWeight: 800, color: '#F4E07B' }}>
+                Interactive System Role Video Guide
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#CBD5E1', marginTop: 2 }}>
+                Watch exact commands, permitted actions, controls &amp; workflow steps for every user role.
+              </div>
+            </div>
+            <RoleVideoTrigger
+              userRole="COMPANY_OWNER"
+              allowRoleSwitch
+              label="Watch Video Presentation"
+              className="btn btn-primary"
+              style={{
+                padding: '8px 14px',
+                fontSize: '0.8rem',
+                background: 'linear-gradient(135deg, #F4E07B 0%, #D4AF37 60%, #B45309 100%)',
+                color: '#060C18',
+                borderColor: '#FDE68A',
+                fontWeight: 700,
+              }}
+            />
+          </div>
 
           <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
             <Link

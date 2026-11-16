@@ -1,5 +1,6 @@
 const { AuthorizationError } = require('../utils/errors');
 const { ROLES, ROLE_PERMISSIONS } = require('../constants');
+const { hasRoleAction } = require('../constants/roleCapabilities');
 
 const ROLE_ALIASES = {
   MANAGER: ['OPERATIONS_MANAGER', 'BRANCH_MANAGER', 'MANAGER'],
@@ -65,6 +66,18 @@ function requirePermission(...requiredPermissions) {
   };
 }
 
+function requireCapability(actionKey) {
+  return (req, res, next) => {
+    if (!req.user || !req.user.role) {
+      return next(new AuthorizationError('Authentication required for capability verification'));
+    }
+    if (!hasRoleAction(req.user.role, actionKey)) {
+      return next(new AuthorizationError(`Role '${req.user.role}' is not authorized for action '${actionKey}'.`));
+    }
+    return next();
+  };
+}
+
 const companyOwnerOnly = authorize(ROLES.COMPANY_OWNER);
 const executiveOnly = authorize(ROLES.COMPANY_OWNER, ROLES.BOARD_EXECUTIVE, ROLES.EXECUTIVE_MANAGEMENT);
 const managementAndAbove = authorize(
@@ -92,6 +105,7 @@ module.exports = {
   authorize,
   requireRole: authorize,
   requirePermission,
+  requireCapability,
   normalizeRole,
   companyOwnerOnly,
   executiveOnly,

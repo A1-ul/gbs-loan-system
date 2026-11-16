@@ -7,9 +7,12 @@ import {
   Landmark, CreditCard, Users, ShieldCheck, AlertTriangle, Download, Plus, Video,
   Navigation, Clock, CheckCircle2, Database, Briefcase, Megaphone, TrendingUp,
   Bell, ArrowUpRight, RefreshCw, Upload, Search, MapPin, Eye, EyeOff, Calculator,
-  Building2, CalendarCheck, Send, UserPlus, LogIn, LogOut, ArrowLeft
+  Building2, CalendarCheck, Send, UserPlus, LogIn, LogOut, ArrowLeft,
+  Camera, UserCheck, MessageSquare, Star, X
 } from 'lucide-react';
 import api, { sessionStore } from '../services/api';
+import LiveCameraCapture from '../components/common/LiveCameraCapture';
+import FeedbackModal, { FeedbackFloatingTrigger } from '../components/common/FeedbackModal';
 import { ROLES_META, resolveRoleMeta, USER_COUNT_DROPDOWN_ROLES } from '../constants/rolesMeta';
 import { BackButtonBar, useNavigationState } from '../context/NavigationContext';
 import LiveLocationTrackerMap from '../components/LiveLocationTrackerMap';
@@ -97,9 +100,16 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
   const [savingBranding, setSavingBranding] = useState(false);
   const [upgradingPlan, setUpgradingPlan] = useState('');
   const [pendingStaff, setPendingStaff] = useState([]);
+  const [branchApprovedStaff, setBranchApprovedStaff] = useState([]);
+  const [feedbacks, setFeedbacks] = useState([]);
+  const [feedbackReplyText, setFeedbackReplyText] = useState({});
+  const [respondingFeedbackId, setRespondingFeedbackId] = useState(null);
+  const [selectedStaffDossier, setSelectedStaffDossier] = useState(null);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [newStaffForm, setNewStaffForm] = useState({
     firstName: '', lastName: '', email: '', phone: '', password: '',
     role: 'LOAN_OFFICER', department: 'CREDIT', position: 'Loan Officer', baseSalary: '2500', gpsAddress: '',
+    livePhoto: '',
   });
   const [showStaffPass, setShowStaffPass] = useState(false);
   const [creatingStaff, setCreatingStaff] = useState(false);
@@ -123,7 +133,10 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
   const [wrappingPeriod, setWrappingPeriod] = useState('');
 
   // Operational Forms
-  const [newMember, setNewMember] = useState({ firstName: '', lastName: '', phone: '', email: '', ghanaCardNumber: '', occupation: '', monthlyIncome: '', address: '', gpsAddress: '', isHidden: false });
+  const [newMember, setNewMember] = useState({
+    firstName: '', lastName: '', phone: '', email: '', ghanaCardNumber: '',
+    occupation: '', monthlyIncome: '', address: '', gpsAddress: '', isHidden: false, livePhoto: '',
+  });
   const [newLoan, setNewLoan] = useState({ memberId: '', loanProductId: '', principalAmount: '', termMonths: '12', purpose: '' });
   const [newPayment, setNewPayment] = useState({ loanId: '', amount: '', method: 'MOMO', momoPhone: '', momoNetwork: 'MTN' });
   const [newMeeting, setNewMeeting] = useState({ title: '', scheduledAt: '', audienceType: 'ALL_STAFF', participantUserIds: [] });
@@ -256,14 +269,18 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
           snapRes,
           pendingRes,
           attLogsRes,
+          branchApprovedRes,
+          feedbackRes,
         ] = await Promise.all([
           safe(api.get('/tenants/my/profile')),
           safe(api.get('/staff/attendance/my-status')),
           safe(api.get('/notifications/broadcasts')),
           safe(api.get('/notifications/repayment-alerts')),
           safe(api.get('/reports/snapshots')),
-          isManagement ? safe(api.get('/staff/pending-approvals')) : Promise.resolve({ data: { data: [] } }),
+          (isManagement || roleActions.canApproveStaff || roleKey === 'BRANCH_MANAGER') ? safe(api.get('/staff/pending-approvals')) : Promise.resolve({ data: { data: [] } }),
           isManagement || isHR ? safe(api.get('/staff/attendance')) : Promise.resolve({ data: { data: [] } }),
+          isCompanyOwner ? safe(api.get('/staff/branch-approved')) : Promise.resolve({ data: { data: [] } }),
+          (isCompanyOwner || isManagement) ? safe(api.get('/feedback')) : Promise.resolve({ data: { data: [] } }),
         ]);
 
         const prof = profileRes.data?.data || null;
@@ -281,6 +298,8 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
         setReportSnapshots(snapRes.data?.data || []);
         setPendingStaff(pendingRes.data?.data || []);
         setAttendanceLogs(attLogsRes.data?.data || []);
+        setBranchApprovedStaff(branchApprovedRes.data?.data || []);
+        setFeedbacks(feedbackRes.data?.data || []);
       }
       if (coreFailure) {
         setLoadError(coreFailure);
@@ -289,7 +308,7 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
     } finally {
       setLoading(false);
     }
-  }, [roleKey, isMemberOnly, isGuarantorOnly, isManagement, isRiskLegal, isHR]);
+  }, [roleKey, isMemberOnly, isGuarantorOnly, isManagement, isRiskLegal, isHR, isCompanyOwner]);
 
   useEffect(() => {
     loadDashboardData();
@@ -366,10 +385,17 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
   // CRUD Action Handlers
   const handleCreateMember = async (e) => {
     e.preventDefault();
+    if (!newMember.livePhoto) {
+      showToast('Live camera photo is strictly required before registering borrower.', true);
+      return;
+    }
     try {
       await api.post('/members', newMember);
       showToast(`Member ${newMember.firstName} ${newMember.lastName} registered cleanly!`);
-      setNewMember({ firstName: '', lastName: '', phone: '', email: '', ghanaCardNumber: '', occupation: '', monthlyIncome: '', address: '', gpsAddress: '', isHidden: false });
+      setNewMember({
+        firstName: '', lastName: '', phone: '', email: '', ghanaCardNumber: '',
+        occupation: '', monthlyIncome: '', address: '', gpsAddress: '', isHidden: false, livePhoto: '',
+      });
       loadDashboardData();
     } catch (err) {
       showToast(err.response?.data?.message || 'Member registration failed', true);
@@ -428,16 +454,21 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
 
   const handleCreateStaffAccount = async (e) => {
     e.preventDefault();
+    if (!newStaffForm.livePhoto) {
+      showToast('Live camera photo is strictly required before employing staff.', true);
+      return;
+    }
     setCreatingStaff(true);
     try {
       const res = await api.post('/staff/provision', {
         ...newStaffForm,
         baseSalary: Number(newStaffForm.baseSalary || 2500),
       });
-      showToast(res.data?.message || 'Staff account created.');
+      showToast(res.data?.message || 'Staff account created / queued.');
       setNewStaffForm({
         firstName: '', lastName: '', email: '', phone: '', password: '',
         role: 'LOAN_OFFICER', department: 'CREDIT', position: 'Loan Officer', baseSalary: '2500', gpsAddress: '',
+        livePhoto: '',
       });
       loadDashboardData();
     } catch (err) {
@@ -454,6 +485,55 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
       loadDashboardData();
     } catch (err) {
       showToast(err.response?.data?.message || 'Staff approval update failed', true);
+    }
+  };
+
+  const handleOwnerApproveStaff = async (targetUserId) => {
+    try {
+      const res = await api.post(`/staff/${targetUserId}/owner-approve`);
+      showToast(res.data?.message || 'Company Owner approved! Awaiting Branch Manager final sign-off.');
+      loadDashboardData();
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Owner approval failed', true);
+    }
+  };
+
+  const handleBranchApproveStaff = async (targetUserId) => {
+    try {
+      const res = await api.post(`/staff/${targetUserId}/branch-approve`);
+      showToast(res.data?.message || 'Branch Manager approved and employee activated.');
+      loadDashboardData();
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Branch approval failed', true);
+    }
+  };
+
+  const handleVerifyEmployment = async (staffId) => {
+    try {
+      const res = await api.post(`/staff/${staffId}/verify-employment`);
+      showToast(res.data?.message || 'Employee profile dossier verified and signed off by Company Owner.');
+      loadDashboardData();
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Employment verification failed', true);
+    }
+  };
+
+  const handleRespondFeedback = async (feedbackId) => {
+    const text = (feedbackReplyText[feedbackId] || '').trim();
+    if (!text) {
+      showToast('Please type a response before submitting.', true);
+      return;
+    }
+    setRespondingFeedbackId(feedbackId);
+    try {
+      const res = await api.post(`/feedback/${feedbackId}/respond`, { response: text });
+      showToast(res.data?.message || 'Response sent successfully.');
+      setFeedbackReplyText((prev) => ({ ...prev, [feedbackId]: '' }));
+      loadDashboardData();
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to submit response', true);
+    } finally {
+      setRespondingFeedbackId(null);
     }
   };
 
@@ -2028,6 +2108,12 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
             <div className="glass-panel" style={{ padding: 20 }}>
               <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>Register Borrower &amp; Mandatory GPS Digital Address</h3>
               <form onSubmit={handleCreateMember} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <LiveCameraCapture
+                  label="Mandatory Borrower Live Camera Shot (Face ID)"
+                  onCapture={(shot) => setNewMember((prev) => ({ ...prev, livePhoto: shot }))}
+                  capturedImage={newMember.livePhoto}
+                  required={true}
+                />
                 <div className="gbs-grid-2" style={{ gap: 10 }}>
                   <input type="text" required className="gbs-input" placeholder="First Name" value={newMember.firstName} onChange={(e) => setNewMember({ ...newMember, firstName: e.target.value })} />
                   <input type="text" required className="gbs-input" placeholder="Last Name" value={newMember.lastName} onChange={(e) => setNewMember({ ...newMember, lastName: e.target.value })} />
@@ -2083,6 +2169,7 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                 <table className="data-table">
                   <thead>
                     <tr>
+                      <th style={{ width: 44 }}>Photo</th>
                       <th>Member #</th>
                       <th>Full Name</th>
                       <th>Phone / GPS Address</th>
@@ -2091,33 +2178,49 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                     </tr>
                   </thead>
                   <tbody>
-                    {members.map((m) => (
-                      <tr key={m.id} onClick={() => navigate(`/members/${m.id}`)} style={{ cursor: 'pointer' }}>
-                        <td>
-                          <strong>{m.memberNumber}</strong>
-                          {m.isHidden && <div><span className="badge badge-danger" style={{ fontSize: '0.62rem' }}>HIDDEN</span></div>}
-                        </td>
-                        <td>{m.user?.firstName} {m.user?.lastName}</td>
-                        <td>
-                          <div>{m.user?.phone}</div>
-                          <div style={{ fontSize: '0.72rem', color: '#00F2FE' }}>{m.gpsAddress || m.user?.gpsAddress || 'No GPS Addr'}</div>
-                        </td>
-                        <td><span className={`badge ${m.ghanaCardVerified ? 'badge-success' : 'badge-warning'}`}>{m.ghanaCardVerified ? 'KYC VERIFIED' : 'PENDING KYC'}</span></td>
-                        <td style={{ display: 'flex', gap: 6 }}>
-                          <button type="button" className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.74rem' }}>Open</button>
-                          {(m.user?.phone || m.gpsAddress) && (
-                            <Link
-                              to={`/dashboard/tab/FIELD_OPS?locate=${encodeURIComponent(m.user?.phone || m.gpsAddress || '')}`}
-                              className="btn btn-primary"
-                              style={{ padding: '4px 8px', fontSize: '0.74rem', textDecoration: 'none' }}
-                              onClick={(ev) => ev.stopPropagation()}
-                            >
-                              <MapPin size={12} /> Locate
-                            </Link>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                    {members.map((m) => {
+                      const photo = m.user?.profilePicture || m.user?.metadata?.liveCameraShot;
+                      return (
+                        <tr key={m.id} onClick={() => navigate(`/members/${m.id}`)} style={{ cursor: 'pointer' }}>
+                          <td>
+                            {photo ? (
+                              <img
+                                src={photo}
+                                alt="Live Shot"
+                                style={{ width: 34, height: 34, borderRadius: 6, objectFit: 'cover', border: '1px solid #D4AF37' }}
+                              />
+                            ) : (
+                              <div style={{ width: 34, height: 34, borderRadius: 6, background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94A3B8' }}>
+                                <Camera size={14} />
+                              </div>
+                            )}
+                          </td>
+                          <td>
+                            <strong>{m.memberNumber}</strong>
+                            {m.isHidden && <div><span className="badge badge-danger" style={{ fontSize: '0.62rem' }}>HIDDEN</span></div>}
+                          </td>
+                          <td>{m.user?.firstName} {m.user?.lastName}</td>
+                          <td>
+                            <div>{m.user?.phone}</div>
+                            <div style={{ fontSize: '0.72rem', color: '#00F2FE' }}>{m.gpsAddress || m.user?.gpsAddress || 'No GPS Addr'}</div>
+                          </td>
+                          <td><span className={`badge ${m.ghanaCardVerified ? 'badge-success' : 'badge-warning'}`}>{m.ghanaCardVerified ? 'KYC VERIFIED' : 'PENDING KYC'}</span></td>
+                          <td style={{ display: 'flex', gap: 6 }}>
+                            <button type="button" className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.74rem' }}>Open</button>
+                            {(m.user?.phone || m.gpsAddress) && (
+                              <Link
+                                to={`/dashboard/tab/FIELD_OPS?locate=${encodeURIComponent(m.user?.phone || m.gpsAddress || '')}`}
+                                className="btn btn-primary"
+                                style={{ padding: '4px 8px', fontSize: '0.74rem', textDecoration: 'none' }}
+                                onClick={(ev) => ev.stopPropagation()}
+                              >
+                                <MapPin size={12} /> Locate
+                              </Link>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                     {members.length === 0 && (
                       <tr>
                         <td colSpan={5} style={{ textAlign: 'center', color: '#94A3B8', padding: 24 }}>
@@ -2416,37 +2519,275 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
         {/* ===================================================================== */}
         {activeTab === 'HR_PAYROLL' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            {isCompanyOwner && (
+            {/* 1. COMPANY OWNER: TIER-1 STAFF APPROVAL QUEUE */}
+            {(isCompanyOwner || roleActions.canApproveStaff) && (
               <div className="glass-panel" style={{ padding: 20, borderColor: 'rgba(245, 158, 11, 0.4)' }}>
-                <h3 style={{ margin: '0 0 12px', color: '#FBBF24' }}>
-                  Company Owner Pending Staff Approval Queue ({pendingStaff.length})
-                </h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                  <div>
+                    <h3 style={{ margin: 0, color: '#FBBF24', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <ShieldCheck size={18} /> Company Owner Staff Approval Queue ({pendingStaff.length})
+                    </h3>
+                    <p style={{ margin: '4px 0 0', fontSize: '0.78rem', color: '#94A3B8' }}>
+                      Branch managers submit requests to employ new staff. Review candidate profiles, live camera reference shots, and grant approval for the branch manager to finalize.
+                    </p>
+                  </div>
+                  <span className="badge badge-gold">TIER-1 OWNER APPROVAL</span>
+                </div>
+
                 {pendingStaff.length === 0 ? (
                   <p style={{ color: '#94A3B8', fontSize: '0.84rem', margin: 0 }}>
                     All newly created or registered institution staff have been reviewed.
                   </p>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {pendingStaff.map((u) => (
-                      <div key={u.id} style={{ padding: 12, borderRadius: 10, background: 'rgba(6,12,24,0.85)', border: '1px solid rgba(245,158,11,0.3)', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
-                        <div>
-                          <div style={{ fontWeight: 700, color: '#F1F5F9' }}>
-                            {u.firstName} {u.lastName} — <span className="badge badge-gold">{u.role}</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {pendingStaff.map((u) => {
+                      const photo = u.profilePicture || u.metadata?.liveCameraShot;
+                      const reqBy = u.metadata?.employedByBranchManagerName || u.metadata?.requestedByBranchManagerName || 'Branch Portal';
+                      const stage = u.metadata?.approvalStage || 'PENDING_OWNER_APPROVAL';
+                      const isOwnerApproved = stage === 'OWNER_APPROVED_AWAITING_BRANCH';
+
+                      return (
+                        <div key={u.id} style={{ padding: 14, borderRadius: 10, background: 'rgba(6,12,24,0.85)', border: '1px solid rgba(245,158,11,0.3)', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
+                          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                            {photo ? (
+                              <img
+                                src={photo}
+                                alt="Live Shot"
+                                style={{ width: 52, height: 52, borderRadius: 8, objectFit: 'cover', border: '2px solid #D4AF37', cursor: 'pointer' }}
+                                onClick={() => setSelectedStaffDossier({ user: u, ...u })}
+                                title="Click to inspect live camera shot"
+                              />
+                            ) : (
+                              <div style={{ width: 52, height: 52, borderRadius: 8, background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94A3B8' }}>
+                                <Camera size={20} />
+                              </div>
+                            )}
+                            <div>
+                              <div style={{ fontWeight: 700, color: '#F1F5F9', fontSize: '0.92rem' }}>
+                                {u.firstName} {u.lastName} — <span className="badge badge-gold">{u.role}</span>
+                                {isOwnerApproved && <span className="badge badge-cyan" style={{ marginLeft: 6 }}>OWNER APPROVED • AWAITING BRANCH</span>}
+                              </div>
+                              <div style={{ fontSize: '0.78rem', color: '#94A3B8', marginTop: 3 }}>
+                                {u.email} • {u.phone} {u.gpsAddress ? `• GPS: ${u.gpsAddress}` : ''}
+                              </div>
+                              <div style={{ fontSize: '0.74rem', color: '#38BDF8', marginTop: 2 }}>
+                                Requesting Authority: <strong>{reqBy}</strong>
+                                {u.metadata?.cameraCapturedAt && ` • Photo Captured: ${new Date(u.metadata.cameraCapturedAt).toLocaleDateString()}`}
+                              </div>
+                            </div>
                           </div>
-                          <div style={{ fontSize: '0.78rem', color: '#94A3B8' }}>
-                            {u.email} • {u.phone} {u.gpsAddress ? `• GPS: ${u.gpsAddress}` : ''}
+
+                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            {!isOwnerApproved && (
+                              <button
+                                type="button"
+                                className="btn btn-primary"
+                                style={{ padding: '6px 12px', fontSize: '0.78rem' }}
+                                onClick={() => handleOwnerApproveStaff(u.id)}
+                              >
+                                <CheckCircle2 size={14} /> Approve for Branch Manager
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              style={{ padding: '6px 12px', fontSize: '0.78rem' }}
+                              onClick={() => handleApprovePendingStaff(u.id, true)}
+                            >
+                              <ShieldCheck size={14} /> Direct Activate
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-danger"
+                              style={{ padding: '6px 12px', fontSize: '0.78rem' }}
+                              onClick={() => handleApprovePendingStaff(u.id, false)}
+                            >
+                              Decline
+                            </button>
                           </div>
                         </div>
-                        <div style={{ display: 'flex', gap: 8 }}>
-                          <button type="button" className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.78rem' }} onClick={() => handleApprovePendingStaff(u.id, true)}>
-                            <CheckCircle2 size={14} /> Approve Staff Access
-                          </button>
-                          <button type="button" className="btn btn-danger" style={{ padding: '6px 12px', fontSize: '0.78rem' }} onClick={() => handleApprovePendingStaff(u.id, false)}>
-                            Decline
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 2. BRANCH MANAGER: TIER-2 FINAL ACTIVATION QUEUE */}
+            {(roleKey === 'BRANCH_MANAGER' || roleKey === 'OPERATIONS_MANAGER') && (
+              <div className="glass-panel" style={{ padding: 20, borderColor: 'rgba(56, 189, 248, 0.4)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                  <div>
+                    <h3 style={{ margin: 0, color: '#38BDF8', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <UserCheck size={18} /> Branch Manager Employment Final Sign-Off Queue
+                    </h3>
+                    <p style={{ margin: '4px 0 0', fontSize: '0.78rem', color: '#94A3B8' }}>
+                      Staff requests approved by the Company Owner appear here for your final branch sign-off and activation.
+                    </p>
+                  </div>
+                  <span className="badge badge-cyan">TIER-2 BRANCH APPROVAL</span>
+                </div>
+
+                {pendingStaff.filter((u) => u.metadata?.approvalStage === 'OWNER_APPROVED_AWAITING_BRANCH').length === 0 ? (
+                  <p style={{ color: '#94A3B8', fontSize: '0.84rem', margin: 0 }}>
+                    No staff currently awaiting final branch manager sign-off.
+                  </p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {pendingStaff
+                      .filter((u) => u.metadata?.approvalStage === 'OWNER_APPROVED_AWAITING_BRANCH')
+                      .map((u) => {
+                        const photo = u.profilePicture || u.metadata?.liveCameraShot;
+                        return (
+                          <div key={u.id} style={{ padding: 14, borderRadius: 10, background: 'rgba(6,12,24,0.85)', border: '1px solid rgba(56,189,248,0.3)', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
+                            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                              {photo ? (
+                                <img
+                                  src={photo}
+                                  alt="Live Shot"
+                                  style={{ width: 50, height: 50, borderRadius: 8, objectFit: 'cover', border: '2px solid #38BDF8', cursor: 'pointer' }}
+                                  onClick={() => setSelectedStaffDossier({ user: u, ...u })}
+                                />
+                              ) : (
+                                <div style={{ width: 50, height: 50, borderRadius: 8, background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  <Camera size={20} />
+                                </div>
+                              )}
+                              <div>
+                                <div style={{ fontWeight: 700, color: '#F1F5F9', fontSize: '0.92rem' }}>
+                                  {u.firstName} {u.lastName} — <span className="badge badge-gold">{u.role}</span>
+                                </div>
+                                <div style={{ fontSize: '0.78rem', color: '#94A3B8', marginTop: 3 }}>
+                                  {u.email} • {u.phone} {u.gpsAddress ? `• GPS: ${u.gpsAddress}` : ''}
+                                </div>
+                                <div style={{ fontSize: '0.74rem', color: '#10B981', marginTop: 2 }}>
+                                  ✓ Company Owner Approved on: {u.metadata?.ownerApprovedAt ? new Date(u.metadata.ownerApprovedAt).toLocaleString() : 'Recent'}
+                                </div>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              className="btn btn-primary"
+                              style={{ padding: '8px 16px', fontSize: '0.82rem' }}
+                              onClick={() => handleBranchApproveStaff(u.id)}
+                            >
+                              <CheckCircle2 size={15} /> Final Branch Approval &amp; Activate Staff
+                            </button>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 3. COMPANY OWNER: BRANCH MANAGER EMPLOYED STAFF DIRECTORY & VERIFICATION */}
+            {isCompanyOwner && (
+              <div className="glass-panel" style={{ padding: 20, borderColor: 'rgba(16, 185, 129, 0.4)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                  <div>
+                    <h3 style={{ margin: 0, color: '#10B981', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Users size={18} /> Branch Manager Employed Staff Directory &amp; Verification ({branchApprovedStaff.length})
+                    </h3>
+                    <p style={{ margin: '4px 0 0', fontSize: '0.78rem', color: '#94A3B8' }}>
+                      Live directory of new staff employed or approved by Branch Managers. Inspect candidate profile details, live camera reference shots, and verify employee dossiers.
+                    </p>
+                  </div>
+                  <span className="badge badge-success">OWNER VERIFICATION ACTIVE</span>
+                </div>
+
+                {branchApprovedStaff.length === 0 ? (
+                  <p style={{ color: '#94A3B8', fontSize: '0.84rem', margin: 0 }}>
+                    No branch-employed staff records found yet.
+                  </p>
+                ) : (
+                  <div className="data-table-container" style={{ maxHeight: 420 }}>
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th style={{ width: 50 }}>Live Shot</th>
+                          <th>Employee</th>
+                          <th>Role &amp; Department</th>
+                          <th>Salary</th>
+                          <th>Employed By (BM)</th>
+                          <th>GPS Address</th>
+                          <th>Verification Status</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {branchApprovedStaff.map((s) => {
+                          const photo = s.user?.profilePicture || s.user?.metadata?.liveCameraShot || s.metadata?.liveCameraShot;
+                          const bmName = s.metadata?.employedByBranchManagerName || s.user?.metadata?.employedByBranchManagerName || 'Branch Manager';
+                          const isVerified = Boolean(s.metadata?.ownerVerifiedAt || s.user?.metadata?.ownerVerifiedAt);
+                          const verifiedAt = s.metadata?.ownerVerifiedAt || s.user?.metadata?.ownerVerifiedAt;
+
+                          return (
+                            <tr key={s.id} onClick={() => setSelectedStaffDossier(s)} style={{ cursor: 'pointer' }}>
+                              <td>
+                                {photo ? (
+                                  <img
+                                    src={photo}
+                                    alt="Live Shot"
+                                    style={{ width: 40, height: 40, borderRadius: 6, objectFit: 'cover', border: '1px solid #10B981' }}
+                                  />
+                                ) : (
+                                  <div style={{ width: 40, height: 40, borderRadius: 6, background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <Camera size={16} />
+                                  </div>
+                                )}
+                              </td>
+                              <td>
+                                <strong>{s.user?.firstName} {s.user?.lastName}</strong>
+                                <div style={{ fontSize: '0.72rem', color: '#94A3B8' }}>{s.user?.email} • {s.user?.phone}</div>
+                              </td>
+                              <td>
+                                <div><span className="badge badge-gold">{s.user?.role || 'STAFF'}</span></div>
+                                <div style={{ fontSize: '0.72rem', color: '#CBD5E1' }}>{s.department} • {s.position}</div>
+                              </td>
+                              <td>{formatGHS(s.baseSalary)}</td>
+                              <td>
+                                <strong style={{ color: '#38BDF8' }}>{bmName}</strong>
+                                <div style={{ fontSize: '0.72rem', color: '#94A3B8' }}>{s.branch?.name || 'Main Branch'}</div>
+                              </td>
+                              <td style={{ fontSize: '0.74rem', color: '#00F2FE' }}>
+                                {s.gpsAddress || s.user?.gpsAddress || '—'}
+                              </td>
+                              <td>
+                                {isVerified ? (
+                                  <span className="badge badge-success" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                    <CheckCircle2 size={11} /> Verified {verifiedAt ? new Date(verifiedAt).toLocaleDateString() : ''}
+                                  </span>
+                                ) : (
+                                  <span className="badge badge-warning">Awaiting Owner Verification</span>
+                                )}
+                              </td>
+                              <td onClick={(e) => e.stopPropagation()} style={{ display: 'flex', gap: 6 }}>
+                                {!isVerified && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-primary"
+                                    style={{ padding: '4px 10px', fontSize: '0.72rem' }}
+                                    onClick={() => handleVerifyEmployment(s.id)}
+                                  >
+                                    <CheckCircle2 size={13} /> Verify Dossier
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary"
+                                  style={{ padding: '4px 8px', fontSize: '0.72rem' }}
+                                  onClick={() => setSelectedStaffDossier(s)}
+                                >
+                                  Dossier
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </div>
@@ -2457,6 +2798,12 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                 <div className="glass-panel" style={{ padding: 20 }}>
                   <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}><UserPlus size={16} /> Create New Staff Account (All {ROLES_META.length} Roles + GPS Address)</h3>
                   <form onSubmit={handleCreateStaffAccount} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <LiveCameraCapture
+                      label="Mandatory Staff Live Camera Shot (Employment Reference)"
+                      onCapture={(shot) => setNewStaffForm((prev) => ({ ...prev, livePhoto: shot }))}
+                      capturedImage={newStaffForm.livePhoto}
+                      required={true}
+                    />
                     <div className="gbs-grid-2" style={{ gap: 10 }}>
                       <input type="text" required className="gbs-input" placeholder="First Name" value={newStaffForm.firstName} onChange={(e) => setNewStaffForm({ ...newStaffForm, firstName: e.target.value })} />
                       <input type="text" required className="gbs-input" placeholder="Last Name" value={newStaffForm.lastName} onChange={(e) => setNewStaffForm({ ...newStaffForm, lastName: e.target.value })} />
@@ -2529,6 +2876,7 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                   <table className="data-table">
                     <thead>
                       <tr>
+                        <th style={{ width: 44 }}>Photo</th>
                         <th>Employee</th>
                         <th>Role / GPS Addr</th>
                         <th>Salary</th>
@@ -2536,30 +2884,46 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                       </tr>
                     </thead>
                     <tbody>
-                      {staffList.map((s) => (
-                        <tr key={s.id} onClick={() => navigate(`/staff/${s.id}`)} style={{ cursor: 'pointer' }}>
-                          <td><strong>{s.user?.firstName} {s.user?.lastName}</strong></td>
-                          <td>
-                            <div>{s.department} ({s.position})</div>
-                            <div style={{ fontSize: '0.72rem', color: '#00F2FE' }}>{s.user?.gpsAddress || s.gpsAddress || 'No GPS Addr'}</div>
-                          </td>
-                          <td>{formatGHS(s.baseSalary)}</td>
-                          <td>
-                            {(s.user?.phone || s.user?.gpsAddress || s.gpsAddress) ? (
-                              <Link
-                                to={`/dashboard/tab/FIELD_OPS?locate=${encodeURIComponent(s.user?.phone || s.user?.gpsAddress || s.gpsAddress || '')}`}
-                                className="btn btn-primary"
-                                style={{ padding: '4px 8px', fontSize: '0.74rem', textDecoration: 'none' }}
-                                onClick={(ev) => ev.stopPropagation()}
-                              >
-                                <MapPin size={12} /> Locate
-                              </Link>
-                            ) : (
-                              <button type="button" className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.74rem' }}>Open</button>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
+                      {staffList.map((s) => {
+                        const photo = s.user?.profilePicture || s.user?.metadata?.liveCameraShot || s.metadata?.liveCameraShot;
+                        return (
+                          <tr key={s.id} onClick={() => navigate(`/staff/${s.id}`)} style={{ cursor: 'pointer' }}>
+                            <td>
+                              {photo ? (
+                                <img
+                                  src={photo}
+                                  alt="Live Shot"
+                                  style={{ width: 34, height: 34, borderRadius: 6, objectFit: 'cover', border: '1px solid #D4AF37' }}
+                                />
+                              ) : (
+                                <div style={{ width: 34, height: 34, borderRadius: 6, background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  <Camera size={14} />
+                                </div>
+                              )}
+                            </td>
+                            <td><strong>{s.user?.firstName} {s.user?.lastName}</strong></td>
+                            <td>
+                              <div>{s.department} ({s.position})</div>
+                              <div style={{ fontSize: '0.72rem', color: '#00F2FE' }}>{s.user?.gpsAddress || s.gpsAddress || 'No GPS Addr'}</div>
+                            </td>
+                            <td>{formatGHS(s.baseSalary)}</td>
+                            <td>
+                              {(s.user?.phone || s.user?.gpsAddress || s.gpsAddress) ? (
+                                <Link
+                                  to={`/dashboard/tab/FIELD_OPS?locate=${encodeURIComponent(s.user?.phone || s.user?.gpsAddress || s.gpsAddress || '')}`}
+                                  className="btn btn-primary"
+                                  style={{ padding: '4px 8px', fontSize: '0.74rem', textDecoration: 'none' }}
+                                  onClick={(ev) => ev.stopPropagation()}
+                                >
+                                  <MapPin size={12} /> Locate
+                                </Link>
+                              ) : (
+                                <button type="button" className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.74rem' }}>Open</button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -2884,6 +3248,103 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                 ))}
               </div>
             </div>
+
+            {/* Customer & Staff Feedbacks & Resolution Center */}
+            <div className="glass-panel" style={{ padding: 20, gridColumn: 'span 2', borderColor: 'rgba(212, 175, 55, 0.4)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
+                <div>
+                  <h3 style={{ margin: 0, color: '#D4AF37', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <MessageSquare size={18} /> Customer &amp; Staff Feedbacks &amp; Inquiry Responses ({feedbacks.length})
+                  </h3>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.78rem', color: '#94A3B8' }}>
+                    Direct system feedbacks, user satisfaction ratings, and issue reports submitted across all portals. Respond to customers or staff instantly.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ padding: '6px 14px', fontSize: '0.78rem' }}
+                  onClick={() => setShowFeedbackModal(true)}
+                >
+                  <Plus size={14} /> Submit New Feedback
+                </button>
+              </div>
+
+              {feedbacks.length === 0 ? (
+                <p style={{ color: '#94A3B8', fontSize: '0.84rem', margin: 0 }}>
+                  No customer or staff feedback submissions received yet.
+                </p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {feedbacks.map((fb) => {
+                    const isResponded = fb.status === 'RESPONDED' || Boolean(fb.response);
+                    return (
+                      <div key={fb.id} style={{ padding: 14, borderRadius: 10, background: 'rgba(6,12,24,0.85)', border: '1px solid rgba(212,175,55,0.25)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <strong style={{ color: '#F1F5F9', fontSize: '0.9rem' }}>{fb.name || 'Anonymous User'}</strong>
+                              {fb.userRole && <span className="badge badge-gold">{fb.userRole}</span>}
+                              <span className="badge badge-cyan">{fb.category || 'GENERAL'}</span>
+                            </div>
+                            <div style={{ fontSize: '0.74rem', color: '#94A3B8', marginTop: 2 }}>
+                              {fb.contactEmail && `${fb.contactEmail} • `}{fb.contactPhone && `${fb.contactPhone} • `}{new Date(fb.createdAt).toLocaleString()}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            {fb.rating && (
+                              <div style={{ display: 'flex', gap: 2, color: '#FBBF24' }}>
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                  <Star key={star} size={13} fill={star <= fb.rating ? '#FBBF24' : 'none'} color="#FBBF24" />
+                                ))}
+                              </div>
+                            )}
+                            <span className={`badge ${isResponded ? 'badge-success' : 'badge-warning'}`}>
+                              {fb.status || 'PENDING'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div style={{ fontSize: '0.82rem', color: '#CBD5E1', marginBottom: 10, lineHeight: 1.4, background: 'rgba(255,255,255,0.03)', padding: 10, borderRadius: 6 }}>
+                          {fb.message}
+                        </div>
+
+                        {isResponded ? (
+                          <div style={{ padding: 10, borderRadius: 6, background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', fontSize: '0.78rem' }}>
+                            <div style={{ color: '#34D399', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                              <CheckCircle2 size={13} /> Official Management Response
+                              {fb.respondedAt && <span style={{ color: '#94A3B8', fontWeight: 400 }}>({new Date(fb.respondedAt).toLocaleString()})</span>}
+                            </div>
+                            <div style={{ color: '#F1F5F9' }}>{fb.response}</div>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+                            <input
+                              type="text"
+                              className="gbs-input"
+                              placeholder="Type management response to user feedback..."
+                              style={{ flex: 1, fontSize: '0.8rem' }}
+                              value={feedbackReplyText[fb.id] || ''}
+                              onChange={(e) => setFeedbackReplyText((prev) => ({ ...prev, [fb.id]: e.target.value }))}
+                              onKeyDown={(e) => { if (e.key === 'Enter') handleRespondFeedback(fb.id); }}
+                            />
+                            <button
+                              type="button"
+                              className="btn btn-primary"
+                              disabled={respondingFeedbackId === fb.id}
+                              style={{ padding: '8px 14px', fontSize: '0.78rem', whiteSpace: 'nowrap' }}
+                              onClick={() => handleRespondFeedback(fb.id)}
+                            >
+                              {respondingFeedbackId === fb.id ? 'Sending...' : 'Send Response'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -3174,6 +3635,206 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
           </div>
         )}
       </div>
+
+      {/* Floating Feedback Trigger & Submission Modal */}
+      <FeedbackFloatingTrigger onClick={() => setShowFeedbackModal(true)} />
+      <FeedbackModal
+        isOpen={showFeedbackModal}
+        onClose={() => {
+          setShowFeedbackModal(false);
+          loadDashboardData();
+        }}
+      />
+
+      {/* Staff Employment Dossier & Live Camera Shot Verification Modal */}
+      {selectedStaffDossier && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(2, 6, 23, 0.85)',
+            backdropFilter: 'blur(8px)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+          onClick={() => setSelectedStaffDossier(null)}
+        >
+          <div
+            style={{
+              background: '#0B132B',
+              border: '1px solid rgba(212, 175, 55, 0.4)',
+              borderRadius: 16,
+              maxWidth: 580,
+              width: '100%',
+              padding: 24,
+              boxShadow: '0 25px 60px rgba(0,0,0,0.7)',
+              position: 'relative',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div>
+                <h3 style={{ margin: 0, color: '#D4AF37', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <ShieldCheck size={20} /> Verified Employee Dossier
+                </h3>
+                <span style={{ fontSize: '0.78rem', color: '#94A3B8' }}>Live Camera Shot &amp; Employment Authorization</span>
+              </div>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ padding: '6px 10px', borderRadius: '50%' }}
+                onClick={() => setSelectedStaffDossier(null)}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Live Camera Shot Preview */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 18 }}>
+              {selectedStaffDossier.profilePicture || selectedStaffDossier.user?.profilePicture || selectedStaffDossier.metadata?.liveCameraShot || selectedStaffDossier.user?.metadata?.liveCameraShot ? (
+                <div style={{ position: 'relative' }}>
+                  <img
+                    src={selectedStaffDossier.profilePicture || selectedStaffDossier.user?.profilePicture || selectedStaffDossier.metadata?.liveCameraShot || selectedStaffDossier.user?.metadata?.liveCameraShot}
+                    alt="Live Reference Camera Shot"
+                    style={{
+                      width: 180,
+                      height: 180,
+                      borderRadius: 12,
+                      objectFit: 'cover',
+                      border: '3px solid #D4AF37',
+                      boxShadow: '0 10px 25px rgba(212,175,55,0.3)',
+                    }}
+                  />
+                  <div style={{
+                    position: 'absolute',
+                    bottom: 6,
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    background: 'rgba(0,0,0,0.8)',
+                    color: '#10B981',
+                    fontSize: '0.68rem',
+                    padding: '2px 8px',
+                    borderRadius: 10,
+                    whiteSpace: 'nowrap',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}>
+                    <Camera size={10} /> Live Camera Reference
+                  </div>
+                </div>
+              ) : (
+                <div style={{
+                  width: 140,
+                  height: 140,
+                  borderRadius: 12,
+                  background: 'rgba(255,255,255,0.05)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#94A3B8',
+                  flexDirection: 'column',
+                  gap: 6,
+                }}>
+                  <Camera size={32} />
+                  <span style={{ fontSize: '0.74rem' }}>No Camera Shot</span>
+                </div>
+              )}
+            </div>
+
+            {/* Profile Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, fontSize: '0.84rem', marginBottom: 20 }}>
+              <div style={{ padding: 10, borderRadius: 8, background: 'rgba(255,255,255,0.03)' }}>
+                <span style={{ color: '#94A3B8', fontSize: '0.72rem' }}>Full Name</span>
+                <div style={{ fontWeight: 600, color: '#F1F5F9' }}>
+                  {selectedStaffDossier.firstName || selectedStaffDossier.user?.firstName} {selectedStaffDossier.lastName || selectedStaffDossier.user?.lastName}
+                </div>
+              </div>
+              <div style={{ padding: 10, borderRadius: 8, background: 'rgba(255,255,255,0.03)' }}>
+                <span style={{ color: '#94A3B8', fontSize: '0.72rem' }}>Assigned Role</span>
+                <div><span className="badge badge-gold">{selectedStaffDossier.role || selectedStaffDossier.user?.role || 'STAFF'}</span></div>
+              </div>
+              <div style={{ padding: 10, borderRadius: 8, background: 'rgba(255,255,255,0.03)' }}>
+                <span style={{ color: '#94A3B8', fontSize: '0.72rem' }}>Department &amp; Position</span>
+                <div style={{ color: '#CBD5E1' }}>
+                  {selectedStaffDossier.department || 'OPERATIONS'} • {selectedStaffDossier.position || 'Staff'}
+                </div>
+              </div>
+              <div style={{ padding: 10, borderRadius: 8, background: 'rgba(255,255,255,0.03)' }}>
+                <span style={{ color: '#94A3B8', fontSize: '0.72rem' }}>Monthly Base Salary</span>
+                <div style={{ color: '#10B981', fontWeight: 600 }}>
+                  {formatGHS(selectedStaffDossier.baseSalary || 2500)}
+                </div>
+              </div>
+              <div style={{ padding: 10, borderRadius: 8, background: 'rgba(255,255,255,0.03)' }}>
+                <span style={{ color: '#94A3B8', fontSize: '0.72rem' }}>Work Email</span>
+                <div style={{ color: '#F1F5F9' }}>{selectedStaffDossier.email || selectedStaffDossier.user?.email}</div>
+              </div>
+              <div style={{ padding: 10, borderRadius: 8, background: 'rgba(255,255,255,0.03)' }}>
+                <span style={{ color: '#94A3B8', fontSize: '0.72rem' }}>Phone Contact</span>
+                <div style={{ color: '#F1F5F9' }}>{selectedStaffDossier.phone || selectedStaffDossier.user?.phone}</div>
+              </div>
+              <div style={{ padding: 10, borderRadius: 8, background: 'rgba(255,255,255,0.03)' }}>
+                <span style={{ color: '#94A3B8', fontSize: '0.72rem' }}>GPS Digital Address</span>
+                <div style={{ color: '#00F2FE' }}>
+                  {selectedStaffDossier.gpsAddress || selectedStaffDossier.user?.gpsAddress || 'N/A'}
+                </div>
+              </div>
+              <div style={{ padding: 10, borderRadius: 8, background: 'rgba(255,255,255,0.03)' }}>
+                <span style={{ color: '#94A3B8', fontSize: '0.72rem' }}>Branch Assignment</span>
+                <div style={{ color: '#38BDF8' }}>
+                  {selectedStaffDossier.branch?.name || 'Main Enterprise Branch'}
+                </div>
+              </div>
+              <div style={{ padding: 10, borderRadius: 8, background: 'rgba(255,255,255,0.03)', gridColumn: 'span 2' }}>
+                <span style={{ color: '#94A3B8', fontSize: '0.72rem' }}>Employed / Requested By</span>
+                <div style={{ color: '#F1F5F9', fontWeight: 500 }}>
+                  {selectedStaffDossier.metadata?.employedByBranchManagerName || selectedStaffDossier.user?.metadata?.employedByBranchManagerName || 'Branch Manager'}
+                </div>
+              </div>
+            </div>
+
+            {/* Owner Verification Action */}
+            {isCompanyOwner && (
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 16 }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setSelectedStaffDossier(null)}
+                >
+                  Close
+                </button>
+                {!(selectedStaffDossier.metadata?.ownerVerifiedAt || selectedStaffDossier.user?.metadata?.ownerVerifiedAt) && (
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={async () => {
+                      await handleVerifyEmployment(selectedStaffDossier.id);
+                      setSelectedStaffDossier(null);
+                    }}
+                  >
+                    <CheckCircle2 size={16} /> Sign Off &amp; Verify Dossier
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <RoleVideoPresentationModal
+        isOpen={roleVideoOpen}
+        onClose={() => setRoleVideoOpen(false)}
+        userRole={roleKey}
+        isDeveloper={false}
+      />
     </div>
   );
 }

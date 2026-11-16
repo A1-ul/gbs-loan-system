@@ -143,12 +143,37 @@ async function getById(id) {
       loan: {
         include: {
           member: { include: { user: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } } } },
+          loanGuarantors: { include: { guarantor: { select: { id: true, userId: true } } } },
         },
       },
     },
   });
   if (!payment) throw new NotFoundError(`Payment record '${id}'`);
   return payment;
+}
+
+async function getMyPayments(userId, role, tenantId = null) {
+  const isGuarantor = String(role || '').toUpperCase().includes('GUARANTOR');
+  const where = {
+    ...(tenantId ? { tenantId } : {}),
+    loan: isGuarantor
+      ? { loanGuarantors: { some: { guarantor: { userId } } } }
+      : { member: { userId } },
+  };
+  return prisma.payment.findMany({
+    where,
+    include: {
+      loan: {
+        select: {
+          id: true,
+          loanNumber: true,
+          member: { include: { user: { select: { firstName: true, lastName: true } } } },
+        },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 50,
+  });
 }
 
 async function approveCash(paramId, approvedById, body = {}) {
@@ -311,6 +336,7 @@ module.exports = {
   create,
   createPayment,
   getAll,
+  getMyPayments,
   getById,
   approveCash,
   initiateMoMo,

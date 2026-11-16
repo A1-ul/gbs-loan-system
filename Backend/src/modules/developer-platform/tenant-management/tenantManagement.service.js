@@ -60,13 +60,22 @@ class TenantManagementService {
         region: t.region,
         city: t.city,
         location: t.location,
+        address: t.address,
+        gpsAddress: t.gpsAddress,
         latitude: t.latitude,
         longitude: t.longitude,
         contactEmail: t.contactEmail,
         contactPhone: t.contactPhone,
         representativeName: t.representativeName,
         representativeEmail: t.representativeEmail,
+        representativePhone: t.representativePhone,
+        representativeRole: t.representativeRole,
         registrationNumber: t.registrationNumber,
+        businessLicenseNumber: t.businessLicenseNumber,
+        tinNumber: t.tinNumber,
+        approvedByDeveloperId: t.approvedByDeveloperId,
+        approvedAt: t.approvedAt,
+        rejectionReason: t.rejectionReason,
         daysLeft,
         subStart: t.subStart,
         subExpiry: t.subExpiry,
@@ -107,16 +116,18 @@ class TenantManagementService {
         approvedByDeveloperId: developerId,
       });
     }
-    return tenantService.createTenant(data);
+    return tenantService.createTenant({ ...data, approvedByDeveloperId: developerId });
   }
 
   async approveTenant(tenantId, developerId, options = {}) {
+    if (!developerId) throw new BadRequestError('Authenticated Developer ID is required to approve tenant onboarding.');
     const tenant = await tenantProvisioner.approvePendingTenant(tenantId, developerId, options);
     await recordDeveloperTenantAudit(developerId, 'TENANT_APPROVED', { tenantId: tenant.id, name: tenant.name });
     return tenant;
   }
 
   async rejectTenant(tenantId, developerId, reason) {
+    if (!developerId) throw new BadRequestError('Authenticated Developer ID is required to reject tenant onboarding.');
     const tenant = await tenantProvisioner.rejectPendingTenant(tenantId, developerId, reason);
     await recordDeveloperTenantAudit(developerId, 'TENANT_REJECTED', { tenantId: tenant.id, name: tenant.name, reason });
     return tenant;

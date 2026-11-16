@@ -98,4 +98,8 @@ router.delete('/tenants/:id', sensitiveOpLimiter, tenantManagement.controller.de
 router.get('/messages', developerController.getMessages);
 router.post('/messages', developerController.sendMessage);
 
+// 14. Developer Feedbacks & Inquiries Management
+router.get('/feedbacks', developerController.getFeedbacks);
+router.post('/feedbacks/:id/respond', sensitiveOpLimiter, developerController.respondFeedback);
+
 module.exports = router;

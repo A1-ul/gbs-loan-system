@@ -1,5 +1,6 @@
 const { prisma } = require('../../../config/database');
 const { getRecordProvenance } = require('../../../config/environments');
+const { getRoleCapabilities, normalizeCapabilityRole } = require('../../../constants/roleCapabilities');
 
 function buildTenantFilter(tenantId) {
   return tenantId ? { tenantId } : {};
@@ -183,9 +184,28 @@ async function getPaymentTrendsChart(tenantId = null) {
   return Object.values(buckets);
 }
 
-async function getRecentActivity(tenantId = null, limit = 20) {
+async function getRecentActivity(tenantId = null, limit = 20, actor = null) {
+  const caps = actor?.role ? getRoleCapabilities(actor.role) : null;
+  const canonicalRole = actor?.role ? normalizeCapabilityRole(actor.role) : null;
+  const whereClause = {
+    ...buildTenantFilter(tenantId),
+  };
+
+  if (canonicalRole === 'MEMBER_PORTAL' || canonicalRole === 'GUARANTOR_PORTAL') {
+    if (actor?.id) {
+      whereClause.userId = actor.id;
+    }
+    if (caps?.activityEntityTypes?.length) {
+      whereClause.entityType = { in: caps.activityEntityTypes };
+    }
+  } else if (caps && !['COMPANY_OWNER', 'EXECUTIVE_MANAGEMENT'].includes(canonicalRole)) {
+    if (caps.activityEntityTypes?.length) {
+      whereClause.entityType = { in: caps.activityEntityTypes };
+    }
+  }
+
   const logs = await prisma.auditLog.findMany({
-    where: buildTenantFilter(tenantId),
+    where: whereClause,
     take: limit,
     orderBy: { createdAt: 'desc' },
     include: {
@@ -205,19 +225,147 @@ async function getRecentActivity(tenantId = null, limit = 20) {
 }
 
 /**
- * Role-Tailored Live Dashboard Payload (Real PostgreSQL Queries - Zero Fake Figures)
+ * Role-Tailored Live Dashboard Payload (Real PostgreSQL Queries - Zero Unauthorized Leaks)
  */
 async function getRoleDashboardMetrics(role, userId, tenantId = null) {
-  const overview = await getOverview(tenantId);
+  const canonicalRole = normalizeCapabilityRole(role || 'MEMBER_PORTAL');
+  const caps = getRoleCapabilities(canonicalRole);
+  const allowedTabs = new Set(caps.allowedTabs || []);
+  const actions = caps.actions || {};
   const where = buildTenantFilter(tenantId);
 
-  const normalized = String(role || 'MEMBER_PORTAL').toUpperCase().replace(/-/g, '_');
+  const tenantRecord = tenantId
+    ? await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { id: true, code: true, name: true, status: true, onboardingStatus: true, daysLeft: true, subExpiry: true, planTier: true },
+    })
+    : null;
+
+  const isDemoSandbox = tenantRecord?.code === 'DEMO-SANDBOX';
+  const baseProv = getRecordProvenance();
+  const environmentProvenance = isDemoSandbox
+    ? { dataSource: 'DEMO_SANDBOX', environmentTag: 'DEMO', isProductionRecord: false }
+    : baseProv;
+
+  const roleDescriptor = {
+    role: caps.role,
+    title: caps.title,
+    category: caps.category,
+    domain: caps.domain,
+    allowedTabs: caps.allowedTabs,
+    actions,
+    restrictedNotice: caps.restrictedNotice,
+  };
+
+  // Strict Self-Service Partition 1: MEMBER_PORTAL
+  if (canonicalRole === 'MEMBER_PORTAL') {
+    const memberProfile = userId
+      ? await prisma.member.findUnique({
+        where: { userId },
+        include: {
+          loans: {
+            orderBy: { createdAt: 'desc' },
+            include: { payments: { orderBy: { createdAt: 'desc' } }, schedule: true },
+          },
+        },
+      })
+      : null;
+
+    const myLoans = memberProfile?.loans || [];
+    const myPayments = myLoans.flatMap((l) => l.payments || []);
+    const recentActivities = await getRecentActivity(tenantId, 12, { id: userId, role: canonicalRole });
+
+    return {
+      role: canonicalRole,
+      userId,
+      tenantId,
+      tenant: tenantRecord,
+      environmentProvenance,
+      capabilities: roleDescriptor,
+      timestamp: new Date().toISOString(),
+      summary: {
+        myLoansCount: myLoans.length,
+        activeLoansCount: myLoans.filter((l) => ['APPROVED', 'DISBURSED', 'ONGOING', 'OVERDUE'].includes(l.status)).length,
+        totalBorrowedGhs: myLoans.reduce((s, l) => s + Number(l.principalAmount || 0), 0),
+        totalRepaidGhs: myLoans.reduce((s, l) => s + Number(l.amountPaid || 0), 0),
+        totalOutstandingGhs: myLoans.reduce((s, l) => s + Number(l.outstandingAmount || 0), 0),
+        completedPaymentsCount: myPayments.length,
+      },
+      datasets: {
+        memberProfile,
+        recentLoans: myLoans.slice(0, 10),
+        recentPayments: myPayments.slice(0, 10),
+        recentActivities,
+      },
+    };
+  }
+
+  // Strict Self-Service Partition 2: GUARANTOR_PORTAL
+  if (canonicalRole === 'GUARANTOR_PORTAL') {
+    const guarantorProfile = userId
+      ? await prisma.guarantor.findUnique({
+        where: { userId },
+        include: {
+          loanGuarantors: {
+            include: {
+              loan: {
+                include: {
+                  member: { include: { user: { select: { firstName: true, lastName: true, phone: true } } } },
+                  payments: { orderBy: { createdAt: 'desc' }, take: 5 },
+                  penalties: true,
+                },
+              },
+            },
+          },
+        },
+      })
+      : null;
+
+    const linkedLoans = (guarantorProfile?.loanGuarantors || []).map((lg) => lg.loan).filter(Boolean);
+    const guarantorPayments = linkedLoans.flatMap((l) => l.payments || []);
+    const recentActivities = await getRecentActivity(tenantId, 12, { id: userId, role: canonicalRole });
+
+    return {
+      role: canonicalRole,
+      userId,
+      tenantId,
+      tenant: tenantRecord,
+      environmentProvenance,
+      capabilities: roleDescriptor,
+      timestamp: new Date().toISOString(),
+      summary: {
+        guaranteedLoansCount: linkedLoans.length,
+        totalGuaranteedPrincipalGhs: linkedLoans.reduce((s, l) => s + Number(l.principalAmount || 0), 0),
+        totalGuaranteedOutstandingGhs: linkedLoans.reduce((s, l) => s + Number(l.outstandingAmount || 0), 0),
+        agreementSigned: Boolean(guarantorProfile?.agreementSigned),
+        penaltyAlertsEnabled: Boolean(guarantorProfile?.penaltyNotifyEnabled),
+      },
+      datasets: {
+        guarantorProfile,
+        recentLoans: linkedLoans.slice(0, 10),
+        recentPayments: guarantorPayments.slice(0, 10),
+        recentActivities,
+      },
+    };
+  }
+
+  // Scoped Staff Roles — Only fetch domain data permitted for this role
+  const isOwnerOrExec = ['COMPANY_OWNER', 'EXECUTIVE_MANAGEMENT'].includes(canonicalRole);
+  const canLoadLoans = allowedTabs.has('LOANS');
+  const canLoadPayments = allowedTabs.has('PAYMENTS');
+  const canLoadInvestors = canonicalRole === 'INVESTOR' || actions.canManageInvestors || isOwnerOrExec;
+  const canLoadCases = allowedTabs.has('RISK_AUDIT');
+  const canLoadTickets = allowedTabs.has('SUPPORT');
+  const canLoadCampaigns = canonicalRole === 'MARKETING' || actions.canManageCampaigns || isOwnerOrExec;
+  const canLoadMeetings = allowedTabs.has('MEETINGS_REPORTS');
+  const canLoadCollectors = allowedTabs.has('FIELD_OPS');
+  const canLoadStaff = allowedTabs.has('HR_PAYROLL');
+  const canLoadSalaries = Boolean(actions.canViewSalaries);
 
   const [
+    overview,
     recentLoans,
     recentPayments,
-    memberProfile,
-    guarantorProfile,
     investorAccounts,
     complianceCases,
     tickets,
@@ -226,56 +374,94 @@ async function getRoleDashboardMetrics(role, userId, tenantId = null) {
     collectorList,
     staffList,
     salaryRuns,
-    tenantRecord,
-    prov,
+    recentActivities,
   ] = await Promise.all([
-    prisma.loan.findMany({
-      where,
-      take: 10,
-      orderBy: { createdAt: 'desc' },
-      include: { member: { include: { user: { select: { firstName: true, lastName: true, email: true } } } } },
-    }),
-    prisma.payment.findMany({
-      where,
-      take: 10,
-      orderBy: { createdAt: 'desc' },
-      include: { loan: { select: { loanNumber: true } } },
-    }),
-    userId ? prisma.member.findUnique({ where: { userId }, include: { loans: { include: { payments: true, schedule: true } } } }) : null,
-    userId ? prisma.guarantor.findUnique({ where: { userId }, include: { loanGuarantors: { include: { loan: { include: { member: { include: { user: true } } } } } } } }) : null,
-    prisma.investorAccount.findMany({ where, take: 10, orderBy: { createdAt: 'desc' } }),
-    prisma.complianceCase.findMany({ where, take: 10, orderBy: { createdAt: 'desc' } }),
-    prisma.supportTicket.findMany({ where, take: 10, orderBy: { createdAt: 'desc' } }),
-    prisma.marketingCampaign.findMany({ where, take: 10, orderBy: { createdAt: 'desc' } }),
-    prisma.zoomMeeting.findMany({ where, take: 10, orderBy: { startTime: 'desc' } }),
-    prisma.collector.findMany({ where, take: 10, include: { user: { select: { firstName: true, lastName: true, phone: true } }, visits: { take: 5, orderBy: { visitedAt: 'desc' } } } }),
-    prisma.staff.findMany({ where, take: 10, include: { user: { select: { firstName: true, lastName: true, role: true, status: true } }, salaryProfile: true } }),
-    prisma.staffSalary.findMany({ where, take: 10, orderBy: { createdAt: 'desc' }, include: { staff: { include: { user: { select: { firstName: true, lastName: true } } } } } }),
-    tenantId ? prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true, code: true, name: true, status: true, onboardingStatus: true, daysLeft: true, subExpiry: true, planTier: true } }) : null,
-    Promise.resolve(getRecordProvenance()),
+    actions.canViewOverviewMetrics ? getOverview(tenantId) : Promise.resolve(null),
+    canLoadLoans
+      ? prisma.loan.findMany({
+        where,
+        take: 10,
+        orderBy: { createdAt: 'desc' },
+        include: { member: { include: { user: { select: { firstName: true, lastName: true, email: true } } } } },
+      })
+      : Promise.resolve([]),
+    canLoadPayments
+      ? prisma.payment.findMany({
+        where,
+        take: 10,
+        orderBy: { createdAt: 'desc' },
+        include: { loan: { select: { loanNumber: true } } },
+      })
+      : Promise.resolve([]),
+    canLoadInvestors ? prisma.investorAccount.findMany({ where, take: 10, orderBy: { createdAt: 'desc' } }) : Promise.resolve([]),
+    canLoadCases ? prisma.complianceCase.findMany({ where, take: 10, orderBy: { createdAt: 'desc' } }) : Promise.resolve([]),
+    canLoadTickets ? prisma.supportTicket.findMany({ where, take: 10, orderBy: { createdAt: 'desc' } }) : Promise.resolve([]),
+    canLoadCampaigns ? prisma.marketingCampaign.findMany({ where, take: 10, orderBy: { createdAt: 'desc' } }) : Promise.resolve([]),
+    canLoadMeetings ? prisma.zoomMeeting.findMany({ where, take: 10, orderBy: { startTime: 'desc' } }) : Promise.resolve([]),
+    canLoadCollectors ? prisma.collector.findMany({ where, take: 10, include: { user: { select: { firstName: true, lastName: true, phone: true } }, visits: { take: 5, orderBy: { visitedAt: 'desc' } } } }) : Promise.resolve([]),
+    canLoadStaff ? prisma.staff.findMany({ where, take: 10, include: { user: { select: { firstName: true, lastName: true, role: true, status: true } }, salaryProfile: true } }) : Promise.resolve([]),
+    canLoadSalaries ? prisma.staffSalary.findMany({ where, take: 10, orderBy: { createdAt: 'desc' }, include: { staff: { include: { user: { select: { firstName: true, lastName: true } } } } } }) : Promise.resolve([]),
+    getRecentActivity(tenantId, 15, { id: userId, role: canonicalRole }),
   ]);
 
+  let roleSummary = overview;
+  if (!roleSummary) {
+    if (canonicalRole === 'HUMAN_RESOURCE') {
+      const [activeStaffCount, pendingStaffCount, todayShifts] = await Promise.all([
+        prisma.staff.count({ where: { ...where, isActive: true } }),
+        prisma.user.count({ where: { ...where, status: 'PENDING_VERIFICATION', deletedAt: null } }),
+        prisma.staffAttendance.count({ where: { ...where } }),
+      ]);
+      roleSummary = {
+        activeStaffCount,
+        pendingStaffApprovals: pendingStaffCount,
+        attendanceLogsCount: todayShifts,
+        salaryRunsCount: salaryRuns.length,
+      };
+    } else if (canonicalRole === 'MARKETING') {
+      roleSummary = {
+        activeCampaignsCount: campaigns.length,
+        totalCampaignBudgetGhs: campaigns.reduce((s, c) => s + Number(c.budget || 0), 0),
+        totalReachLeads: campaigns.reduce((s, c) => s + Number(c.leadsCount || 0), 0),
+        totalConversions: campaigns.reduce((s, c) => s + Number(c.conversions || 0), 0),
+      };
+    } else if (canonicalRole === 'INVESTOR') {
+      roleSummary = {
+        investorTranchesCount: investorAccounts.length,
+        totalCommittedCapitalGhs: investorAccounts.reduce((s, i) => s + Number(i.committedCapital || 0), 0),
+        totalDeployedCapitalGhs: investorAccounts.reduce((s, i) => s + Number(i.deployedCapital || 0), 0),
+        totalReturnsAccruedGhs: investorAccounts.reduce((s, i) => s + Number(i.returnsAccrued || 0), 0),
+      };
+    } else if (['CUSTOMER_SERVICE', 'RECEPTION'].includes(canonicalRole)) {
+      roleSummary = {
+        openSupportTickets: tickets.filter((t) => t.status !== 'RESOLVED').length,
+        totalSupportTickets: tickets.length,
+        recentBorrowersCount: await prisma.member.count({ where }),
+      };
+    }
+  }
+
   return {
-    role: normalized,
+    role: canonicalRole,
     userId,
     tenantId,
     tenant: tenantRecord,
-    environmentProvenance: prov,
+    environmentProvenance,
+    capabilities: roleDescriptor,
     timestamp: new Date().toISOString(),
-    summary: overview,
+    summary: roleSummary,
     datasets: {
-      recentLoans,
-      recentPayments,
-      memberProfile,
-      guarantorProfile,
-      investorAccounts,
-      complianceCases,
-      tickets,
-      campaigns,
-      meetings,
-      collectors: collectorList,
-      staff: staffList,
-      salaries: salaryRuns,
+      ...(canLoadLoans ? { recentLoans } : {}),
+      ...(canLoadPayments ? { recentPayments } : {}),
+      ...(canLoadInvestors ? { investorAccounts } : {}),
+      ...(canLoadCases ? { complianceCases } : {}),
+      ...(canLoadTickets ? { tickets } : {}),
+      ...(canLoadCampaigns ? { campaigns } : {}),
+      ...(canLoadMeetings ? { meetings } : {}),
+      ...(canLoadCollectors ? { collectors: collectorList } : {}),
+      ...(canLoadStaff ? { staff: staffList } : {}),
+      ...(canLoadSalaries ? { salaries: salaryRuns } : {}),
+      recentActivities,
     },
   };
 }

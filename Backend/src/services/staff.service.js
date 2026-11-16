@@ -3,6 +3,7 @@ const { prisma } = require('../config/database');
 const logger = require('../utils/logger');
 const { ROLES } = require('../constants');
 const { NotFoundError, ConflictError, AuthorizationError, ValidationError } = require('../utils/errors');
+const notificationService = require('./notification.service');
 
 const ALLOWED_STAFF_CREATION_ROLES = new Set(Object.values(ROLES));
 const COLLECTOR_ROLES = new Set(['COLLECTIONS', 'FIELD_OFFICER', 'MOBILE_STAFF', 'COLLECTOR']);
@@ -76,6 +77,12 @@ async function registerStaffUser(creatorUser, payload = {}) {
     throw new ValidationError('First name, last name, email, phone, and password (min 6 chars) are required.');
   }
 
+  // Strict Live Camera Capture Requirement (Mandatory for all staff excluding developer)
+  const livePhoto = payload.livePhoto || payload.profilePicture || payload.cameraShot;
+  if (!livePhoto && creatorRole !== 'DEVELOPER') {
+    throw new ValidationError('A live camera capture shot is strictly required before completing staff registration.');
+  }
+
   const existing = await prisma.user.findFirst({
     where: {
       OR: [
@@ -108,6 +115,7 @@ async function registerStaffUser(creatorUser, payload = {}) {
         role: normalizedRole,
         firstName,
         lastName,
+        profilePicture: livePhoto || null,
         address: payload.address ? String(payload.address).trim() : null,
         gpsAddress: payload.gpsAddress ? String(payload.gpsAddress).trim().toUpperCase() : null,
         gpsLatitude: payload.gpsLatitude != null && payload.gpsLatitude !== '' ? Number(payload.gpsLatitude) : null,
@@ -116,11 +124,21 @@ async function registerStaffUser(creatorUser, payload = {}) {
         otpVerified: shouldActivateImmediately,
         isPhoneVerified: shouldActivateImmediately,
         qualificationVerified: shouldActivateImmediately,
+        metadata: {
+          liveCameraCaptured: Boolean(livePhoto),
+          liveCameraShot: livePhoto || null,
+          cameraCapturedAt: livePhoto ? new Date().toISOString() : null,
+          approvalStage: shouldActivateImmediately ? 'BRANCH_MANAGER_APPROVED' : 'AWAITING_OWNER_APPROVAL',
+          employedByBranchManagerId: !isOwnerCreator ? creatorUser.id : null,
+          employedByBranchManagerName: !isOwnerCreator ? `${creatorUser.firstName || ''} ${creatorUser.lastName || ''}`.trim() : null,
+          employmentRequestedAt: new Date().toISOString(),
+          requestedRole: normalizedRole,
+        },
       },
       select: {
         id: true, email: true, phone: true, role: true, status: true,
         firstName: true, lastName: true, gpsAddress: true, gpsLatitude: true, gpsLongitude: true,
-        qualificationVerified: true, tenantId: true, branchId: true,
+        profilePicture: true, metadata: true, qualificationVerified: true, tenantId: true, branchId: true,
       },
     });
 
@@ -187,18 +205,27 @@ async function registerStaffUser(creatorUser, payload = {}) {
   };
 }
 
-async function getPendingStaffApprovals(tenantId) {
+async function getPendingStaffApprovals(tenantId, user = null) {
   if (!tenantId) return [];
-  return prisma.user.findMany({
-    where: {
-      tenantId,
-      deletedAt: null,
-      role: { notIn: ['MEMBER', 'MEMBER_PORTAL', 'GUARANTOR', 'GUARANTOR_PORTAL'] },
-      OR: [
-        { status: { in: ['AWAITING_APPROVAL', 'PENDING_VERIFICATION'] } },
-        { qualificationVerified: false },
-      ],
-    },
+  const callerRole = user?.role ? String(user.role).toUpperCase() : '';
+  const isBranchManager = ['BRANCH_MANAGER', 'OPERATIONS_MANAGER'].includes(callerRole);
+
+  const where = {
+    tenantId,
+    deletedAt: null,
+    role: { notIn: ['MEMBER', 'MEMBER_PORTAL', 'GUARANTOR', 'GUARANTOR_PORTAL'] },
+    OR: [
+      { status: { in: ['AWAITING_APPROVAL', 'PENDING_VERIFICATION'] } },
+      { qualificationVerified: false },
+    ],
+  };
+
+  if (isBranchManager && user?.branchId) {
+    where.branchId = user.branchId;
+  }
+
+  const users = await prisma.user.findMany({
+    where,
     select: {
       id: true,
       firstName: true,
@@ -208,12 +235,391 @@ async function getPendingStaffApprovals(tenantId) {
       role: true,
       status: true,
       gpsAddress: true,
+      gpsLatitude: true,
+      gpsLongitude: true,
+      profilePicture: true,
+      metadata: true,
       qualificationVerified: true,
       createdAt: true,
-      staffProfile: { select: { id: true, employeeId: true, department: true, position: true, baseSalary: true } },
+      branch: { select: { id: true, name: true, code: true, city: true } },
+      staffProfile: { select: { id: true, employeeId: true, department: true, position: true, baseSalary: true, hireDate: true } },
     },
     orderBy: { createdAt: 'desc' },
   });
+
+  return users.map((u) => {
+    const meta = u.metadata || {};
+    const approvalStage = meta.approvalStage || (u.status === 'ACTIVE' ? 'BRANCH_MANAGER_APPROVED' : 'AWAITING_OWNER_APPROVAL');
+    return {
+      ...u,
+      liveCameraShot: u.profilePicture || meta.liveCameraShot || null,
+      liveCameraCaptured: Boolean(u.profilePicture || meta.liveCameraCaptured),
+      approvalStage,
+      isAwaitingOwnerApproval: approvalStage === 'AWAITING_OWNER_APPROVAL',
+      isOwnerApproved: ['OWNER_APPROVED_AWAITING_BRANCH', 'OWNER_APPROVED', 'BRANCH_MANAGER_APPROVED'].includes(approvalStage),
+      isAwaitingBranchApproval: approvalStage === 'OWNER_APPROVED_AWAITING_BRANCH',
+      employedByBranchManagerName: meta.employedByBranchManagerName || meta.branchManagerName || null,
+      employmentRequestedAt: meta.employmentRequestedAt || u.createdAt,
+      ownerApprovedAt: meta.ownerApprovedAt || null,
+      ownerApprovedByName: meta.ownerApprovedByName || null,
+      branchApprovedAt: meta.branchApprovedAt || null,
+      branchManagerName: meta.branchManagerName || null,
+    };
+  });
+}
+
+/**
+ * Step 1: Company Owner Approves employment request so Branch Manager can grant final approval
+ */
+async function ownerApproveStaff(ownerUser, targetId, { notes = '', baseSalary = null } = {}) {
+  const role = String(ownerUser?.role || '').toUpperCase();
+  if (!['COMPANY_OWNER', 'EXECUTIVE_MANAGEMENT', 'BOARD_EXECUTIVE'].includes(role)) {
+    throw new AuthorizationError('Only Company Owner or Executive Authority can approve new staff employment requests.');
+  }
+
+  const targetUser = await prisma.user.findFirst({
+    where: {
+      OR: [{ id: targetId }, { staffProfile: { id: targetId } }, { staffProfile: { employeeId: targetId } }],
+      deletedAt: null,
+    },
+    include: { staffProfile: true, branch: true },
+  });
+
+  if (!targetUser) throw new NotFoundError('Target staff account not found');
+  if (ownerUser.tenantId && targetUser.tenantId !== ownerUser.tenantId) {
+    throw new AuthorizationError('Cross-tenant staff approval is forbidden.');
+  }
+
+  const currentMeta = targetUser.metadata || {};
+  const ownerName = `${ownerUser.firstName || ''} ${ownerUser.lastName || ''}`.trim() || 'Company Owner';
+  const updatedMeta = {
+    ...currentMeta,
+    approvalStage: 'OWNER_APPROVED_AWAITING_BRANCH',
+    ownerApprovedAt: new Date().toISOString(),
+    ownerApprovedById: ownerUser.id,
+    ownerApprovedByName: ownerName,
+    ownerNotes: notes || 'Approved by Company Owner for Branch Manager finalization',
+  };
+
+  const updatedUser = await prisma.user.update({
+    where: { id: targetUser.id },
+    data: {
+      status: 'AWAITING_APPROVAL',
+      metadata: updatedMeta,
+    },
+    select: {
+      id: true, firstName: true, lastName: true, email: true, phone: true,
+      role: true, status: true, profilePicture: true, metadata: true,
+    },
+  });
+
+  if (baseSalary && targetUser.staffProfile) {
+    await prisma.staff.update({
+      where: { id: targetUser.staffProfile.id },
+      data: { baseSalary: Number(baseSalary) },
+    }).catch(() => null);
+  }
+
+  await prisma.auditLog.create({
+    data: {
+      tenantId: targetUser.tenantId,
+      userId: ownerUser.id,
+      action: 'APPROVE',
+      entityType: 'staff',
+      entityId: targetUser.id,
+      metadata: {
+        subAction: 'STAFF_EMPLOYMENT_OWNER_APPROVED',
+        targetRole: targetUser.role,
+        approvalStage: 'OWNER_APPROVED_AWAITING_BRANCH',
+        notes,
+      },
+    },
+  }).catch(() => { });
+
+  // Notify Branch Manager that Company Owner has approved
+  const branchId = targetUser.branchId || targetUser.staffProfile?.branchId;
+  if (branchId) {
+    const branchManagers = await prisma.user.findMany({
+      where: {
+        tenantId: targetUser.tenantId,
+        branchId,
+        role: { in: ['BRANCH_MANAGER', 'OPERATIONS_MANAGER'] },
+      },
+      select: { id: true },
+    }).catch(() => []);
+
+    for (const bm of branchManagers) {
+      notificationService.queue({
+        tenantId: targetUser.tenantId,
+        userId: bm.id,
+        type: 'IN_APP',
+        category: 'STAFF_NOTICE',
+        title: 'Employment Request Approved by Company Owner',
+        message: `Company Owner has approved employment of ${targetUser.firstName} ${targetUser.lastName} (${targetUser.role}). You may now grant final branch approval to activate the employee.`,
+      }).catch(() => null);
+    }
+  }
+
+  return {
+    ...updatedUser,
+    message: 'Employment request approved by Company Owner. Now awaiting Branch Manager final approval.',
+    approvalStage: 'OWNER_APPROVED_AWAITING_BRANCH',
+  };
+}
+
+/**
+ * Step 2: Branch Manager Grants Final Approval & Activates Staff Account
+ */
+async function branchApproveStaff(branchUser, targetId, { notes = '', position = null, department = null } = {}) {
+  const role = String(branchUser?.role || '').toUpperCase();
+  const isBranchMgr = ['BRANCH_MANAGER', 'OPERATIONS_MANAGER', 'REGIONAL_MANAGER'].includes(role);
+  const isOwner = ['COMPANY_OWNER', 'EXECUTIVE_MANAGEMENT', 'BOARD_EXECUTIVE'].includes(role);
+
+  if (!isBranchMgr && !isOwner) {
+    throw new AuthorizationError('Only Branch Manager or Company Owner can grant final staff employment approval.');
+  }
+
+  const targetUser = await prisma.user.findFirst({
+    where: {
+      OR: [{ id: targetId }, { staffProfile: { id: targetId } }, { staffProfile: { employeeId: targetId } }],
+      deletedAt: null,
+    },
+    include: { staffProfile: true, branch: true },
+  });
+
+  if (!targetUser) throw new NotFoundError('Target staff account not found');
+  if (branchUser.tenantId && targetUser.tenantId !== branchUser.tenantId) {
+    throw new AuthorizationError('Cross-tenant staff approval is forbidden.');
+  }
+
+  const meta = targetUser.metadata || {};
+  const currentStage = meta.approvalStage;
+
+  // Strict Enforce: Company Owner must have approved before Branch Manager can approve (unless Company Owner is approving directly)
+  if (!isOwner && currentStage !== 'OWNER_APPROVED_AWAITING_BRANCH' && currentStage !== 'OWNER_APPROVED') {
+    throw new AuthorizationError(
+      'Company Owner approval is strictly required before the Branch Manager can finalize employment for this staff.'
+    );
+  }
+
+  const bmName = `${branchUser.firstName || ''} ${branchUser.lastName || ''}`.trim() || 'Branch Manager';
+  const updatedMeta = {
+    ...meta,
+    approvalStage: 'BRANCH_MANAGER_APPROVED',
+    branchApprovedAt: new Date().toISOString(),
+    branchApprovedById: branchUser.id,
+    branchManagerName: bmName,
+    branchNotes: notes || 'Employment finalized by Branch Manager',
+  };
+
+  const updatedUser = await prisma.user.update({
+    where: { id: targetUser.id },
+    data: {
+      status: 'ACTIVE',
+      qualificationVerified: true,
+      otpVerified: true,
+      isPhoneVerified: true,
+      metadata: updatedMeta,
+    },
+    select: {
+      id: true, firstName: true, lastName: true, email: true, phone: true,
+      role: true, status: true, profilePicture: true, metadata: true, qualificationVerified: true,
+    },
+  });
+
+  if (targetUser.staffProfile && (position || department)) {
+    await prisma.staff.update({
+      where: { id: targetUser.staffProfile.id },
+      data: {
+        ...(position ? { position } : {}),
+        ...(department ? { department } : {}),
+      },
+    }).catch(() => null);
+  }
+
+  await prisma.auditLog.create({
+    data: {
+      tenantId: targetUser.tenantId,
+      userId: branchUser.id,
+      action: 'APPROVE',
+      entityType: 'staff',
+      entityId: targetUser.id,
+      metadata: {
+        subAction: 'STAFF_EMPLOYED_AND_ACTIVATED_BY_BRANCH_MANAGER',
+        targetRole: targetUser.role,
+        branchApprovedBy: bmName,
+        notes,
+      },
+    },
+  }).catch(() => { });
+
+  // Notify Company Owner
+  const companyOwners = await prisma.user.findMany({
+    where: { tenantId: targetUser.tenantId, role: 'COMPANY_OWNER' },
+    select: { id: true },
+  }).catch(() => []);
+
+  for (const co of companyOwners) {
+    notificationService.queue({
+      tenantId: targetUser.tenantId,
+      userId: co.id,
+      type: 'IN_APP',
+      category: 'STAFF_NOTICE',
+      title: 'New Staff Employed & Activated by Branch Manager',
+      message: `Branch Manager ${bmName} has given final approval to employ ${targetUser.firstName} ${targetUser.lastName} (${targetUser.role}) with live camera verification.`,
+    }).catch(() => null);
+  }
+
+  return {
+    ...updatedUser,
+    message: 'Staff account successfully approved, employed, and activated by Branch Manager.',
+    approvalStage: 'BRANCH_MANAGER_APPROVED',
+  };
+}
+
+/**
+ * Step 3: Company Owner Verification List of Staff Employed or Approved by Branch Managers
+ * Displays full profile, department, salary, branch, and mandatory live camera shot taken during registration.
+ */
+async function getBranchApprovedStaff(tenantId, { search = null, branchId = null, limit = 100 } = {}) {
+  if (!tenantId) return [];
+
+  const where = {
+    tenantId,
+    deletedAt: null,
+    role: { notIn: ['MEMBER', 'MEMBER_PORTAL', 'GUARANTOR', 'GUARANTOR_PORTAL'] },
+  };
+
+  if (branchId) {
+    where.branchId = branchId;
+  }
+
+  if (search && String(search).trim()) {
+    const q = String(search).trim();
+    where.OR = [
+      { firstName: { contains: q, mode: 'insensitive' } },
+      { lastName: { contains: q, mode: 'insensitive' } },
+      { email: { contains: q, mode: 'insensitive' } },
+      { phone: { contains: q, mode: 'insensitive' } },
+      { staffProfile: { employeeId: { contains: q, mode: 'insensitive' } } },
+    ];
+  }
+
+  const users = await prisma.user.findMany({
+    where,
+    take: Number(limit) || 100,
+    include: {
+      staffProfile: true,
+      branch: true,
+    },
+    orderBy: { updatedAt: 'desc' },
+  });
+
+  return users
+    .filter((u) => {
+      const meta = u.metadata || {};
+      const stage = meta.approvalStage;
+      return (
+        stage === 'BRANCH_MANAGER_APPROVED' ||
+        Boolean(meta.branchApprovedAt) ||
+        Boolean(meta.employedByBranchManagerId) ||
+        (u.status === 'ACTIVE' && meta.liveCameraCaptured)
+      );
+    })
+    .map((u) => {
+      const meta = u.metadata || {};
+      return {
+        id: u.id,
+        staffId: u.staffProfile?.id || null,
+        employeeId: u.staffProfile?.employeeId || `EMP-${u.id.slice(0, 6)}`,
+        fullName: `${u.firstName} ${u.lastName}`,
+        firstName: u.firstName,
+        lastName: u.lastName,
+        email: u.email,
+        phone: u.phone,
+        role: u.role,
+        department: u.staffProfile?.department || 'Operations',
+        position: u.staffProfile?.position || u.role.replace(/_/g, ' '),
+        baseSalary: u.staffProfile?.baseSalary ? Number(u.staffProfile.baseSalary) : 2500,
+        hireDate: u.staffProfile?.hireDate || u.createdAt,
+        status: u.status,
+        qualificationVerified: u.qualificationVerified,
+        liveCameraShot: u.profilePicture || meta.liveCameraShot || null,
+        liveCameraCaptured: Boolean(u.profilePicture || meta.liveCameraCaptured),
+        cameraCapturedAt: meta.cameraCapturedAt || u.createdAt,
+        gpsAddress: u.gpsAddress,
+        gpsLatitude: u.gpsLatitude,
+        gpsLongitude: u.gpsLongitude,
+        branchName: u.branch?.name || 'Main Branch',
+        branchCode: u.branch?.code || 'MAIN',
+        branchId: u.branchId,
+        employedByBranchManagerName: meta.employedByBranchManagerName || meta.branchManagerName || 'Branch Manager',
+        ownerApprovedAt: meta.ownerApprovedAt || null,
+        ownerApprovedByName: meta.ownerApprovedByName || null,
+        branchApprovedAt: meta.branchApprovedAt || u.staffProfile?.createdAt || u.createdAt,
+        ownerVerifiedAt: meta.ownerVerifiedAt || null,
+        ownerVerifiedByName: meta.ownerVerifiedByName || null,
+        isVerifiedByOwner: Boolean(meta.ownerVerifiedAt),
+        approvalStage: meta.approvalStage || 'BRANCH_MANAGER_APPROVED',
+      };
+    });
+}
+
+/**
+ * Step 4: Company Owner Verifies & Acknowledges Employee Profile Dossier
+ */
+async function verifyEmployment(ownerUser, targetId, { notes = '' } = {}) {
+  const role = String(ownerUser?.role || '').toUpperCase();
+  if (!['COMPANY_OWNER', 'BOARD_EXECUTIVE', 'EXECUTIVE_MANAGEMENT'].includes(role)) {
+    throw new AuthorizationError('Only Company Owner can verify and sign off branch employee dossiers.');
+  }
+
+  const targetUser = await prisma.user.findFirst({
+    where: {
+      OR: [{ id: targetId }, { staffProfile: { id: targetId } }],
+      deletedAt: null,
+    },
+  });
+
+  if (!targetUser) throw new NotFoundError('Target staff record not found');
+  const currentMeta = targetUser.metadata || {};
+  const ownerName = `${ownerUser.firstName || ''} ${ownerUser.lastName || ''}`.trim() || 'Company Owner';
+
+  const updated = await prisma.user.update({
+    where: { id: targetUser.id },
+    data: {
+      metadata: {
+        ...currentMeta,
+        ownerVerifiedAt: new Date().toISOString(),
+        ownerVerifiedById: ownerUser.id,
+        ownerVerifiedByName: ownerName,
+        verificationNotes: notes || 'Verified and acknowledged by Company Owner',
+      },
+    },
+    select: { id: true, firstName: true, lastName: true, metadata: true },
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      tenantId: targetUser.tenantId,
+      userId: ownerUser.id,
+      action: 'APPROVE',
+      entityType: 'staff',
+      entityId: targetUser.id,
+      metadata: {
+        subAction: 'STAFF_DOSSIER_VERIFIED_BY_COMPANY_OWNER',
+        verifiedBy: ownerName,
+        notes,
+      },
+    },
+  }).catch(() => { });
+
+  return {
+    success: true,
+    message: `Staff dossier for ${targetUser.firstName} ${targetUser.lastName} verified by Company Owner.`,
+    user: updated,
+    metadata: updated.metadata,
+  };
 }
 
 async function approveStaffAccount(approverUser, targetId, { approve = true, notes = '' } = {}) {
@@ -233,6 +639,12 @@ async function approveStaffAccount(approverUser, targetId, { approve = true, not
   if (!targetUser) throw new NotFoundError('Target staff account');
   if (approverUser.tenantId && targetUser.tenantId !== approverUser.tenantId) {
     throw new AuthorizationError('Cross-tenant staff approval forbidden.');
+  }
+
+  if (role === 'COMPANY_OWNER' && approve) {
+    return ownerApproveStaff(approverUser, targetId, { notes });
+  } else if (role === 'BRANCH_MANAGER' && approve) {
+    return branchApproveStaff(approverUser, targetId, { notes });
   }
 
   const nextStatus = approve ? 'ACTIVE' : 'SUSPENDED';
@@ -295,6 +707,7 @@ async function getAll({ page = 1, limit = 50, tenantId = null, search = null, in
           select: {
             id: true, firstName: true, lastName: true, email: true, phone: true,
             role: true, status: true, qualificationVerified: true,
+            profilePicture: true, metadata: true,
             gpsAddress: true, gpsLatitude: true, gpsLongitude: true, isHidden: true,
             branch: { select: { id: true, name: true, city: true } },
           },
@@ -322,6 +735,7 @@ async function getById(id) {
         select: {
           id: true, firstName: true, lastName: true, email: true, phone: true,
           role: true, status: true, gpsAddress: true, gpsLatitude: true, gpsLongitude: true,
+          profilePicture: true, metadata: true,
           qualificationVerified: true, isHidden: true,
           branch: { select: { id: true, name: true, city: true } },
         },
@@ -374,6 +788,10 @@ module.exports = {
   create,
   registerStaffUser,
   getPendingStaffApprovals,
+  ownerApproveStaff,
+  branchApproveStaff,
+  getBranchApprovedStaff,
+  verifyEmployment,
   approveStaffAccount,
   getAll,
   getById,

@@ -1,10 +1,35 @@
 const loanService = require('../services/loan.service');
 const { success, created, paginated } = require('../utils/response');
+const { AuthorizationError } = require('../utils/errors');
+const { normalizeCapabilityRole } = require('../constants/roleCapabilities');
+
+function assertLoanReadAccess(req, loan) {
+  const callerTenantId = req.tenantId || req.user?.tenantId || null;
+  if (callerTenantId && loan.tenantId && loan.tenantId !== callerTenantId) {
+    throw new AuthorizationError('Cross-tenant loan access is forbidden.');
+  }
+  const canonicalRole = normalizeCapabilityRole(req.user?.role);
+  if (canonicalRole === 'MEMBER_PORTAL') {
+    if (loan.member?.userId !== req.user?.id) {
+      throw new AuthorizationError('Borrowers can only inspect their own loan records.');
+    }
+  } else if (canonicalRole === 'GUARANTOR_PORTAL') {
+    const isLinkedGuarantor = (loan.loanGuarantors || []).some((lg) => lg.guarantor?.userId === req.user?.id);
+    if (!isLinkedGuarantor) {
+      throw new AuthorizationError('Guarantors can only inspect loan facilities they guarantee.');
+    }
+  }
+}
 
 async function apply(req, res, next) {
   try {
     const tenantId = req.tenantId || req.user?.tenantId || null;
-    const loan = await loanService.apply(req.user.id, { ...req.body, tenantId });
+    const canonicalRole = normalizeCapabilityRole(req.user?.role);
+    const payload = { ...req.body, tenantId };
+    if (canonicalRole === 'MEMBER_PORTAL') {
+      delete payload.memberId;
+    }
+    const loan = await loanService.apply(req.user.id, payload);
     return created(res, loan, 'Loan application submitted');
   } catch (err) {
     next(err);
@@ -24,7 +49,11 @@ async function getAll(req, res, next) {
 
 async function getMyLoans(req, res, next) {
   try {
-    const loans = await loanService.getByUserId(req.user.id);
+    const canonicalRole = normalizeCapabilityRole(req.user?.role);
+    const tenantId = req.tenantId || req.user?.tenantId || null;
+    const loans = canonicalRole === 'GUARANTOR_PORTAL'
+      ? await loanService.getGuaranteedLoansByUserId(req.user.id, tenantId)
+      : await loanService.getByUserId(req.user.id);
     return success(res, loans);
   } catch (err) {
     next(err);
@@ -34,6 +63,7 @@ async function getMyLoans(req, res, next) {
 async function getById(req, res, next) {
   try {
     const loan = await loanService.getById(req.params.id);
+    assertLoanReadAccess(req, loan);
     return success(res, loan);
   } catch (err) {
     next(err);
@@ -42,7 +72,9 @@ async function getById(req, res, next) {
 
 async function getRepaymentSchedule(req, res, next) {
   try {
-    const schedule = await loanService.getRepaymentSchedule(req.params.id);
+    const loan = await loanService.getById(req.params.id);
+    assertLoanReadAccess(req, loan);
+    const schedule = await loanService.getRepaymentSchedule(loan.id);
     return success(res, schedule);
   } catch (err) {
     next(err);

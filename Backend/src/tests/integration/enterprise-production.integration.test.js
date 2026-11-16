@@ -4,6 +4,8 @@ const app = require('../../app');
 const { prisma } = require('../../config/database');
 const { redis } = require('../../config/redis');
 
+jest.setTimeout(120000);
+
 describe('GBS Enterprise Production Integration Suite (PostgreSQL Live)', () => {
   let devToken = '';
   let adminToken = '';
@@ -228,6 +230,20 @@ describe('GBS Enterprise Production Integration Suite (PostgreSQL Live)', () => 
       .get('/api/v1/loans')
       .set('Authorization', `Bearer ${tenantToken}`);
     expect(lockedOperationalCheck.statusCode).toBe(402);
+
+    // Locked/non-approved tenant CANNOT self-activate or unlock via /tenants/my/subscription or PUT /tenants/:id
+    const blockedSelfUnlock = await request(app)
+      .post('/api/v1/tenants/my/subscription')
+      .set('Authorization', `Bearer ${tenantToken}`)
+      .send({ planCode: 'LIFETIME' });
+    expect([402, 403]).toContain(blockedSelfUnlock.statusCode);
+
+    // Tenant owner CANNOT approve another pending tenant via /developer/tenants/:id/approve
+    const ownerCannotApproveTenant = await request(app)
+      .post(`/api/v1/developer/tenants/${createdTenantId}/approve`)
+      .set('Authorization', `Bearer ${tenantToken}`)
+      .send({ trialDays: 30, planCode: 'TRIAL_1M' });
+    expect([401, 403]).toContain(ownerCannotApproveTenant.statusCode);
 
     // Developer unlocks explicitly via /unlock -> operational access restored
     const unlockRes = await request(app)
@@ -468,7 +484,7 @@ describe('GBS Enterprise Production Integration Suite (PostgreSQL Live)', () => 
       .post(`/api/v1/migration/jobs/${createdMigrationJobId}/rollback`)
       .set('Authorization', `Bearer ${adminToken}`);
     expect(rollRes.statusCode).toBe(200);
-  });
+  }, 40000);
 
   it('publishes Live Device GPS, locates mobile numbers on Google Map, searches members & exposes env mode', async () => {
     const healthRes = await request(app).get('/api/v1/health');

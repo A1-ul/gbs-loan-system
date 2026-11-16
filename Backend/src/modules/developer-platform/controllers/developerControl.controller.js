@@ -1,6 +1,7 @@
 const os = require('os');
 const developerControlService = require('../services/developerControl.service');
 const developerAuthService = require('../services/developerAuth.service');
+const feedbackService = require('../../../services/feedback.service');
 const gpsService = require('../../../services/gps.service');
 const { checkDatabaseHealth } = require('../../../config/database');
 const { checkRedisHealth } = require('../../../config/redis');
@@ -191,6 +192,24 @@ async function getMessages(req, res, next) {
   }
 }
 
+async function getFeedbacks(req, res, next) {
+  try {
+    const result = await feedbackService.getFeedbacks(req.query, req.developer, true);
+    return res.status(200).json({ success: true, data: result.data, total: result.total, pagination: { page: result.page, limit: result.limit, totalPages: result.totalPages } });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function respondFeedback(req, res, next) {
+  try {
+    const updated = await feedbackService.respondToFeedback(req.params.id, req.body, req.developer, true);
+    return res.status(200).json({ success: true, message: 'Developer response submitted', data: updated });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   login,
   logout,
@@ -206,4 +225,6 @@ module.exports = {
   runDiagnostics,
   sendMessage,
   getMessages,
+  getFeedbacks,
+  respondFeedback,
 };

@@ -160,6 +160,8 @@ const HTTP_STATUS = {
   INTERNAL_ERROR: 500,
 };
 
+const roleCapabilities = require('./roleCapabilities');
+
 module.exports = {
   ROLES,
   ROLE_HIERARCHY,
@@ -171,4 +173,5 @@ module.exports = {
   COLLECTOR_STATUS,
   REPORT_TYPES,
   HTTP_STATUS,
+  ...roleCapabilities,
 };

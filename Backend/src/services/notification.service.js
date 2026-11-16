@@ -110,15 +110,29 @@ async function queue(notification) {
   const rawCategory = String(notification.category || 'SYSTEM_ALERT').toUpperCase();
   const dbCategory = normalizeNotificationCategory(rawCategory);
 
+  let targetUserId = notification.userId;
+  if (!targetUserId && notification.tenantId) {
+    const adminUser = await prisma.user.findFirst({
+      where: { tenantId: notification.tenantId, deletedAt: null },
+      select: { id: true },
+    }).catch(() => null);
+    if (adminUser) targetUserId = adminUser.id;
+  }
+
+  if (!targetUserId) {
+    logger.debug(`[Notification] Skipping notification '${notification.title}' because no target user ID was specified.`);
+    return null;
+  }
+
   const record = await prisma.notification.create({
     data: {
       tenantId: notification.tenantId || null,
-      userId: notification.userId,
+      userId: targetUserId,
       type: notification.type || 'PUSH',
       category: dbCategory,
       title: notification.title,
       message: notification.message,
-      recipient: notification.recipient || notification.userId,
+      recipient: notification.recipient || targetUserId || 'SYSTEM',
       metadata: {
         ...(notification.metadata || {}),
         subCategory: rawCategory,

@@ -12,6 +12,12 @@ async function create(data) {
   let userId = data.userId;
   const tenantId = data.tenantId || null;
 
+  // Strict live camera capture check (mandatory for member registration)
+  const livePhoto = data.livePhoto || data.profilePicture || data.cameraShot;
+  if (!livePhoto && data.role !== 'DEVELOPER') {
+    throw new ValidationError('A live camera capture shot is strictly required before completing member registration.');
+  }
+
   // 1. If userId is not provided, create or find User record
   if (!userId) {
     if (!data.email && !data.phone && !data.name) {
@@ -46,6 +52,7 @@ async function create(data) {
           passwordHash,
           firstName,
           lastName,
+          profilePicture: livePhoto || null,
           role: 'MEMBER_PORTAL',
           status: 'ACTIVE',
           tenantId,
@@ -54,6 +61,11 @@ async function create(data) {
           gpsLatitude: data.gpsLatitude != null ? Number(data.gpsLatitude) : null,
           gpsLongitude: data.gpsLongitude != null ? Number(data.gpsLongitude) : null,
           isHidden: Boolean(data.isHidden),
+          metadata: {
+            liveCameraCaptured: Boolean(livePhoto),
+            liveCameraShot: livePhoto || null,
+            cameraCapturedAt: livePhoto ? new Date().toISOString() : null,
+          },
           ...getRecordProvenance(),
         },
       });
@@ -61,10 +73,11 @@ async function create(data) {
     }
   }
 
-  if (userId && (data.gpsAddress || data.address || data.gpsLatitude != null)) {
+  if (userId) {
     await prisma.user.update({
       where: { id: userId },
       data: {
+        ...(livePhoto ? { profilePicture: livePhoto } : {}),
         ...(data.address ? { address: data.address } : {}),
         ...(data.gpsAddress ? { gpsAddress: data.gpsAddress } : {}),
         ...(data.gpsLatitude != null ? { gpsLatitude: Number(data.gpsLatitude) } : {}),
@@ -210,6 +223,8 @@ async function getAll({ page = 1, limit = 50, search, status, tenantId, includeH
             lastName: true,
             email: true,
             phone: true,
+            profilePicture: true,
+            metadata: true,
             address: true,
             gpsAddress: true,
             gpsLatitude: true,

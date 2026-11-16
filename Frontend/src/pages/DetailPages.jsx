@@ -8,7 +8,7 @@ import api, { sessionStore } from '../services/api';
 import { BackButtonBar } from '../context/NavigationContext';
 import VoiceChallengePanel from '../components/VoiceChallengePanel';
 import FaceScanner from '../components/biometric/FaceScanner';
-import { ROLES_META } from '../constants/rolesMeta';
+import { ROLES_META, resolveRoleCapabilities } from '../constants/rolesMeta';
 
 const formatGHS = (n) =>
   `GHS ${Number(n || 0).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -18,6 +18,10 @@ const formatGHS = (n) =>
 /* ========================================================================== */
 export function LoanDetailPage() {
   const { id } = useParams();
+  const currentUser = sessionStore.getTenantUser();
+  const caps = resolveRoleCapabilities(currentUser?.role);
+  const roleActions = caps.actions || {};
+  const canShowLoanWorkflowPanel = roleActions.canReviewLoan || roleActions.canApproveLoan || roleActions.canDisburseLoan;
   const [loan, setLoan] = useState(null);
   const [schedule, setSchedule] = useState([]);
   const [workflow, setWorkflow] = useState([]);
@@ -115,31 +119,45 @@ export function LoanDetailPage() {
             </div>
           </div>
 
-          <div className="glass-panel" style={{ padding: 20 }}>
-            <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>Loan Lifecycle Workflow Actions</h3>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-              <input
-                type="text"
-                className="gbs-input"
-                style={{ width: 190 }}
-                placeholder="2FA Code (if Manager w/ 2FA)"
-                value={totpHeader}
-                onChange={(e) => setTotpHeader(e.target.value)}
-              />
-              <button type="button" className="btn btn-secondary" onClick={() => handleReview('approve')}>Officer Review Approve</button>
-              <button type="button" className="btn btn-primary" onClick={handleApprove}>Final Approve</button>
-              <button type="button" className="btn btn-primary" onClick={handleDisburse}>Disburse Funds</button>
-              <input
-                type="text"
-                className="gbs-input"
-                style={{ width: 200 }}
-                placeholder="Rejection reason..."
-                value={rejectReason}
-                onChange={(e) => setRejectReason(e.target.value)}
-              />
-              <button type="button" className="btn btn-danger" onClick={() => handleReview('reject')}>Reject Application</button>
+          {canShowLoanWorkflowPanel && (
+            <div className="glass-panel" style={{ padding: 20 }}>
+              <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>Loan Lifecycle Workflow Actions</h3>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                {(roleActions.canApproveLoan || roleActions.canDisburseLoan) && (
+                  <input
+                    type="text"
+                    className="gbs-input"
+                    style={{ width: 190 }}
+                    placeholder="2FA Code (if Manager w/ 2FA)"
+                    value={totpHeader}
+                    onChange={(e) => setTotpHeader(e.target.value)}
+                  />
+                )}
+                {roleActions.canReviewLoan && (
+                  <button type="button" className="btn btn-secondary" onClick={() => handleReview('approve')}>Officer Review Approve</button>
+                )}
+                {roleActions.canApproveLoan && (
+                  <button type="button" className="btn btn-primary" onClick={handleApprove}>Final Approve</button>
+                )}
+                {roleActions.canDisburseLoan && (
+                  <button type="button" className="btn btn-primary" onClick={handleDisburse}>Disburse Funds</button>
+                )}
+                {(roleActions.canReviewLoan || roleActions.canApproveLoan) && (
+                  <>
+                    <input
+                      type="text"
+                      className="gbs-input"
+                      style={{ width: 200 }}
+                      placeholder="Rejection reason..."
+                      value={rejectReason}
+                      onChange={(e) => setRejectReason(e.target.value)}
+                    />
+                    <button type="button" className="btn btn-danger" onClick={() => handleReview('reject')}>Reject Application</button>
+                  </>
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="gbs-grid-2">
             <div className="glass-panel" style={{ padding: 20 }}>
@@ -205,6 +223,8 @@ export function LoanDetailPage() {
 export function MemberDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const currentUser = sessionStore.getTenantUser();
+  const memberRoleActions = resolveRoleCapabilities(currentUser?.role).actions || {};
   const [member, setMember] = useState(null);
   const [delReason, setDelReason] = useState('');
   const [msg, setMsg] = useState(null);
@@ -294,22 +314,26 @@ export function MemberDetailPage() {
             </div>
 
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              {!member.ghanaCardVerified && (
+              {!member.ghanaCardVerified && memberRoleActions.canVerifyKyc && (
                 <button type="button" className="btn btn-primary" onClick={handleVerifyGhanaCard}>Verify Ghana Card KYC</button>
               )}
-              <label className="btn btn-secondary" style={{ cursor: 'pointer' }}>
-                <Upload size={14} /> Upload Photo
-                <input type="file" accept="image/*" onChange={handleUploadPicture} style={{ display: 'none' }} />
-              </label>
+              {(memberRoleActions.canRegisterMember || member.userId === currentUser?.id) && (
+                <label className="btn btn-secondary" style={{ cursor: 'pointer' }}>
+                  <Upload size={14} /> Upload Photo
+                  <input type="file" accept="image/*" onChange={handleUploadPicture} style={{ display: 'none' }} />
+                </label>
+              )}
             </div>
 
-            <div style={{ marginTop: 20, paddingTop: 14, borderTop: '1px solid rgba(239,68,68,0.25)' }}>
-              <label className="gbs-label">Request Profile Deletion (Manager Approval Required)</label>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input type="text" className="gbs-input" placeholder="Reason for removal..." value={delReason} onChange={(e) => setDelReason(e.target.value)} />
-                <button type="button" className="btn btn-danger" onClick={handleRequestDeletion}>Request Deletion</button>
+            {memberRoleActions.canRequestDeletion && (
+              <div style={{ marginTop: 20, paddingTop: 14, borderTop: '1px solid rgba(239,68,68,0.25)' }}>
+                <label className="gbs-label">Request Profile Deletion (Manager Approval Required)</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input type="text" className="gbs-input" placeholder="Reason for removal..." value={delReason} onChange={(e) => setDelReason(e.target.value)} />
+                  <button type="button" className="btn btn-danger" onClick={handleRequestDeletion}>Request Deletion</button>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           <div className="glass-panel" style={{ padding: 20 }}>
@@ -336,6 +360,8 @@ export function MemberDetailPage() {
 /* ========================================================================== */
 export function PaymentDetailPage() {
   const { id } = useParams();
+  const currentUser = sessionStore.getTenantUser();
+  const paymentRoleActions = resolveRoleCapabilities(currentUser?.role).actions || {};
   const [payment, setPayment] = useState(null);
   const [msg, setMsg] = useState(null);
 
@@ -378,7 +404,7 @@ export function PaymentDetailPage() {
             <div><strong>Status:</strong> <span className="badge badge-gold">{payment.status}</span></div>
             <div><strong>Paid At:</strong> {new Date(payment.createdAt).toLocaleString()}</div>
           </div>
-          {payment.method === 'CASH' && ['AWAITING_APPROVAL', 'PENDING'].includes(payment.status) && (
+          {payment.method === 'CASH' && ['AWAITING_APPROVAL', 'PENDING'].includes(payment.status) && paymentRoleActions.canApproveCash && (
             <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
               <button type="button" className="btn btn-primary" onClick={() => handleCashApproval(true)}>Approve Cash Receipt</button>
               <button type="button" className="btn btn-danger" onClick={() => handleCashApproval(false)}>Reject Cash Receipt</button>
@@ -431,6 +457,8 @@ export function CollectorDetailPage() {
 /* ========================================================================== */
 export function GuarantorDetailPage() {
   const { id } = useParams();
+  const currentUser = sessionStore.getTenantUser();
+  const gurRoleActions = resolveRoleCapabilities(currentUser?.role).actions || {};
   const [guarantor, setGuarantor] = useState(null);
   const [loans, setLoans] = useState([]);
   const [msg, setMsg] = useState(null);
@@ -469,9 +497,11 @@ export function GuarantorDetailPage() {
             {guarantor.isHidden && <div><span className="badge badge-danger">HIDDEN GUARANTOR (Locatable by Mobile or GPS Address)</span></div>}
           </div>
         )}
-        <button type="button" className="btn btn-primary" onClick={signAgreement} style={{ marginBottom: 16 }}>
-          Sign Digital Guarantor Agreement
-        </button>
+        {!guarantor?.agreementSigned && (gurRoleActions.canSignOwnGuarantee || gurRoleActions.canManageGuarantors) && (
+          <button type="button" className="btn btn-primary" onClick={signAgreement} style={{ marginBottom: 16 }}>
+            Sign Digital Guarantor Agreement
+          </button>
+        )}
         <h3 style={{ margin: '0 0 10px', color: '#00F2FE' }}>Guaranteed Loans ({loans.length})</h3>
         {loans.map((l) => (
           <div key={l.id} style={{ padding: 10, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
@@ -488,6 +518,9 @@ export function GuarantorDetailPage() {
 /* ========================================================================== */
 export function StaffDetailPage() {
   const { id } = useParams();
+  const currentUser = sessionStore.getTenantUser();
+  const staffRoleActions = resolveRoleCapabilities(currentUser?.role).actions || {};
+  const canEditStaffSalary = staffRoleActions.canCreateStaff || staffRoleActions.canManagePayroll;
   const [staff, setStaff] = useState(null);
   const [groupForm, setGroupForm] = useState({ qualificationLevel: 'DEGREE', positionTitle: 'Senior Officer', salaryGrade: 'GRADE_3', baseSalary: '4500', allowances: '500' });
   const [msg, setMsg] = useState(null);
@@ -523,35 +556,44 @@ export function StaffDetailPage() {
         breadcrumb={['Dashboard', 'HR & Staff', staff?.employeeId || 'Profile']}
       />
       {msg && <div className="glass-panel" style={{ padding: 12, marginBottom: 14, color: msg.ok ? '#34D399' : '#FCA5A5' }}>{msg.text}</div>}
-      <div className="glass-panel" style={{ padding: 22, maxWidth: 640 }}>
-        <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>HR Qualification &amp; Salary Grade Assignment</h3>
-        <form onSubmit={handleSaveSalaryProfile} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div>
-            <label className="gbs-label">Qualification Level</label>
-            <select className="gbs-select" value={groupForm.qualificationLevel} onChange={(e) => setGroupForm({ ...groupForm, qualificationLevel: e.target.value })}>
-              <option value="CERTIFICATE">Certificate / Diploma</option>
-              <option value="DEGREE">Bachelor&apos;s Degree</option>
-              <option value="MASTERS">Master&apos;s / MBA</option>
-              <option value="PROFESSIONAL">CPA / ACCA / Chartered</option>
-            </select>
-          </div>
-          <div>
-            <label className="gbs-label">Salary Grade</label>
-            <input type="text" className="gbs-input" value={groupForm.salaryGrade} onChange={(e) => setGroupForm({ ...groupForm, salaryGrade: e.target.value })} />
-          </div>
-          <div className="gbs-grid-2" style={{ gap: 10 }}>
+      {canEditStaffSalary ? (
+        <div className="glass-panel" style={{ padding: 22, maxWidth: 640 }}>
+          <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>HR Qualification &amp; Salary Grade Assignment</h3>
+          <form onSubmit={handleSaveSalaryProfile} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div>
-              <label className="gbs-label">Base Salary (GHS)</label>
-              <input type="number" className="gbs-input" value={groupForm.baseSalary} onChange={(e) => setGroupForm({ ...groupForm, baseSalary: e.target.value })} />
+              <label className="gbs-label">Qualification Level</label>
+              <select className="gbs-select" value={groupForm.qualificationLevel} onChange={(e) => setGroupForm({ ...groupForm, qualificationLevel: e.target.value })}>
+                <option value="CERTIFICATE">Certificate / Diploma</option>
+                <option value="DEGREE">Bachelor&apos;s Degree</option>
+                <option value="MASTERS">Master&apos;s / MBA</option>
+                <option value="PROFESSIONAL">CPA / ACCA / Chartered</option>
+              </select>
             </div>
             <div>
-              <label className="gbs-label">Allowances (GHS)</label>
-              <input type="number" className="gbs-input" value={groupForm.allowances} onChange={(e) => setGroupForm({ ...groupForm, allowances: e.target.value })} />
+              <label className="gbs-label">Salary Grade</label>
+              <input type="text" className="gbs-input" value={groupForm.salaryGrade} onChange={(e) => setGroupForm({ ...groupForm, salaryGrade: e.target.value })} />
             </div>
+            <div className="gbs-grid-2" style={{ gap: 10 }}>
+              <div>
+                <label className="gbs-label">Base Salary (GHS)</label>
+                <input type="number" className="gbs-input" value={groupForm.baseSalary} onChange={(e) => setGroupForm({ ...groupForm, baseSalary: e.target.value })} />
+              </div>
+              <div>
+                <label className="gbs-label">Allowances (GHS)</label>
+                <input type="number" className="gbs-input" value={groupForm.allowances} onChange={(e) => setGroupForm({ ...groupForm, allowances: e.target.value })} />
+              </div>
+            </div>
+            <button type="submit" className="btn btn-primary">Save Qualification Salary Profile</button>
+          </form>
+        </div>
+      ) : (
+        <div className="glass-panel" style={{ padding: 22, maxWidth: 640 }}>
+          <h3 style={{ margin: '0 0 8px', color: '#D4AF37' }}>Staff Profile Summary</h3>
+          <div style={{ fontSize: '0.86rem', color: '#CBD5E1' }}>
+            <strong>Employee ID:</strong> {staff?.employeeId || id.slice(0, 8)} • <strong>Department:</strong> {staff?.department || 'Operations'} • <strong>Position:</strong> {staff?.position || 'N/A'}
           </div>
-          <button type="submit" className="btn btn-primary">Save Qualification Salary Profile</button>
-        </form>
-      </div>
+        </div>
+      )}
     </div>
   );
 }

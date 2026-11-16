@@ -9,6 +9,9 @@ import api, { devApi, sessionStore, getDeviceFingerprint } from '../services/api
 import { ROLES_META, resolveRoleMeta } from '../constants/rolesMeta';
 import VoiceChallengePanel from '../components/VoiceChallengePanel';
 import GbsBrandLogo from '../components/common/GbsBrandLogo';
+import { RoleVideoTrigger } from '../components/RoleVideoPresentationModal';
+import LiveCameraCapture from '../components/common/LiveCameraCapture';
+import FeedbackModal, { FeedbackFloatingTrigger } from '../components/common/FeedbackModal';
 
 /**
  * GBS Loan Management System — Dedicated Role-Specific Login & All-30-Role Account Registration
@@ -49,8 +52,9 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
   const [devPassword, setDevPassword] = useState('');
   const [devTotp, setDevTotp] = useState('');
 
-  // Registration State (supports all 30 roles + GPS Address)
+  // Registration State (supports all 30 roles + GPS Address + Mandatory Live Camera Capture)
   const [showRegPwd, setShowRegPwd] = useState(false);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [regData, setRegData] = useState({
     firstName: '',
     lastName: '',
@@ -62,6 +66,7 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
     password: '',
     tenantCode: '',
     role: roleMeta.key,
+    livePhoto: '',
   });
 
   // OTP Verification State
@@ -224,6 +229,13 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
     e.preventDefault();
     setError('');
     setSuccessMsg('');
+
+    const isDevReg = ['DEVELOPER', 'DEVELOPER_LANDLORD'].includes(regData.role);
+    if (!isDevReg && !regData.livePhoto) {
+      setError('A live camera capture shot is strictly required before completing registration. Please open the camera and capture your reference photo.');
+      return;
+    }
+
     setSubmitting(true);
 
     try {
@@ -362,12 +374,29 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
             {roleMeta.subtitle}
           </p>
 
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
             <span className={`badge ${envMode === 'demo' ? 'badge-warning' : 'badge-success'}`}>
               {envMode === 'demo' ? 'Isolated Demo Sandbox' : 'PostgreSQL Multi-Tenant Live'}
             </span>
             <span className="badge badge-cyan">Live SMS OTP</span>
             <span className="badge badge-gold">{ROLES_META.length} RBAC Portals</span>
+          </div>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+            <RoleVideoTrigger
+              userRole={roleMeta.key}
+              allowRoleSwitch
+              label={`Watch ${roleMeta.title} Walkthrough Video`}
+              className="btn btn-primary"
+              style={{
+                padding: '10px 16px',
+                fontSize: '0.84rem',
+                background: 'linear-gradient(135deg, #F4E07B 0%, #D4AF37 55%, #B45309 100%)',
+                color: '#060C18',
+                borderColor: '#FDE68A',
+                fontWeight: 800,
+              }}
+            />
           </div>
         </div>
       </div>
@@ -650,6 +679,44 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
             </div>
           ) : (
             <div className="glass-panel" style={{ padding: 28 }}>
+              <div
+                style={{
+                  marginBottom: 16,
+                  padding: '10px 14px',
+                  borderRadius: 10,
+                  background: 'rgba(212, 175, 55, 0.1)',
+                  border: '1px solid rgba(212, 175, 55, 0.4)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: 10,
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#F4E07B' }}>
+                    {roleMeta.title} — Role Video Guide
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: '#CBD5E1' }}>
+                    See exact commands, actions, controls &amp; steps before signing in.
+                  </div>
+                </div>
+                <RoleVideoTrigger
+                  userRole={roleMeta.key}
+                  allowRoleSwitch
+                  label="Watch Video"
+                  className="btn btn-primary"
+                  style={{
+                    padding: '6px 12px',
+                    fontSize: '0.78rem',
+                    background: 'linear-gradient(135deg, #F4E07B 0%, #D4AF37 60%, #B45309 100%)',
+                    color: '#060C18',
+                    borderColor: '#FDE68A',
+                    fontWeight: 700,
+                  }}
+                />
+              </div>
+
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
                 <Link
                   to={`/login/${roleMeta.slug}?env=production&mode=login&switch=1`}
@@ -868,6 +935,20 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
                     </div>
                   </div>
 
+                  {/* Mandatory Live Camera Reference Photo (Strictly Required for all except developer) */}
+                  {regData.role !== 'DEVELOPER' && regData.role !== 'DEVELOPER_LANDLORD' && (
+                    <LiveCameraCapture
+                      required
+                      label="Mandatory Live Camera Reference Photo (Strict KYC)"
+                      photo={regData.livePhoto}
+                      onPhotoCaptured={(dataUrl) => {
+                        setRegData((prev) => ({ ...prev, livePhoto: dataUrl }));
+                        setError('');
+                      }}
+                      onPhotoCleared={() => setRegData((prev) => ({ ...prev, livePhoto: '' }))}
+                    />
+                  )}
+
                   <button type="submit" disabled={submitting} className="btn btn-primary" style={{ justifyContent: 'center' }}>
                     {submitting ? 'Creating Account & Dispatching OTP...' : 'Create Account & Verify Mobile'}
                   </button>
@@ -1035,6 +1116,14 @@ export default function Login({ onAuthenticated, onDevAuthenticated }) {
           )}
         </div>
       </div>
+
+      {/* Floating Feedback Trigger & Modal */}
+      <FeedbackFloatingTrigger onOpen={() => setShowFeedbackModal(true)} />
+      <FeedbackModal
+        isOpen={showFeedbackModal}
+        onClose={() => setShowFeedbackModal(false)}
+        defaultCategory="API_ISSUE"
+      />
     </div>
   );
 }

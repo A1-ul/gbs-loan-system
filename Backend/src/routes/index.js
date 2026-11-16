@@ -14,6 +14,7 @@ const dashboardRoutes = require('./dashboard.routes');
 const meetingRoutes = require('./meeting.routes');
 const systemRoutes = require('./system.routes');
 const auditRoutes = require('./audit.routes');
+const feedbackRoutes = require('./feedback.routes');
 
 // Master Subsystem Modules
 const { voiceRoutes } = require('../modules/voice-auth');
@@ -59,6 +60,8 @@ router.use('/dashboard', dashboardRoutes);
 router.use('/meetings', meetingRoutes);
 router.use('/system', systemRoutes);
 router.use('/audit-logs', auditRoutes);
+router.use('/feedback', feedbackRoutes);
+router.use('/feedbacks', feedbackRoutes);
 
 // Blueprint & Subsystem Endpoints
 router.use('/demo', demoRoutes);

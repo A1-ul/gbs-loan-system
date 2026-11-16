@@ -51,8 +51,36 @@ async function registerStaff(req, res, next) {
 
 async function getPendingApprovals(req, res, next) {
   try {
-    const list = await staffService.getPendingStaffApprovals(req.tenantId || req.user?.tenantId);
+    const list = await staffService.getPendingStaffApprovals(req.tenantId || req.user?.tenantId, req.user);
     return success(res, list);
+  } catch (err) { next(err); }
+}
+
+async function ownerApproveStaff(req, res, next) {
+  try {
+    const updated = await staffService.ownerApproveStaff(req.user, req.params.id, req.body);
+    return success(res, updated, 'Employment request approved by Company Owner. Now awaiting Branch Manager final approval.');
+  } catch (err) { next(err); }
+}
+
+async function branchApproveStaff(req, res, next) {
+  try {
+    const updated = await staffService.branchApproveStaff(req.user, req.params.id, req.body);
+    return success(res, updated, 'Staff employed and activated successfully by Branch Manager.');
+  } catch (err) { next(err); }
+}
+
+async function getBranchApprovedStaff(req, res, next) {
+  try {
+    const list = await staffService.getBranchApprovedStaff(req.tenantId || req.user?.tenantId, req.query);
+    return success(res, list);
+  } catch (err) { next(err); }
+}
+
+async function verifyEmployment(req, res, next) {
+  try {
+    const result = await staffService.verifyEmployment(req.user, req.params.id, req.body);
+    return success(res, result, 'Employee dossier verified and acknowledged by Company Owner.');
   } catch (err) { next(err); }
 }
 
@@ -123,6 +151,10 @@ module.exports = {
   create,
   registerStaff,
   getPendingApprovals,
+  ownerApproveStaff,
+  branchApproveStaff,
+  getBranchApprovedStaff,
+  verifyEmployment,
   approveStaff,
   update,
   deactivate,

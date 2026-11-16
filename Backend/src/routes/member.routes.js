@@ -1,16 +1,16 @@
 const express = require('express');
 const memberController = require('../controllers/member.controller');
 const { authenticate } = require('../middleware/auth');
-const { staffAndAbove, managerOnly } = require('../middleware/rbac');
+const { staffAndAbove, managerOnly, requireCapability } = require('../middleware/rbac');
 const { validate } = require('../middleware/validate');
 const { upload } = require('../middleware/upload');
 const { memberSchemas } = require('../validators');
 
 const router = express.Router();
 
-router.post('/', authenticate, validate(memberSchemas.create), memberController.create);
-router.get('/', authenticate, memberController.getAll);
-router.get('/stats', authenticate, staffAndAbove, memberController.getStats);
+router.post('/', authenticate, requireCapability('canRegisterMember'), validate(memberSchemas.create), memberController.create);
+router.get('/', authenticate, requireCapability('canViewCustomerDirectory'), memberController.getAll);
+router.get('/stats', authenticate, requireCapability('canViewCustomerDirectory'), memberController.getStats);
 router.get('/me', authenticate, memberController.getMyProfile);
 router.get('/:id', authenticate, memberController.getById);
 router.put('/:id', authenticate, validate(memberSchemas.update), memberController.update);
