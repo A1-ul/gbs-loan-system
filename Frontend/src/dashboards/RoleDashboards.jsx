@@ -3600,6 +3600,14 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 6 }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ padding: '5px 10px', fontSize: '0.74rem' }}
+                      onClick={() => navigate(`/meetings/${m.id}`)}
+                    >
+                      Details <ArrowUpRight size={12} />
+                    </button>
                     {m.joinUrl && (
                       <a href={m.joinUrl} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ padding: '5px 10px', fontSize: '0.75rem' }}>
                         Join Room
@@ -3648,9 +3656,14 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                         <strong style={{ fontSize: '0.8rem', color: '#34D399' }}>[{snap.periodType || snap.reportType}] {snap.periodLabel || snap.reportType}</strong>
                         <div style={{ fontSize: '0.72rem', color: '#94A3B8' }}>Saved {new Date(snap.createdAt).toLocaleString()}</div>
                       </div>
-                      <button type="button" className="btn btn-secondary" style={{ padding: '4px 9px', fontSize: '0.74rem' }} onClick={() => handleDownloadWrappedCsv(snap.id, snap.periodLabel)}>
-                        <Download size={12} /> CSV
-                      </button>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button type="button" className="btn btn-secondary" style={{ padding: '4px 9px', fontSize: '0.74rem' }} onClick={() => navigate(`/reports/${snap.id}`)}>
+                          Details <ArrowUpRight size={12} />
+                        </button>
+                        <button type="button" className="btn btn-secondary" style={{ padding: '4px 9px', fontSize: '0.74rem' }} onClick={() => handleDownloadWrappedCsv(snap.id, snap.periodLabel)}>
+                          <Download size={12} /> CSV
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
