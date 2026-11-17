@@ -65,6 +65,7 @@ router.get('/cctv', managementAndAbove, ctrl.getCctvCameras);
 router.post('/cctv', managementAndAbove, ctrl.registerCctvCamera);
 router.put('/cctv/:id/toggle', managementAndAbove, ctrl.toggleCctvCamera);
 router.post('/cctv/:id/regenerate', managementAndAbove, ctrl.regenerateCctvLink);
+router.post('/cctv/:id/test', managementAndAbove, ctrl.testCctvCamera);
 router.delete('/cctv/:id', managementAndAbove, ctrl.deleteCctvCamera);
 
 module.exports = router;

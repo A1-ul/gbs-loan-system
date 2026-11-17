@@ -196,6 +196,18 @@ exports.deleteCctvCamera = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+exports.testCctvCamera = async (req, res, next) => {
+  try {
+    const result = await cctvService.testCameraStream(
+      req.params.id,
+      getTenantScope(req),
+      req.user?.id,
+      req.body || {}
+    );
+    return success(res, result, result.verificationMessage || 'CCTV stream link tested and recorded in audit log.');
+  } catch (err) { next(err); }
+};
+
 exports.verifyCctvMobileAccess = async (req, res, next) => {
   try {
     const cam = await cctvService.verifyMobileAccess({

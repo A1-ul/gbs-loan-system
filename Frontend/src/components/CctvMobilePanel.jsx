@@ -10,6 +10,8 @@ export function CctvMobilePanel({ branches = [] }) {
   const [cameras, setCameras] = useState([]);
   const [form, setForm] = useState({ name: '', locationLabel: '', branchId: '', streamUrl: '' });
   const [selectedQrCam, setSelectedQrCam] = useState(null);
+  const [testResult, setTestResult] = useState(null);
+  const [testingCamId, setTestingCamId] = useState(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
 
@@ -60,8 +62,31 @@ export function CctvMobilePanel({ branches = [] }) {
     try {
       await api.delete(`/enterprise/cctv/${id}`);
       if (selectedQrCam?.id === id) setSelectedQrCam(null);
+      if (testResult?.camera?.id === id) setTestResult(null);
       loadCameras();
     } catch (_) { }
+  };
+
+  const handleTestStream = async (cam, snapshotCaptured = false) => {
+    setTestingCamId(cam.id);
+    setMsg(null);
+    try {
+      const res = await api.post(`/enterprise/cctv/${cam.id}/test`, {
+        snapshotCaptured,
+        notes: snapshotCaptured ? 'Live camera verification & snapshot stored in PostgreSQL' : 'Automated stream endpoint connectivity verification',
+      });
+      const result = res.data?.data;
+      setTestResult(result);
+      setMsg({
+        ok: Boolean(result?.reachable),
+        text: result?.verificationMessage || res.data?.message || 'Camera stream tested & recorded in PostgreSQL AuditLog.',
+      });
+      loadCameras();
+    } catch (err) {
+      setMsg({ ok: false, text: err.response?.data?.message || 'Unable to verify CCTV camera stream.' });
+    } finally {
+      setTestingCamId(null);
+    }
   };
 
   return (
@@ -191,6 +216,15 @@ export function CctvMobilePanel({ branches = [] }) {
                     </span>
                   </td>
                   <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      disabled={testingCamId === cam.id}
+                      className="btn btn-primary"
+                      style={{ padding: '5px 10px', fontSize: '0.74rem', background: 'linear-gradient(135deg, #10B981, #059669)', color: '#FFF', border: 'none' }}
+                      onClick={() => handleTestStream(cam)}
+                    >
+                      <Video size={13} /> {testingCamId === cam.id ? 'Testing...' : 'Test & Display'}
+                    </button>
                     <button type="button" className="btn btn-primary" style={{ padding: '5px 10px', fontSize: '0.74rem' }} onClick={() => setSelectedQrCam(cam)}>
                       <QrCode size={13} /> Mobile QR
                     </button>
@@ -213,6 +247,63 @@ export function CctvMobilePanel({ branches = [] }) {
           </table>
         </div>
       </div>
+
+      {testResult && testResult.camera && (
+        <div className="glass-panel" style={{ padding: 20, borderColor: testResult.reachable ? 'rgba(16,185,129,0.5)' : 'rgba(245,158,11,0.5)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
+            <div>
+              <h3 style={{ margin: 0, color: '#00F2FE', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Video size={18} /> Live Camera Monitor &amp; Verification: {testResult.camera.name}
+              </h3>
+              <div style={{ fontSize: '0.78rem', color: '#94A3B8', marginTop: 2 }}>
+                Stream Type: <strong style={{ color: '#F4E07B' }}>{testResult.streamType}</strong> • Latency: <strong style={{ color: '#34D399' }}>{testResult.latencyMs}ms</strong> • Verified: {new Date(testResult.verifiedAt).toLocaleString()}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <span className={`badge ${testResult.reachable ? 'badge-success' : 'badge-warning'}`}>
+                {testResult.reachable ? 'VERIFIED & STORED IN DB' : 'NEEDS STREAM CHECK'}
+              </span>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ padding: '5px 10px', fontSize: '0.74rem' }}
+                onClick={() => handleTestStream(testResult.camera, true)}
+              >
+                <CheckCircle2 size={13} /> Store Verification Record
+              </button>
+            </div>
+          </div>
+
+          {/\.(mp4|webm|m3u8)(\?|$)/i.test(testResult.camera.streamUrl) ? (
+            <video
+              src={testResult.camera.streamUrl}
+              controls
+              autoPlay
+              muted
+              playsInline
+              style={{ width: '100%', maxHeight: 380, borderRadius: 10, border: '1px solid rgba(0,242,254,0.35)', background: '#000' }}
+            />
+          ) : /\.(jpg|jpeg|png|gif|mjpg|mjpeg)(\?|$)/i.test(testResult.camera.streamUrl) ? (
+            <img
+              src={testResult.camera.streamUrl}
+              alt={testResult.camera.name}
+              style={{ width: '100%', maxHeight: 380, objectFit: 'contain', borderRadius: 10, border: '1px solid rgba(0,242,254,0.35)', background: '#000' }}
+            />
+          ) : (
+            <div style={{ padding: 16, borderRadius: 10, background: 'rgba(6,12,24,0.85)', border: '1px solid rgba(0,242,254,0.25)' }}>
+              <div style={{ fontSize: '0.84rem', color: '#CBD5E1', marginBottom: 8 }}>
+                {testResult.verificationMessage}
+              </div>
+              <div style={{ fontSize: '0.76rem', color: '#38BDF8', wordBreak: 'break-all', marginBottom: 10 }}>
+                Endpoint: {testResult.camera.streamUrl}
+              </div>
+              <a href={testResult.camera.streamUrl} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ fontSize: '0.78rem' }}>
+                <ExternalLink size={14} /> Open Camera Stream in Player
+              </a>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

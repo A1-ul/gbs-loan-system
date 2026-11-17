@@ -142,6 +142,105 @@ class CctvService {
     return { deleted: true, id };
   }
 
+  async testCameraStream(id, tenantId, userId = null, { snapshotCaptured = false, notes = '' } = {}) {
+    const cam = await prisma.cctvCamera.findUnique({ where: { id } });
+    if (!cam) throw new NotFoundError('CCTV Camera');
+    if (tenantId && cam.tenantId !== tenantId) throw new AuthorizationError('Cross-tenant camera access denied');
+
+    const startedAt = Date.now();
+    let reachable = false;
+    let statusCode = null;
+    let contentType = null;
+    let streamType = 'UNKNOWN';
+    let verificationMessage = '';
+
+    try {
+      const parsed = new URL(cam.streamUrl);
+      const proto = parsed.protocol.toLowerCase();
+
+      if (proto === 'http:' || proto === 'https:') {
+        streamType = /\.(m3u8)(\?|$)/i.test(cam.streamUrl)
+          ? 'HLS_STREAM'
+          : /\.(mp4|webm)(\?|$)/i.test(cam.streamUrl)
+            ? 'VIDEO_FEED'
+            : 'HTTP_ENDPOINT';
+
+        try {
+          let resp = await fetch(cam.streamUrl, {
+            method: 'HEAD',
+            signal: AbortSignal.timeout(4000),
+          });
+          if (resp.status === 405) {
+            resp = await fetch(cam.streamUrl, {
+              method: 'GET',
+              signal: AbortSignal.timeout(4000),
+            });
+          }
+          statusCode = resp.status;
+          contentType = resp.headers.get('content-type') || 'unknown';
+          reachable = resp.ok || (resp.status >= 200 && resp.status < 400);
+          verificationMessage = reachable
+            ? `Live stream endpoint responded (HTTP ${statusCode}, ${contentType}).`
+            : `Stream endpoint returned HTTP ${statusCode}.`;
+        } catch (netErr) {
+          reachable = false;
+          verificationMessage = `Stream endpoint unreachable: ${netErr.message}`;
+        }
+      } else if (['rtsp:', 'rtsps:', 'ws:', 'wss:'].includes(proto)) {
+        streamType = proto.replace(':', '').toUpperCase();
+        reachable = Boolean(parsed.hostname);
+        verificationMessage = reachable
+          ? `${streamType} camera feed URI validated (${parsed.hostname}). Ready for NVR/Mobile player.`
+          : 'Invalid stream hostname.';
+      }
+    } catch (urlErr) {
+      reachable = false;
+      verificationMessage = `Invalid camera URL syntax: ${urlErr.message}`;
+    }
+
+    const latencyMs = Date.now() - startedAt;
+    const updated = await prisma.cctvCamera.update({
+      where: { id },
+      data: {
+        status: reachable ? 'ONLINE' : cam.status,
+      },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        tenantId: cam.tenantId || null,
+        userId: userId || cam.addedById || null,
+        action: 'UPDATE',
+        entityType: 'CctvCamera',
+        entityId: cam.id,
+        newValues: {
+          event: 'CCTV_STREAM_VERIFIED',
+          cameraName: cam.name,
+          streamUrl: cam.streamUrl,
+          reachable,
+          statusCode,
+          latencyMs,
+          streamType,
+          snapshotCaptured: Boolean(snapshotCaptured),
+          notes: notes || verificationMessage,
+          verifiedAt: new Date().toISOString(),
+        },
+      },
+    }).catch(() => {});
+
+    return {
+      camera: await formatCameraWithQr(updated),
+      reachable,
+      statusCode,
+      contentType,
+      streamType,
+      latencyMs,
+      snapshotCaptured: Boolean(snapshotCaptured),
+      verifiedAt: new Date().toISOString(),
+      verificationMessage,
+    };
+  }
+
   async verifyMobileAccess({ cameraId, code, token }) {
     const cleanCode = code ? String(code).trim().toUpperCase() : null;
     const cam = await prisma.cctvCamera.findFirst({

@@ -2121,7 +2121,33 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                 <input type="tel" required className="gbs-input" placeholder="Phone (+233...)" value={newMember.phone} onChange={(e) => setNewMember({ ...newMember, phone: e.target.value })} />
                 <input type="email" className="gbs-input" placeholder="Email (optional)" value={newMember.email} onChange={(e) => setNewMember({ ...newMember, email: e.target.value })} />
                 <input type="text" className="gbs-input" placeholder="Ghana Card No. (GHA-...)" value={newMember.ghanaCardNumber} onChange={(e) => setNewMember({ ...newMember, ghanaCardNumber: e.target.value })} />
-                <input type="text" required className="gbs-input" placeholder="GPS Digital Address (e.g. GA-183-8164)" value={newMember.gpsAddress} onChange={(e) => setNewMember({ ...newMember, gpsAddress: e.target.value })} />
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input type="text" required className="gbs-input" style={{ flex: 1 }} placeholder="GPS Digital Address (e.g. GA-183-8164)" value={newMember.gpsAddress} onChange={(e) => setNewMember({ ...newMember, gpsAddress: e.target.value })} />
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ padding: '8px 10px', fontSize: '0.74rem', whiteSpace: 'nowrap' }}
+                    onClick={() => {
+                      if (!navigator.geolocation) return showToast('Browser geolocation is unavailable.', true);
+                      navigator.geolocation.getCurrentPosition(
+                        (pos) => {
+                          const lat = Number(pos.coords.latitude).toFixed(5);
+                          const lng = Number(pos.coords.longitude).toFixed(5);
+                          setNewMember((prev) => ({
+                            ...prev,
+                            gpsAddress: prev.gpsAddress || `GPS-${lat},${lng}`,
+                            gpsLatitude: Number(lat),
+                            gpsLongitude: Number(lng),
+                          }));
+                          showToast(`GPS coordinates captured (${lat}, ${lng})`);
+                        },
+                        () => showToast('Unable to read device GPS. Please enter GhanaPost GPS address manually.', true)
+                      );
+                    }}
+                  >
+                    <MapPin size={13} /> Detect GPS
+                  </button>
+                </div>
                 <input type="text" className="gbs-input" placeholder="Physical Street / Business Location" value={newMember.address} onChange={(e) => setNewMember({ ...newMember, address: e.target.value })} />
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.8rem', color: '#CBD5E1', cursor: 'pointer' }}>
                   <input type="checkbox" checked={newMember.isHidden} onChange={(e) => setNewMember({ ...newMember, isHidden: e.target.checked })} />
