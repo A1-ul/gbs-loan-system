@@ -554,6 +554,51 @@ export default function DeveloperControlCenter({ onLogout }) {
           </div>
         </div>
 
+        {/* Organized Environment & Data Provenance Classification Strip */}
+        <div
+          className="glass-panel"
+          style={{
+            padding: '12px 18px',
+            marginBottom: 20,
+            borderColor: envInfo.dataMode === 'PRODUCTION_LIVE' ? 'rgba(16,185,129,0.45)' : 'rgba(212,175,55,0.4)',
+            background: 'linear-gradient(90deg, rgba(8,16,32,0.95), rgba(15,27,49,0.88))',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 12,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span className={`badge ${envInfo.dataMode === 'PRODUCTION_LIVE' ? 'badge-success' : 'badge-warning'}`}>
+              ENV: {envInfo.dataMode === 'PRODUCTION_LIVE' ? 'PRODUCTION_LIVE' : 'DEVELOPMENT_DEMO'}
+            </span>
+            <span style={{ fontSize: '0.8rem', color: '#E2E8F0' }}>
+              <strong>Live Production Institutions:</strong>{' '}
+              <span style={{ color: '#34D399', fontWeight: 800 }}>
+                {tenants.filter((t) => t.isProductionRecord || t.dataSource === 'PRODUCTION_LIVE').length}
+              </span>
+            </span>
+            <span style={{ fontSize: '0.8rem', color: '#94A3B8' }}>•</span>
+            <span style={{ fontSize: '0.8rem', color: '#E2E8F0' }}>
+              <strong>Development / Sandbox Records:</strong>{' '}
+              <span style={{ color: '#FBBF24', fontWeight: 800 }}>
+                {tenants.filter((t) => !t.isProductionRecord && t.dataSource !== 'PRODUCTION_LIVE').length}
+              </span>
+            </span>
+            <span style={{ fontSize: '0.8rem', color: '#94A3B8' }}>•</span>
+            <span style={{ fontSize: '0.8rem', color: '#E2E8F0' }}>
+              <strong>System Users:</strong>{' '}
+              <span style={{ color: '#38BDF8', fontWeight: 800 }}>{dashboard?.counts?.totalUsers ?? systemUsers.length}</span>
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span className="badge badge-cyan" style={{ fontSize: '0.7rem' }}>
+              GBS-RCCE ENGINE: 7-FIELD CONTRACT ACTIVE
+            </span>
+          </div>
+        </div>
+
         {/* Developer Authority Commands, Permitted Actions & Recent Developer Activities */}
         <div className="gbs-grid-2" style={{ marginBottom: 20 }}>
           <div className="glass-panel" style={{ padding: 18, borderColor: 'rgba(239, 68, 68, 0.35)' }}>
@@ -613,16 +658,12 @@ export default function DeveloperControlCenter({ onLogout }) {
           <BackButtonBar
             title={(() => {
               const found = [
-                { id: 'TENANTS', label: `Tenant Approvals & Subscriptions (${pendingTenants.length} Pending)` },
+                { id: 'TENANTS', label: `Institutions & Onboarding (${pendingTenants.length} Pending)` },
+                { id: 'USERS', label: 'System Users & Identity Directory' },
                 { id: 'GIS_MAP', label: 'Live Tenant & Collector GIS Map' },
-                { id: 'DIAGNOSTICS', label: 'AI Diagnostics, Crashes & Logs' },
-                { id: 'LOCK_SUBS', label: 'System Lock/Unlock & Security Alerts' },
-                { id: 'TENANTS', label: 'Institutions & Onboarding' },
-                { id: 'USERS', label: 'System Users' },
-                { id: 'GIS_MAP', label: 'Live GIS Map' },
-                { id: 'ACTIVITIES', label: 'System Activities & Audit' },
-                { id: 'DIAGNOSTICS', label: 'AI Diagnostics, Crashes & Logs' },
-                { id: 'LOCK_SUBS', label: 'System Lock & Subscriptions' },
+                { id: 'ACTIVITIES', label: 'System Activities & Immutable Audit' },
+                { id: 'DIAGNOSTICS', label: 'System Diagnostics, Crashes & Logs' },
+                { id: 'LOCK_SUBS', label: 'System Lock, Security & Subscriptions' },
                 { id: 'BACKUPS', label: 'PgDump Backups & Recovery' },
                 { id: 'MESSAGES', label: 'Broadcast to Tenants' },
                 { id: 'FEEDBACKS', label: 'Feedbacks & Inquiries' },
