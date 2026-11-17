@@ -189,6 +189,18 @@ async function authenticate(req, res, next) {
     req.tenant = user.tenant || null;
     req.isDemo = userIsDemoTenant;
     req.environmentMode = userIsDemoTenant ? 'DEMO_SANDBOX' : 'PRODUCTION_LIVE';
+
+    // Anti-spoofing Multi-Tenant Isolation:
+    // Block non-developer users who pass an x-tenant-id header different from their account's tenantId/code
+    const headerTenantId = req.headers['x-tenant-id'];
+    if (headerTenantId && user.tenantId && headerTenantId !== user.tenantId && headerTenantId !== user.tenant?.code) {
+      return res.status(403).json({
+        success: false,
+        code: 'TENANT_ISOLATION_VIOLATION',
+        message: 'Cross-tenant access denied. Users can only access their own institution records.',
+      });
+    }
+
     return next();
   } catch (err) {
     return next(err instanceof AppError ? err : new AuthenticationError(err.message));
