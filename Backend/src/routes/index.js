@@ -31,6 +31,34 @@ const demoRoutes = require('../modules/demo/demo.routes');
 
 const router = express.Router();
 
+router.get('/', (req, res) => {
+  const envProfile = getEnvironmentProfile();
+  return res.rcceSuccess('OPERATION_SUCCESS', {
+    engine: 'GBS Central System Response, Control and Communication Engine (GBS-RCCE)',
+    service: 'gbs-loan-api',
+    version: '2.0.0',
+    apiVersion: 'v1',
+    environment: envProfile.nodeEnv,
+    environmentTag: envProfile.environmentTag,
+    dataMode: envProfile.isProduction ? 'PRODUCTION_LIVE' : 'DEVELOPMENT_DEMO',
+    isProduction: envProfile.isProduction,
+    status: 'ACTIVE_ONLINE',
+    subsystems: {
+      health: '/api/v1/health',
+      developerPlatform: '/api/v1/developer',
+      auth: '/api/v1/auth',
+      tenants: '/api/v1/tenants',
+      loans: '/api/v1/loans',
+      members: '/api/v1/members',
+      payments: '/api/v1/payments',
+      staff: '/api/v1/staff',
+      reports: '/api/v1/reports',
+      dashboard: '/api/v1/dashboard',
+      gatewayStatus: '/api/v1/gateway/status',
+    },
+  }, 'GBS Central API Engine is active, operational, and linked.');
+});
+
 router.get('/health', (req, res) => {
   const envProfile = getEnvironmentProfile();
   res.json({
