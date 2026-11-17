@@ -1898,37 +1898,37 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                       </tr>
                     ) : (
                       filteredLoans.map((l) => (
-                      <tr key={l.id} onClick={() => navigate(`/loans/${l.id}`)} style={{ cursor: 'pointer' }}>
-                        <td><strong>{l.loanNumber}</strong></td>
-                        <td>{l.member?.user?.firstName || user?.firstName} {l.member?.user?.lastName || user?.lastName}</td>
-                        <td>{formatGHS(l.principalAmount)}</td>
-                        <td><span className={`badge ${['APPROVED', 'DISBURSED', 'ONGOING', 'PAID'].includes(l.status) ? 'badge-success' : ['OVERDUE', 'DEFAULTED', 'REJECTED'].includes(l.status) ? 'badge-danger' : 'badge-warning'}`}>{l.status}</span></td>
-                        <td style={{ display: 'flex', gap: 6 }}>
-                          <button type="button" className="btn btn-secondary" style={{ padding: '4px 9px', fontSize: '0.74rem' }}>
-                            Open <ArrowUpRight size={12} />
-                          </button>
-                          {['DISBURSED', 'ONGOING', 'OVERDUE', 'APPROVED'].includes(l.status) && (
-                            <button
-                              type="button"
-                              className="btn btn-primary"
-                              style={{ padding: '4px 9px', fontSize: '0.74rem' }}
-                              onClick={(ev) => {
-                                ev.stopPropagation();
-                                const outBal = Number(l.outstandingAmount ?? l.totalOutstanding ?? l.principalAmount ?? 0);
-                                setNewPayment((prev) => ({
-                                  ...prev,
-                                  loanId: l.id,
-                                  amount: outBal > 0 ? String(Math.min(outBal, Math.round((outBal / Math.max(1, Number(l.termMonths || 12))) * 100) / 100)) : prev.amount,
-                                }));
-                                navigate('/dashboard/tab/PAYMENTS');
-                              }}
-                            >
-                              Pay
+                        <tr key={l.id} onClick={() => navigate(`/loans/${l.id}`)} style={{ cursor: 'pointer' }}>
+                          <td><strong>{l.loanNumber}</strong></td>
+                          <td>{l.member?.user?.firstName || user?.firstName} {l.member?.user?.lastName || user?.lastName}</td>
+                          <td>{formatGHS(l.principalAmount)}</td>
+                          <td><span className={`badge ${['APPROVED', 'DISBURSED', 'ONGOING', 'PAID'].includes(l.status) ? 'badge-success' : ['OVERDUE', 'DEFAULTED', 'REJECTED'].includes(l.status) ? 'badge-danger' : 'badge-warning'}`}>{l.status}</span></td>
+                          <td style={{ display: 'flex', gap: 6 }}>
+                            <button type="button" className="btn btn-secondary" style={{ padding: '4px 9px', fontSize: '0.74rem' }}>
+                              Open <ArrowUpRight size={12} />
                             </button>
-                          )}
-                        </td>
-                      </tr>
-                    )))}
+                            {['DISBURSED', 'ONGOING', 'OVERDUE', 'APPROVED'].includes(l.status) && (
+                              <button
+                                type="button"
+                                className="btn btn-primary"
+                                style={{ padding: '4px 9px', fontSize: '0.74rem' }}
+                                onClick={(ev) => {
+                                  ev.stopPropagation();
+                                  const outBal = Number(l.outstandingAmount ?? l.totalOutstanding ?? l.principalAmount ?? 0);
+                                  setNewPayment((prev) => ({
+                                    ...prev,
+                                    loanId: l.id,
+                                    amount: outBal > 0 ? String(Math.min(outBal, Math.round((outBal / Math.max(1, Number(l.termMonths || 12))) * 100) / 100)) : prev.amount,
+                                  }));
+                                  navigate('/dashboard/tab/PAYMENTS');
+                                }}
+                              >
+                                Pay
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      )))}
                   </tbody>
                 </table>
               </div>
