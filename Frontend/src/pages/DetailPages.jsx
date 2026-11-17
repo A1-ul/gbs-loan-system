@@ -985,9 +985,9 @@ export function ProfileSecurityPage() {
 }
 
 /* ========================================================================== */
-/* 10. SCHOOL / INSTITUTION DETAIL PAGE (/schools/:id, /tenants/:id)         */
+/* 10. TENANT / INSTITUTION DETAIL PAGE (/tenants/:id)                       */
 /* ========================================================================== */
-export function SchoolDetailPage() {
+export function TenantDetailPage() {
   const { id } = useParams();
   const [tenant, setTenant] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -1013,7 +1013,7 @@ export function SchoolDetailPage() {
       <BackButtonBar
         title={`Institution Profile: ${tenant?.name || 'Institution'}`}
         subtitle={`Code: ${tenant?.code || id} • ${tenant?.city || 'Accra'}, ${tenant?.region || 'Ghana'}`}
-        breadcrumb={['Dashboard', 'School / Institution', tenant?.code || 'Profile']}
+        breadcrumb={['Dashboard', 'Institution Profile', tenant?.code || 'Profile']}
         fallbackPath="/dashboard?tab=OVERVIEW"
       />
 
@@ -1028,7 +1028,7 @@ export function SchoolDetailPage() {
           )}
           <div>
             <h3 style={{ margin: 0, color: '#F4E07B' }}>{tenant?.name}</h3>
-            <div style={{ fontSize: '0.85rem', color: '#94A3B8' }}>{tenant?.institutionType || 'Microfinance / Educational Institution'}</div>
+            <div style={{ fontSize: '0.85rem', color: '#94A3B8' }}>{tenant?.institutionType || 'Microfinance / Financial Institution'}</div>
             <span className={`badge ${tenant?.status === 'ACTIVE' ? 'badge-success' : 'badge-warning'}`} style={{ marginTop: 6 }}>
               {tenant?.status || 'ACTIVE'}
             </span>

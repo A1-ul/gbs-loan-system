@@ -12,7 +12,7 @@ const formatGHS = (n) =>
   `GHS ${Number(n || 0).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 /* ========================================================================== */
-/* 1. DEVELOPER TENANT / SCHOOL DETAIL PAGE (/dev-portal/tenants/:id)        */
+/* 1. DEVELOPER TENANT / FINANCIAL INSTITUTION DETAIL PAGE (/dev-portal/tenants/:id) */
 /* ========================================================================== */
 export function DeveloperTenantDetailPage() {
   const { id } = useParams();

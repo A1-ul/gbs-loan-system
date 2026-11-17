@@ -22,7 +22,7 @@ import {
   CollectorDetailPage,
   GuarantorDetailPage,
   StaffDetailPage,
-  SchoolDetailPage,
+  TenantDetailPage,
   ReportDetailPage,
   MeetingDetailPage,
   AdminUsersCrossCheckPage,
@@ -231,14 +231,11 @@ function TenantShell({ user, onLogout, lockBanner }) {
           <Route path="/dashboard/tab/:tabId" element={<RoleDashboards user={user} />} />
           <Route path="/loans/:id" element={<LoanDetailPage />} />
           <Route path="/members/:id" element={<MemberDetailPage />} />
-          <Route path="/students/:id" element={<MemberDetailPage />} />
           <Route path="/payments/:id" element={<PaymentDetailPage />} />
           <Route path="/collectors/:id" element={<CollectorDetailPage />} />
           <Route path="/guarantors/:id" element={<GuarantorDetailPage />} />
           <Route path="/staff/:id" element={<StaffDetailPage />} />
-          <Route path="/teachers/:id" element={<StaffDetailPage />} />
-          <Route path="/schools/:id" element={<SchoolDetailPage />} />
-          <Route path="/tenants/:id" element={<SchoolDetailPage />} />
+          <Route path="/tenants/:id" element={<TenantDetailPage />} />
           <Route path="/reports/:id" element={<ReportDetailPage />} />
           <Route path="/meetings/:id" element={<MeetingDetailPage />} />
           <Route path="/admin/users-crosscheck" element={<AdminUsersCrossCheckPage />} />
@@ -275,7 +272,6 @@ function ProtectedDeveloperRoute({ devUser, onDevLogout }) {
       <Route path="/" element={<DeveloperControlCenter onLogout={onDevLogout} />} />
       <Route path="/tab/:tabId" element={<DeveloperControlCenter onLogout={onDevLogout} />} />
       <Route path="/tenants/:id" element={<DeveloperTenantDetailPage />} />
-      <Route path="/schools/:id" element={<DeveloperTenantDetailPage />} />
       <Route path="/users/:id" element={<DeveloperUserDetailPage />} />
       <Route path="/subscriptions/:id" element={<DeveloperSubscriptionDetailPage />} />
       <Route path="/activities/:id" element={<DeveloperActivityDetailPage />} />
