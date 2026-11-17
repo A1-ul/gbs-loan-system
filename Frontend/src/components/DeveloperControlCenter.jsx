@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   Terminal, Cpu, Lock, Unlock, Database, RefreshCw, Activity, Building2,
   MapPin, ShieldAlert, Send, CheckCircle2, XCircle, Clock, LogOut, Wrench, Trash2, BookOpen, ArrowUpRight, ArrowLeft, Download, Video,
-  MessageSquare, Star
+  MessageSquare, Star, Eye, Users, User
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 import api, { devApi, sessionStore, API_ORIGIN } from '../services/api';
@@ -14,7 +14,7 @@ import OperatingGuideModal from './OperatingGuideModal';
 import RoleVideoPresentationModal from './RoleVideoPresentationModal';
 import GbsBrandLogo from './common/GbsBrandLogo';
 
-const DEV_VALID_TABS = ['TENANTS', 'GIS_MAP', 'DIAGNOSTICS', 'LOCK_SUBS', 'BACKUPS', 'MESSAGES', 'FEEDBACKS'];
+const DEV_VALID_TABS = ['TENANTS', 'USERS', 'GIS_MAP', 'ACTIVITIES', 'DIAGNOSTICS', 'LOCK_SUBS', 'BACKUPS', 'MESSAGES', 'FEEDBACKS'];
 
 /**
  * Hidden Developer Control Center (Step 5 Master Blueprint + Multi-Tenant SaaS Landlord)
@@ -46,6 +46,12 @@ export default function DeveloperControlCenter({ onLogout }) {
   const [feedbacks, setFeedbacks] = useState([]);
   const [devFeedbackReply, setDevFeedbackReply] = useState({});
   const [respondingDevFbId, setRespondingDevFbId] = useState(null);
+  const [systemUsers, setSystemUsers] = useState([]);
+  const [activitiesList, setActivitiesList] = useState([]);
+  const [subscriptionsList, setSubscriptionsList] = useState([]);
+  const [userSearch, setUserSearch] = useState('');
+  const [userRoleFilter, setUserRoleFilter] = useState('');
+  const [activitySearch, setActivitySearch] = useState('');
 
   const [msgForm, setMsgForm] = useState({ tenantId: '', title: '', body: '', messageType: 'ANNOUNCEMENT' });
   const [lockReason, setLockReason] = useState('');
@@ -83,6 +89,9 @@ export default function DeveloperControlCenter({ onLogout }) {
         backupsRes,
         msgsRes,
         feedbacksRes,
+        usersRes,
+        activitiesRes,
+        subsRes,
         resHealth,
       ] = await Promise.all([
         devApi.get('/developer/dashboard'),
@@ -96,6 +105,9 @@ export default function DeveloperControlCenter({ onLogout }) {
         devApi.get('/developer/backups'),
         devApi.get('/developer/messages'),
         devApi.get('/developer/feedbacks').catch(() => ({ data: { data: [] } })),
+        devApi.get('/developer/users?limit=100').catch(() => ({ data: { users: [] } })),
+        devApi.get('/developer/activities?limit=100').catch(() => ({ data: { activities: [] } })),
+        devApi.get('/developer/subscriptions/all?limit=100').catch(() => ({ data: { subscriptions: [] } })),
         api.get('/health').catch(() => ({ data: { data: null } })),
       ]);
 
@@ -110,6 +122,9 @@ export default function DeveloperControlCenter({ onLogout }) {
       setBackups(backupsRes.data?.data || []);
       setMessages(msgsRes.data?.data || []);
       setFeedbacks(feedbacksRes.data?.data || []);
+      setSystemUsers(usersRes.data?.users || []);
+      setActivitiesList(activitiesRes.data?.activities || []);
+      setSubscriptionsList(subsRes.data?.subscriptions || []);
       const healthData = resHealth?.data?.data || resHealth?.data;
       if (healthData?.dataMode) {
         setEnvInfo({ environment: healthData.environment, dataMode: healthData.dataMode });
@@ -602,6 +617,12 @@ export default function DeveloperControlCenter({ onLogout }) {
                 { id: 'GIS_MAP', label: 'Live Tenant & Collector GIS Map' },
                 { id: 'DIAGNOSTICS', label: 'AI Diagnostics, Crashes & Logs' },
                 { id: 'LOCK_SUBS', label: 'System Lock/Unlock & Security Alerts' },
+                { id: 'TENANTS', label: 'Institutions & Onboarding' },
+                { id: 'USERS', label: 'System Users' },
+                { id: 'GIS_MAP', label: 'Live GIS Map' },
+                { id: 'ACTIVITIES', label: 'System Activities & Audit' },
+                { id: 'DIAGNOSTICS', label: 'AI Diagnostics, Crashes & Logs' },
+                { id: 'LOCK_SUBS', label: 'System Lock & Subscriptions' },
                 { id: 'BACKUPS', label: 'PgDump Backups & Recovery' },
                 { id: 'MESSAGES', label: 'Broadcast to Tenants' },
                 { id: 'FEEDBACKS', label: 'Feedbacks & Inquiries' },
@@ -617,11 +638,13 @@ export default function DeveloperControlCenter({ onLogout }) {
         {/* Subsystem Tabs (Organized Command Bar with Icons & Badges) */}
         <div className="dashboard-tab-bar" role="navigation" aria-label="Developer Control Subsystems">
           {[
-            { id: 'TENANTS', label: 'Tenant Approvals & Subscriptions', icon: Building2, badge: pendingTenants.length > 0 ? `${tenants.length}+${pendingTenants.length}` : tenants.length },
-            { id: 'GIS_MAP', label: 'Live Tenant & Collector GIS Map', icon: MapPin, badge: gisData?.features?.length || 0 },
-            { id: 'DIAGNOSTICS', label: 'AI Diagnostics, Crashes & Logs', icon: Wrench, badge: crashes.length },
-            { id: 'LOCK_SUBS', label: 'System Lock/Unlock & Alerts', icon: ShieldAlert, badge: alerts.length },
-            { id: 'BACKUPS', label: 'PgDump Backups & Recovery', icon: Database, badge: backups.length },
+            { id: 'TENANTS', label: 'Institutions & Onboarding', icon: Building2, badge: pendingTenants.length > 0 ? `${tenants.length}+${pendingTenants.length}` : tenants.length },
+            { id: 'USERS', label: 'System Users', icon: Users, badge: systemUsers.length },
+            { id: 'GIS_MAP', label: 'Live GIS Map', icon: MapPin, badge: gisData?.features?.length || 0 },
+            { id: 'ACTIVITIES', label: 'System Activities', icon: Activity, badge: activitiesList.length },
+            { id: 'DIAGNOSTICS', label: 'Diagnostics & Alerts', icon: Wrench, badge: crashes.length },
+            { id: 'LOCK_SUBS', label: 'System Lock & Subscriptions', icon: ShieldAlert, badge: alerts.length },
+            { id: 'BACKUPS', label: 'PgDump Backups', icon: Database, badge: backups.length },
             { id: 'MESSAGES', label: 'Broadcast to Tenants', icon: Send, badge: messages.length },
             { id: 'FEEDBACKS', label: 'Feedbacks & Inquiries', icon: MessageSquare, badge: feedbacks.length },
           ].map((t) => {
@@ -692,6 +715,14 @@ export default function DeveloperControlCenter({ onLogout }) {
                           style={{ padding: '8px 14px' }}
                         >
                           <XCircle size={15} /> Reject
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/dev-portal/tenants/${t.id}`)}
+                          className="btn btn-secondary"
+                          style={{ padding: '8px 14px' }}
+                        >
+                          <Eye size={15} /> View Details
                         </button>
                       </div>
                     </div>
@@ -845,6 +876,14 @@ export default function DeveloperControlCenter({ onLogout }) {
                               <button type="button" className="btn btn-secondary" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => handleRenewTenant(t.id, planChoices[t.id] || 'PLAN_3M')}>
                                 Apply Plan
                               </button>
+                              <button
+                                type="button"
+                                className="btn btn-secondary"
+                                style={{ padding: '5px 10px', fontSize: '0.75rem', borderColor: '#38BDF8', color: '#93C5FD' }}
+                                onClick={() => navigate(`/dev-portal/tenants/${t.id}`)}
+                              >
+                                <Eye size={12} /> View Details
+                              </button>
                               {isTenantLocked ? (
                                 <button type="button" className="btn btn-primary" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => handleUnlockTenant(t.id, 30)}>
                                   <Unlock size={12} /> Unlock
@@ -895,6 +934,189 @@ export default function DeveloperControlCenter({ onLogout }) {
           </div>
         )}
 
+        {/* TAB 2: SYSTEM USERS ACROSS ALL INSTITUTIONS */}
+        {activeTab === 'USERS' && (
+          <div className="glass-panel" style={{ padding: 22 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
+              <div>
+                <h3 style={{ margin: 0, color: '#D4AF37', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Users size={18} /> System Users Across All Institutions ({systemUsers.length})
+                </h3>
+                <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#94A3B8' }}>
+                  Live PostgreSQL user accounts with roles, institution affiliations, and security KYC status.
+                </p>
+              </div>
+            </div>
+
+            <div className="filter-toolbar" style={{ marginBottom: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <input
+                type="text"
+                className="gbs-input"
+                style={{ flex: '1 1 220px', padding: '7px 12px', fontSize: '0.82rem' }}
+                placeholder="Search user by name, email, phone, or username..."
+                value={userSearch}
+                onChange={(e) => setUserSearch(e.target.value)}
+              />
+              <select
+                className="gbs-select"
+                style={{ flex: '0 1 180px', padding: '7px 12px', fontSize: '0.8rem' }}
+                value={userRoleFilter}
+                onChange={(e) => setUserRoleFilter(e.target.value)}
+              >
+                <option value="">All Roles</option>
+                <option value="COMPANY_OWNER">Company Owner</option>
+                <option value="BRANCH_MANAGER">Branch Manager</option>
+                <option value="LOAN_OFFICER">Loan Officer</option>
+                <option value="ACCOUNTANT">Accountant</option>
+                <option value="MEMBER">Borrower / Member</option>
+                <option value="GUARANTOR">Guarantor</option>
+                <option value="COLLECTOR">Collector</option>
+              </select>
+            </div>
+
+            {systemUsers.length === 0 ? (
+              <p style={{ color: '#94A3B8', fontSize: '0.88rem' }}>No user records available.</p>
+            ) : (
+              <div className="data-table-container">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>User</th>
+                      <th>System Role</th>
+                      <th>Institution Affiliation</th>
+                      <th>Account Status</th>
+                      <th>Record Origin</th>
+                      <th>Created Date</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {systemUsers
+                      .filter((u) => {
+                        const q = userSearch.trim().toLowerCase();
+                        const matchesQ =
+                          !q ||
+                          (u.firstName || '').toLowerCase().includes(q) ||
+                          (u.lastName || '').toLowerCase().includes(q) ||
+                          (u.email || '').toLowerCase().includes(q) ||
+                          (u.phone || '').toLowerCase().includes(q);
+                        const matchesRole = !userRoleFilter || u.role === userRoleFilter;
+                        return matchesQ && matchesRole;
+                      })
+                      .map((u) => (
+                        <tr key={u.id}>
+                          <td>
+                            <strong>{u.firstName} {u.lastName}</strong>
+                            <div style={{ fontSize: '0.74rem', color: '#94A3B8' }}>{u.email} • {u.phone}</div>
+                          </td>
+                          <td><span className="badge badge-gold">{u.role}</span></td>
+                          <td>{u.tenant?.name || 'Independent / Lead'} ({u.tenant?.code || 'GBS'})</td>
+                          <td>
+                            <span className={`badge ${u.status === 'ACTIVE' ? 'badge-success' : 'badge-danger'}`}>
+                              {u.status}
+                            </span>
+                          </td>
+                          <td>
+                            <span style={{ fontSize: '0.74rem', color: u.isProductionRecord ? '#34D399' : '#FBBF24' }}>
+                              {u.isProductionRecord ? 'PRODUCTION' : 'DEMO/SEED'}
+                            </span>
+                          </td>
+                          <td>{new Date(u.createdAt).toLocaleDateString()}</td>
+                          <td>
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/dev-portal/users/${u.id}`)}
+                              className="btn btn-secondary"
+                              style={{ padding: '4px 10px', fontSize: '0.75rem', borderColor: '#38BDF8', color: '#93C5FD' }}
+                            >
+                              <Eye size={12} /> View Details
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB: SYSTEM ACTIVITIES & AUDIT TRAIL */}
+        {activeTab === 'ACTIVITIES' && (
+          <div className="glass-panel" style={{ padding: 22 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
+              <div>
+                <h3 style={{ margin: 0, color: '#D4AF37', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Activity size={18} /> System Activities &amp; Comprehensive Audit Trail ({activitiesList.length})
+                </h3>
+                <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#94A3B8' }}>
+                  Complete immutable ledger of operations, tenant administrative actions, and security events.
+                </p>
+              </div>
+            </div>
+
+            <div className="filter-toolbar" style={{ marginBottom: 14 }}>
+              <input
+                type="text"
+                className="gbs-input"
+                style={{ flex: '1 1 240px', padding: '7px 12px', fontSize: '0.82rem' }}
+                placeholder="Search activity by action name or component..."
+                value={activitySearch}
+                onChange={(e) => setActivitySearch(e.target.value)}
+              />
+            </div>
+
+            {activitiesList.length === 0 ? (
+              <p style={{ color: '#94A3B8', fontSize: '0.88rem' }}>No activity records available.</p>
+            ) : (
+              <div className="data-table-container">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Action</th>
+                      <th>Target Component</th>
+                      <th>Actor / Developer</th>
+                      <th>Status Outcome</th>
+                      <th>Timestamp</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activitiesList
+                      .filter((a) => {
+                        const q = activitySearch.trim().toLowerCase();
+                        return !q || (a.action || '').toLowerCase().includes(q) || (a.targetComponent || '').toLowerCase().includes(q);
+                      })
+                      .map((a) => (
+                        <tr key={a.id}>
+                          <td><strong>{a.action}</strong></td>
+                          <td>{a.targetComponent || 'SYSTEM'}</td>
+                          <td>{a.developerUser?.username || 'SYSTEM_OPERATOR'}</td>
+                          <td>
+                            <span className={`badge ${a.status === 'SUCCESS' ? 'badge-success' : 'badge-danger'}`}>
+                              {a.status || 'SUCCESS'}
+                            </span>
+                          </td>
+                          <td>{new Date(a.createdAt).toLocaleString()}</td>
+                          <td>
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/dev-portal/activities/${a.id}`)}
+                              className="btn btn-secondary"
+                              style={{ padding: '4px 10px', fontSize: '0.75rem', borderColor: '#38BDF8', color: '#93C5FD' }}
+                            >
+                              <Eye size={12} /> View Details
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* TAB 2: REAL INTERACTIVE GIS & GOOGLE MAPS PHONE LOCATOR */}
         {activeTab === 'GIS_MAP' && (
           <LiveLocationTrackerMap markers={gisData.features || []} mode="developer" />
@@ -936,12 +1158,22 @@ export default function DeveloperControlCenter({ onLogout }) {
               <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>Developer Landlord Audit Stream ({logs.length})</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 460, overflowY: 'auto' }}>
                 {logs.map((l) => (
-                  <div key={l.id} style={{ padding: 10, borderRadius: 8, background: 'rgba(6,12,24,0.85)', border: '1px solid rgba(212,175,55,0.2)', fontSize: '0.78rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#F4E07B', fontWeight: 700 }}>
-                      <span>{l.type}</span>
-                      <span style={{ color: '#64748B', fontWeight: 400 }}>{l.time ? new Date(l.time).toLocaleString() : ''}</span>
+                  <div key={l.id} style={{ padding: 10, borderRadius: 8, background: 'rgba(6,12,24,0.85)', border: '1px solid rgba(212,175,55,0.2)', fontSize: '0.78rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                    <div>
+                      <div style={{ display: 'flex', gap: 8, color: '#F4E07B', fontWeight: 700, alignItems: 'center' }}>
+                        <span>{l.type}</span>
+                        <span style={{ color: '#64748B', fontWeight: 400 }}>{l.time ? new Date(l.time).toLocaleString() : ''}</span>
+                      </div>
+                      <div style={{ color: '#CBD5E1', marginTop: 3 }}>{l.msg}</div>
                     </div>
-                    <div style={{ color: '#CBD5E1', marginTop: 3 }}>{l.msg}</div>
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/dev-portal/activities/${l.id}`)}
+                      className="btn btn-secondary"
+                      style={{ padding: '3px 8px', fontSize: '0.72rem', borderColor: '#38BDF8', color: '#93C5FD' }}
+                    >
+                      <Eye size={11} /> Details
+                    </button>
                   </div>
                 ))}
               </div>
@@ -988,15 +1220,77 @@ export default function DeveloperControlCenter({ onLogout }) {
                       </div>
                       <div style={{ fontSize: '0.78rem', color: '#CBD5E1' }}>{a.description || a.message || a.title}</div>
                     </div>
-                    {!a.resolved && (
-                      <button type="button" className="btn btn-secondary" style={{ padding: '5px 10px', fontSize: '0.74rem' }} onClick={() => handleResolveAlert(a.id)}>
-                        Resolve
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        style={{ padding: '5px 10px', fontSize: '0.74rem', borderColor: '#38BDF8', color: '#93C5FD' }}
+                        onClick={() => navigate(`/dev-portal/security-alerts/${a.id}`)}
+                      >
+                        <Eye size={12} /> View Details
                       </button>
-                    )}
+                      {!a.resolved && (
+                        <button type="button" className="btn btn-secondary" style={{ padding: '5px 10px', fontSize: '0.74rem' }} onClick={() => handleResolveAlert(a.id)}>
+                          Resolve
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
                 {alerts.length === 0 && <div style={{ color: '#34D399', fontSize: '0.85rem' }}>All security alerts cleared.</div>}
               </div>
+            </div>
+
+            {/* Subscriptions Ledger */}
+            <div className="glass-panel" style={{ gridColumn: '1 / -1', padding: 22, marginTop: 14 }}>
+              <h3 style={{ margin: '0 0 12px', color: '#D4AF37', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <CreditCard size={18} /> Active Institution Subscriptions &amp; Trial Ledger ({subscriptionsList.length})
+              </h3>
+              {subscriptionsList.length === 0 ? (
+                <p style={{ color: '#94A3B8', fontSize: '0.88rem' }}>No subscription records available.</p>
+              ) : (
+                <div className="data-table-container">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Institution</th>
+                        <th>Plan Code</th>
+                        <th>Tier</th>
+                        <th>Price Amount</th>
+                        <th>Days Left</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {subscriptionsList.map((s) => (
+                        <tr key={s.id}>
+                          <td><strong>{s.tenant?.name || 'Institution'}</strong> ({s.tenant?.code || 'GBS'})</td>
+                          <td>{s.planCode}</td>
+                          <td><span className="badge badge-gold">{s.planTier}</span></td>
+                          <td>{formatGHS(s.priceAmount || 0)}</td>
+                          <td>
+                            <span style={{ fontWeight: 700, color: s.isLifetime ? '#F4E07B' : (s.daysLeft || 0) <= 10 ? '#F87171' : '#34D399' }}>
+                              {s.isLifetime ? 'LIFETIME' : `${s.daysLeft ?? 0} days`}
+                            </span>
+                          </td>
+                          <td><span className={`badge ${s.status === 'ACTIVE' ? 'badge-success' : 'badge-danger'}`}>{s.status}</span></td>
+                          <td>
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/dev-portal/subscriptions/${s.id}`)}
+                              className="btn btn-secondary"
+                              style={{ padding: '4px 10px', fontSize: '0.75rem', borderColor: '#38BDF8', color: '#93C5FD' }}
+                            >
+                              <Eye size={12} /> View Details
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         )}

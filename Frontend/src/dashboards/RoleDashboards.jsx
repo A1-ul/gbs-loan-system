@@ -1890,7 +1890,14 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredLoans.map((l) => (
+                    {filteredLoans.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} style={{ textAlign: 'center', padding: '28px 12px', color: '#94A3B8' }}>
+                          No records available
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredLoans.map((l) => (
                       <tr key={l.id} onClick={() => navigate(`/loans/${l.id}`)} style={{ cursor: 'pointer' }}>
                         <td><strong>{l.loanNumber}</strong></td>
                         <td>{l.member?.user?.firstName || user?.firstName} {l.member?.user?.lastName || user?.lastName}</td>
@@ -1921,14 +1928,7 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                           )}
                         </td>
                       </tr>
-                    ))}
-                    {filteredLoans.length === 0 && (
-                      <tr>
-                        <td colSpan={5} style={{ textAlign: 'center', color: '#94A3B8', padding: 24 }}>
-                          No loan records match the current filter.
-                        </td>
-                      </tr>
-                    )}
+                    )))}
                   </tbody>
                 </table>
               </div>
@@ -2089,7 +2089,7 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                     {filteredPayments.length === 0 && (
                       <tr>
                         <td colSpan={6} style={{ textAlign: 'center', color: '#94A3B8', padding: 24 }}>
-                          No repayments match the current filter.
+                          No records available.
                         </td>
                       </tr>
                     )}
@@ -2223,8 +2223,8 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                     })}
                     {members.length === 0 && (
                       <tr>
-                        <td colSpan={5} style={{ textAlign: 'center', color: '#94A3B8', padding: 24 }}>
-                          No members/customers found matching your search.
+                        <td colSpan={6} style={{ textAlign: 'center', color: '#94A3B8', padding: 24 }}>
+                          No records available.
                         </td>
                       </tr>
                     )}
@@ -2419,6 +2419,13 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                           </td>
                         </tr>
                       ))}
+                      {salaries.length === 0 && (
+                        <tr>
+                          <td colSpan={5} style={{ textAlign: 'center', color: '#94A3B8', padding: 24 }}>
+                            No records available.
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -2506,6 +2513,13 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                           </td>
                         </tr>
                       ))}
+                      {salaries.length === 0 && (
+                        <tr>
+                          <td colSpan={5} style={{ textAlign: 'center', color: '#94A3B8', padding: 24 }}>
+                            No records available.
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -2924,6 +2938,13 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                           </tr>
                         );
                       })}
+                      {staffList.length === 0 && (
+                        <tr>
+                          <td colSpan={5} style={{ textAlign: 'center', color: '#94A3B8', padding: 24 }}>
+                            No records available.
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -2992,6 +3013,13 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                           </td>
                         </tr>
                       ))}
+                      {salaries.length === 0 && (
+                        <tr>
+                          <td colSpan={5} style={{ textAlign: 'center', color: '#94A3B8', padding: 24 }}>
+                            No records available.
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -3147,6 +3175,9 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
             <div className="glass-panel" style={{ padding: 20 }}>
               <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}>Cases ({cases.length}) &amp; Immutable Audit Trail ({auditLogs.length})</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 260, overflowY: 'auto', marginBottom: 16 }}>
+                {cases.length === 0 && (
+                  <p style={{ color: '#94A3B8', fontSize: '0.84rem' }}>No records available.</p>
+                )}
                 {cases.map((c) => (
                   <div key={c.id} style={{ padding: 12, borderRadius: 8, background: 'rgba(6,12,24,0.85)', border: '1px solid rgba(0,242,254,0.22)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
@@ -3175,6 +3206,9 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                 ))}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 240, overflowY: 'auto' }}>
+                {auditLogs.length === 0 && (
+                  <p style={{ color: '#94A3B8', fontSize: '0.84rem' }}>No records available.</p>
+                )}
                 {auditLogs.slice(0, 20).map((log) => (
                   <div key={log.id} style={{ padding: 8, borderRadius: 6, background: 'rgba(4,8,16,0.75)', fontSize: '0.74rem', borderLeft: '2px solid #D4AF37' }}>
                     <strong style={{ color: '#D4AF37' }}>{log.action}</strong> on {log.entityType} • {new Date(log.createdAt).toLocaleString()}
@@ -3217,6 +3251,9 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
             <div className="glass-panel" style={{ padding: 20 }}>
               <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}>Active Service Queue ({tickets.length})</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 420, overflowY: 'auto' }}>
+                {tickets.length === 0 && (
+                  <p style={{ color: '#94A3B8', fontSize: '0.84rem' }}>No records available.</p>
+                )}
                 {tickets.map((t) => (
                   <div key={t.id} style={{ padding: 12, borderRadius: 8, background: 'rgba(6,12,24,0.85)', border: '1px solid rgba(212,175,55,0.22)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -3368,6 +3405,9 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                 </div>
                 <button type="submit" className="btn btn-primary">Launch Campaign</button>
               </form>
+              {campaigns.length === 0 && (
+                <p style={{ color: '#94A3B8', fontSize: '0.84rem' }}>No records available.</p>
+              )}
               {campaigns.map((c) => (
                 <div key={c.id} style={{ padding: 10, borderRadius: 8, background: 'rgba(6,12,24,0.8)', marginBottom: 6, fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
                   <div>
@@ -3394,6 +3434,9 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                   </div>
                   <button type="submit" className="btn btn-primary">Add Capital Tranche</button>
                 </form>
+              )}
+              {investors.length === 0 && (
+                <p style={{ color: '#94A3B8', fontSize: '0.84rem' }}>No records available.</p>
               )}
               {investors.map((inv) => (
                 <div key={inv.id} style={{ padding: 10, borderRadius: 8, background: 'rgba(6,12,24,0.8)', marginBottom: 6, fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>

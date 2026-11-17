@@ -984,3 +984,171 @@ export function ProfileSecurityPage() {
   );
 }
 
+/* ========================================================================== */
+/* 10. SCHOOL / INSTITUTION DETAIL PAGE (/schools/:id, /tenants/:id)         */
+/* ========================================================================== */
+export function SchoolDetailPage() {
+  const { id } = useParams();
+  const [tenant, setTenant] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    api.get(`/tenants/my/profile`)
+      .then((res) => setTenant(res.data?.data || null))
+      .catch(() => null)
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div style={{ padding: 24, textAlign: 'center', color: '#CBD5E1' }}>
+        <p>Loading institution profile from live PostgreSQL...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <BackButtonBar
+        title={`Institution Profile: ${tenant?.name || 'Institution'}`}
+        subtitle={`Code: ${tenant?.code || id} • ${tenant?.city || 'Accra'}, ${tenant?.region || 'Ghana'}`}
+        breadcrumb={['Dashboard', 'School / Institution', tenant?.code || 'Profile']}
+        fallbackPath="/dashboard?tab=OVERVIEW"
+      />
+
+      <div className="glass-panel" style={{ padding: 24, maxWidth: 760 }}>
+        <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 20 }}>
+          {tenant?.logoUrl ? (
+            <img src={tenant.logoUrl} alt="Logo" style={{ width: 72, height: 72, borderRadius: 12, objectFit: 'contain', background: '#FFF', padding: 4 }} />
+          ) : (
+            <div style={{ width: 72, height: 72, borderRadius: 12, background: 'rgba(212,175,55,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#D4AF37', fontWeight: 800, fontSize: '1.4rem' }}>
+              {(tenant?.name || 'GBS')[0]}
+            </div>
+          )}
+          <div>
+            <h3 style={{ margin: 0, color: '#F4E07B' }}>{tenant?.name}</h3>
+            <div style={{ fontSize: '0.85rem', color: '#94A3B8' }}>{tenant?.institutionType || 'Microfinance / Educational Institution'}</div>
+            <span className={`badge ${tenant?.status === 'ACTIVE' ? 'badge-success' : 'badge-warning'}`} style={{ marginTop: 6 }}>
+              {tenant?.status || 'ACTIVE'}
+            </span>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, fontSize: '0.88rem' }}>
+          <div><strong>Registration Number:</strong> {tenant?.registrationNumber || 'N/A'}</div>
+          <div><strong>License Number:</strong> {tenant?.businessLicenseNumber || 'N/A'}</div>
+          <div><strong>TIN Number:</strong> {tenant?.tinNumber || 'N/A'}</div>
+          <div><strong>Contact Email:</strong> {tenant?.contactEmail || 'N/A'}</div>
+          <div><strong>Contact Phone:</strong> {tenant?.contactPhone || 'N/A'}</div>
+          <div><strong>Representative:</strong> {tenant?.representativeName || 'N/A'}</div>
+          <div><strong>City / Region:</strong> {tenant?.city || 'Accra'}, {tenant?.region || 'Ghana'}</div>
+          <div><strong>GPS Address:</strong> {tenant?.gpsAddress || tenant?.address || 'N/A'}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ========================================================================== */
+/* 11. REPORT SNAPSHOT DETAIL PAGE (/reports/:id)                            */
+/* ========================================================================== */
+export function ReportDetailPage() {
+  const { id } = useParams();
+  const [snapshot, setSnapshot] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.get('/reports/snapshots')
+      .then((res) => {
+        const list = res.data?.data || [];
+        const found = list.find((s) => s.id === id) || list[0] || null;
+        setSnapshot(found);
+      })
+      .catch(() => null)
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  return (
+    <div>
+      <BackButtonBar
+        title={`Financial Report Snapshot: ${snapshot?.reportType || 'Ledger Report'}`}
+        subtitle={`Period: ${snapshot?.periodLabel || id}`}
+        breadcrumb={['Dashboard', 'Reports', snapshot?.periodLabel || 'Snapshot']}
+        fallbackPath="/dashboard?tab=REPORTS"
+      />
+
+      <div className="glass-panel" style={{ padding: 24, maxWidth: 720 }}>
+        <h3 style={{ margin: '0 0 14px', color: '#D4AF37' }}>
+          Executive Ledger Summary ({snapshot?.periodLabel || 'Current Period'})
+        </h3>
+        {snapshot ? (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, fontSize: '0.9rem' }}>
+            <div><strong>Report Type:</strong> {snapshot.reportType}</div>
+            <div><strong>Period:</strong> {snapshot.periodLabel}</div>
+            <div><strong>Total Disbursed:</strong> {formatGHS(snapshot.totalDisbursedGhs || 0)}</div>
+            <div><strong>Total Collected:</strong> {formatGHS(snapshot.totalCollectedGhs || 0)}</div>
+            <div><strong>Active Loans Count:</strong> {snapshot.activeLoansCount || 0}</div>
+            <div><strong>Default Rate:</strong> {Number(snapshot.defaultRatePct || 0).toFixed(1)}%</div>
+            <div><strong>Generated At:</strong> {new Date(snapshot.createdAt).toLocaleString()}</div>
+          </div>
+        ) : (
+          <p style={{ color: '#94A3B8' }}>No report record available for this period.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ========================================================================== */
+/* 12. MEETING DETAIL PAGE (/meetings/:id)                                   */
+/* ========================================================================== */
+export function MeetingDetailPage() {
+  const { id } = useParams();
+  const [meeting, setMeeting] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.get('/meetings')
+      .then((res) => {
+        const list = res.data?.data || [];
+        const found = list.find((m) => m.id === id) || null;
+        setMeeting(found);
+      })
+      .catch(() => null)
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  return (
+    <div>
+      <BackButtonBar
+        title={`Meeting: ${meeting?.title || 'Operational Briefing'}`}
+        subtitle={`Scheduled: ${meeting?.scheduledAt ? new Date(meeting.scheduledAt).toLocaleString() : 'N/A'}`}
+        breadcrumb={['Dashboard', 'Meetings', meeting?.title || 'Briefing']}
+        fallbackPath="/dashboard?tab=MEETINGS"
+      />
+
+      <div className="glass-panel" style={{ padding: 24, maxWidth: 680 }}>
+        <h3 style={{ margin: '0 0 14px', color: '#38BDF8' }}>Meeting Information</h3>
+        {meeting ? (
+          <div style={{ display: 'grid', gap: 12, fontSize: '0.9rem' }}>
+            <div><strong>Title:</strong> {meeting.title}</div>
+            <div><strong>Audience:</strong> {meeting.audienceType || 'All Staff'}</div>
+            <div><strong>Scheduled At:</strong> {new Date(meeting.scheduledAt).toLocaleString()}</div>
+            <div><strong>Host / Organizer:</strong> {meeting.hostUser ? `${meeting.hostUser.firstName} ${meeting.hostUser.lastName}` : 'Management'}</div>
+            {meeting.joinUrl && (
+              <div style={{ marginTop: 10 }}>
+                <a href={meeting.joinUrl} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ padding: '8px 16px' }}>
+                  Join Zoom Meeting
+                </a>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p style={{ color: '#94A3B8' }}>Meeting details not found or removed.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+

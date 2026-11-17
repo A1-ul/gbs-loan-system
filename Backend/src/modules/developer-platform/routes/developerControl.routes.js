@@ -54,14 +54,22 @@ router.post('/system-unlock', sensitiveOpLimiter, systemLock.controller.unlock);
 // 5. Subscription Control
 router.get('/subscriptions', subscriptionControl.controller.getSubscription);
 router.get('/subscriptions/audit', developerController.checkSubscriptions);
+router.get('/subscriptions/all', developerController.getSubscriptions);
+router.get('/subscriptions/:id', developerController.getSubscriptionById);
 router.post('/subscriptions', sensitiveOpLimiter, subscriptionControl.controller.updateSubscription);
+
+// 5b. System Users Across Institutions
+router.get('/users', developerController.getUsers);
+router.get('/users/:id', developerController.getUserById);
 
 // 6. Deployment History
 router.get('/deployments', deploymentHistory.controller.getDeployments);
 router.post('/deployments', sensitiveOpLimiter, deploymentHistory.controller.recordDeployment);
 
-// 7. Logs
+// 7. Logs & System Activities
 router.get('/logs', developerController.getLogs);
+router.get('/activities', developerController.getActivities);
+router.get('/activities/:id', developerController.getActivityById);
 
 // 8. Live Performance Telemetry (Zero hardcoded metrics)
 router.get('/performance', developerController.getPerformance);
@@ -77,6 +85,7 @@ router.post('/recovery/failover', sensitiveOpLimiter, recovery.controller.trigge
 
 // 11. Security Alerts
 router.get('/security-alerts', securityAlerts.controller.getAlerts);
+router.get('/security-alerts/:id', developerController.getSecurityAlertById);
 router.post('/security-alerts', securityAlerts.controller.triggerAlert);
 router.post('/security-alerts/:id/resolve', securityAlerts.controller.resolveAlert);
 

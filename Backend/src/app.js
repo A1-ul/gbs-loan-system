@@ -15,6 +15,7 @@ const { rateLimiter } = require('./middleware/rateLimiter');
 const { metricsMiddleware } = require('./middleware/metrics');
 const { auditMiddleware } = require('./middleware/audit');
 const { requestIdMiddleware } = require('./middleware/requestId');
+const { rcceResponseMiddleware } = require('./framework/rcce');
 const { sanitizeInput } = require('./middleware/sanitize');
 const apiGatewayService = require('./services/apiGateway.service');
 
@@ -55,6 +56,7 @@ function resolveCorsOrigin() {
 
 // 1. API Gateway Request Correlation & Tracking
 app.use(requestIdMiddleware);
+app.use(rcceResponseMiddleware);
 
 // 2. Enterprise Security Headers (Helmet)
 app.use(helmet({

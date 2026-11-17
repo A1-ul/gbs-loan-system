@@ -246,6 +246,203 @@ async function runAiDiagnostics() {
   return { structure, report, timestamp: new Date().toISOString() };
 }
 
+async function getSystemUsers({ search = '', role = '', tenantId = '', status = '', page = 1, limit = 50 }) {
+  const skip = (Math.max(1, parseInt(page, 10)) - 1) * Math.max(1, parseInt(limit, 10));
+  const take = Math.min(100, Math.max(1, parseInt(limit, 10)));
+  const where = {
+    ...(role ? { role } : {}),
+    ...(status ? { status } : {}),
+    ...(tenantId ? { tenantId } : {}),
+    ...(search
+      ? {
+          OR: [
+            { email: { contains: search, mode: 'insensitive' } },
+            { username: { contains: search, mode: 'insensitive' } },
+            { firstName: { contains: search, mode: 'insensitive' } },
+            { lastName: { contains: search, mode: 'insensitive' } },
+            { phone: { contains: search, mode: 'insensitive' } },
+          ],
+        }
+      : {}),
+  };
+
+  const [total, users] = await Promise.all([
+    prisma.user.count({ where }),
+    prisma.user.findMany({
+      where,
+      skip,
+      take,
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        tenantId: true,
+        branchId: true,
+        email: true,
+        username: true,
+        phone: true,
+        role: true,
+        status: true,
+        firstName: true,
+        lastName: true,
+        profilePicture: true,
+        gpsAddress: true,
+        lastLoginAt: true,
+        dataSource: true,
+        environmentTag: true,
+        isProductionRecord: true,
+        createdAt: true,
+        tenant: {
+          select: { id: true, name: true, code: true, institutionType: true },
+        },
+      },
+    }),
+  ]);
+
+  return { total, page: Math.max(1, parseInt(page, 10)), limit: take, users };
+}
+
+async function getSystemUserById(id) {
+  const user = await prisma.user.findUnique({
+    where: { id },
+    include: {
+      tenant: true,
+      branch: true,
+      verificationLogs: { take: 10, orderBy: { createdAt: 'desc' } },
+      voiceProfile: true,
+      memberProfile: { include: { loans: { take: 5, orderBy: { createdAt: 'desc' } } } },
+      staffProfile: true,
+      collectorProfile: true,
+      guarantorProfile: true,
+      _count: { select: { auditLogs: true, notifications: true } },
+    },
+  });
+  if (!user) {
+    throw new ValidationError(`User with ID '${id}' not found.`);
+  }
+  return user;
+}
+
+async function getAllSubscriptions({ status = '', page = 1, limit = 50 }) {
+  const skip = (Math.max(1, parseInt(page, 10)) - 1) * Math.max(1, parseInt(limit, 10));
+  const take = Math.min(100, Math.max(1, parseInt(limit, 10)));
+  const where = status ? { status } : {};
+
+  const [total, subscriptions] = await Promise.all([
+    prisma.tenantSubscription.count({ where }),
+    prisma.tenantSubscription.findMany({
+      where,
+      skip,
+      take,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        tenant: {
+          select: { id: true, name: true, code: true, city: true, region: true, status: true, contactEmail: true },
+        },
+      },
+    }),
+  ]);
+
+  const now = Date.now();
+  const formatted = subscriptions.map((s) => {
+    const daysLeft = s.isLifetime
+      ? 36500
+      : s.endDate
+        ? Math.max(0, Math.ceil((new Date(s.endDate).getTime() - now) / (1000 * 60 * 60 * 24)))
+        : 0;
+    return {
+      ...s,
+      daysLeft,
+    };
+  });
+
+  return { total, page: Math.max(1, parseInt(page, 10)), limit: take, subscriptions: formatted };
+}
+
+async function getSubscriptionById(id) {
+  const sub = await prisma.tenantSubscription.findUnique({
+    where: { id },
+    include: {
+      tenant: true,
+    },
+  });
+  if (!sub) {
+    throw new ValidationError(`Subscription with ID '${id}' not found.`);
+  }
+  const now = Date.now();
+  const daysLeft = sub.isLifetime
+    ? 36500
+    : sub.endDate
+      ? Math.max(0, Math.ceil((new Date(sub.endDate).getTime() - now) / (1000 * 60 * 60 * 24)))
+      : 0;
+  return { ...sub, daysLeft };
+}
+
+async function getSystemActivities({ search = '', status = '', page = 1, limit = 50 }) {
+  const skip = (Math.max(1, parseInt(page, 10)) - 1) * Math.max(1, parseInt(limit, 10));
+  const take = Math.min(100, Math.max(1, parseInt(limit, 10)));
+  const where = {
+    ...(status ? { status } : {}),
+    ...(search
+      ? {
+          OR: [
+            { action: { contains: search, mode: 'insensitive' } },
+            { targetComponent: { contains: search, mode: 'insensitive' } },
+          ],
+        }
+      : {}),
+  };
+
+  const [total, activities] = await Promise.all([
+    prisma.developerAuditLog.count({ where }),
+    prisma.developerAuditLog.findMany({
+      where,
+      skip,
+      take,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        developerUser: { select: { id: true, username: true, email: true, accessLevel: true } },
+      },
+    }),
+  ]);
+
+  return { total, page: Math.max(1, parseInt(page, 10)), limit: take, activities };
+}
+
+async function getActivityById(id) {
+  const activity = await prisma.developerAuditLog.findUnique({
+    where: { id },
+    include: {
+      developerUser: { select: { id: true, username: true, email: true, accessLevel: true } },
+    },
+  });
+  if (activity) return activity;
+
+  // Fallback to tenant audit log
+  const tenantAudit = await prisma.auditLog.findUnique({
+    where: { id },
+    include: {
+      user: { select: { id: true, firstName: true, lastName: true, email: true, role: true } },
+      tenant: { select: { id: true, name: true, code: true } },
+    },
+  });
+  if (tenantAudit) return tenantAudit;
+
+  throw new ValidationError(`Activity with ID '${id}' not found.`);
+}
+
+async function getSecurityAlertById(id) {
+  const alert = await prisma.securityAlert.findUnique({
+    where: { id },
+    include: {
+      tenant: { select: { id: true, name: true, code: true } },
+    },
+  });
+  if (!alert) {
+    throw new ValidationError(`Security Alert with ID '${id}' not found.`);
+  }
+  return alert;
+}
+
 module.exports = {
   getLiveMonitoringMetrics,
   toggleSystemLock,
@@ -257,4 +454,11 @@ module.exports = {
   sendTenantMessage,
   getTenantMessages,
   runAiDiagnostics,
+  getSystemUsers,
+  getSystemUserById,
+  getAllSubscriptions,
+  getSubscriptionById,
+  getSystemActivities,
+  getActivityById,
+  getSecurityAlertById,
 };

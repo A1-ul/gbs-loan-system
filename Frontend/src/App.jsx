@@ -22,10 +22,20 @@ import {
   CollectorDetailPage,
   GuarantorDetailPage,
   StaffDetailPage,
+  SchoolDetailPage,
+  ReportDetailPage,
+  MeetingDetailPage,
   AdminUsersCrossCheckPage,
   DataMigrationPage,
   ProfileSecurityPage,
 } from './pages/DetailPages';
+import {
+  DeveloperTenantDetailPage,
+  DeveloperUserDetailPage,
+  DeveloperSubscriptionDetailPage,
+  DeveloperActivityDetailPage,
+  DeveloperSecurityAlertDetailPage,
+} from './pages/DeveloperDetailPages';
 
 function TenantShell({ user, onLogout, lockBanner }) {
   const navigate = useNavigate();
@@ -221,10 +231,16 @@ function TenantShell({ user, onLogout, lockBanner }) {
           <Route path="/dashboard/tab/:tabId" element={<RoleDashboards user={user} />} />
           <Route path="/loans/:id" element={<LoanDetailPage />} />
           <Route path="/members/:id" element={<MemberDetailPage />} />
+          <Route path="/students/:id" element={<MemberDetailPage />} />
           <Route path="/payments/:id" element={<PaymentDetailPage />} />
           <Route path="/collectors/:id" element={<CollectorDetailPage />} />
           <Route path="/guarantors/:id" element={<GuarantorDetailPage />} />
           <Route path="/staff/:id" element={<StaffDetailPage />} />
+          <Route path="/teachers/:id" element={<StaffDetailPage />} />
+          <Route path="/schools/:id" element={<SchoolDetailPage />} />
+          <Route path="/tenants/:id" element={<SchoolDetailPage />} />
+          <Route path="/reports/:id" element={<ReportDetailPage />} />
+          <Route path="/meetings/:id" element={<MeetingDetailPage />} />
           <Route path="/admin/users-crosscheck" element={<AdminUsersCrossCheckPage />} />
           <Route path="/migrations" element={<DataMigrationPage />} />
           <Route path="/profile" element={<ProfileSecurityPage />} />
@@ -254,7 +270,19 @@ function ProtectedDeveloperRoute({ devUser, onDevLogout }) {
   if (!devToken || !devUser) {
     return <Navigate to="/dev-portal/login" replace />;
   }
-  return <DeveloperControlCenter onLogout={onDevLogout} />;
+  return (
+    <Routes>
+      <Route path="/" element={<DeveloperControlCenter onLogout={onDevLogout} />} />
+      <Route path="/tab/:tabId" element={<DeveloperControlCenter onLogout={onDevLogout} />} />
+      <Route path="/tenants/:id" element={<DeveloperTenantDetailPage />} />
+      <Route path="/schools/:id" element={<DeveloperTenantDetailPage />} />
+      <Route path="/users/:id" element={<DeveloperUserDetailPage />} />
+      <Route path="/subscriptions/:id" element={<DeveloperSubscriptionDetailPage />} />
+      <Route path="/activities/:id" element={<DeveloperActivityDetailPage />} />
+      <Route path="/security-alerts/:id" element={<DeveloperSecurityAlertDetailPage />} />
+      <Route path="*" element={<DeveloperControlCenter onLogout={onDevLogout} />} />
+    </Routes>
+  );
 }
 
 function LoginRouteGuard({ user, onAuthenticated, onDevAuthenticated }) {
@@ -364,10 +392,6 @@ export default function App() {
           <Route
             path="/dev-portal/login"
             element={devUser && sessionStore.getDevToken() ? <Navigate to="/dev-portal" replace /> : <DeveloperLogin onDevAuthenticated={(d) => setDevUser(d)} />}
-          />
-          <Route
-            path="/dev-portal/tab/:tabId"
-            element={<ProtectedDeveloperRoute devUser={devUser} onDevLogout={() => setDevUser(null)} />}
           />
           <Route
             path="/dev-portal/*"

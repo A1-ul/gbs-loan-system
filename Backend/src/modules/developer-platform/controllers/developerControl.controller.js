@@ -210,6 +210,69 @@ async function respondFeedback(req, res, next) {
   }
 }
 
+async function getUsers(req, res, next) {
+  try {
+    const result = await developerControlService.getSystemUsers(req.query);
+    return res.status(200).json({ success: true, ...result });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getUserById(req, res, next) {
+  try {
+    const user = await developerControlService.getSystemUserById(req.params.id);
+    return res.status(200).json({ success: true, data: user });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getSubscriptions(req, res, next) {
+  try {
+    const result = await developerControlService.getAllSubscriptions(req.query);
+    return res.status(200).json({ success: true, ...result });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getSubscriptionById(req, res, next) {
+  try {
+    const sub = await developerControlService.getSubscriptionById(req.params.id);
+    return res.status(200).json({ success: true, data: sub });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getActivities(req, res, next) {
+  try {
+    const result = await developerControlService.getSystemActivities(req.query);
+    return res.status(200).json({ success: true, ...result });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getActivityById(req, res, next) {
+  try {
+    const activity = await developerControlService.getActivityById(req.params.id);
+    return res.status(200).json({ success: true, data: activity });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getSecurityAlertById(req, res, next) {
+  try {
+    const alert = await developerControlService.getSecurityAlertById(req.params.id);
+    return res.status(200).json({ success: true, data: alert });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   login,
   logout,
@@ -227,4 +290,11 @@ module.exports = {
   getMessages,
   getFeedbacks,
   respondFeedback,
+  getUsers,
+  getUserById,
+  getSubscriptions,
+  getSubscriptionById,
+  getActivities,
+  getActivityById,
+  getSecurityAlertById,
 };
