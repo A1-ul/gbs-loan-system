@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   Terminal, Cpu, Lock, Unlock, Database, RefreshCw, Activity, Building2,
   MapPin, ShieldAlert, Send, CheckCircle2, XCircle, Clock, LogOut, Wrench, Trash2, BookOpen, ArrowUpRight, ArrowLeft, Download, Video,
-  MessageSquare, Star, Eye, Users, User
+  MessageSquare, Star, Eye, Users, User, CreditCard
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 import api, { devApi, sessionStore, API_ORIGIN } from '../services/api';
@@ -1063,7 +1063,7 @@ export default function DeveloperControlCenter({ onLogout }) {
                             </span>
                           </td>
                           <td>{new Date(u.createdAt).toLocaleDateString()}</td>
-                          <td>
+                          <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                             <button
                               type="button"
                               onClick={() => navigate(`/dev-portal/users/${u.id}`)}
@@ -1072,6 +1072,15 @@ export default function DeveloperControlCenter({ onLogout }) {
                             >
                               <Eye size={12} /> View Details
                             </button>
+                            {(u.phone || u.gpsAddress) && (
+                              <Link
+                                to={`/dev-portal/tab/GIS_MAP?locate=${encodeURIComponent(u.phone || u.gpsAddress)}`}
+                                className="btn btn-primary"
+                                style={{ padding: '4px 10px', fontSize: '0.75rem', textDecoration: 'none' }}
+                              >
+                                <MapPin size={12} /> Locate
+                              </Link>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -1160,7 +1169,11 @@ export default function DeveloperControlCenter({ onLogout }) {
 
         {/* TAB 2: REAL INTERACTIVE GIS & GOOGLE MAPS PHONE LOCATOR */}
         {activeTab === 'GIS_MAP' && (
-          <LiveLocationTrackerMap markers={gisData.features || []} mode="developer" />
+          <LiveLocationTrackerMap
+            markers={gisData.features || []}
+            mode="developer"
+            initialPhone={searchParams.get('locate') || ''}
+          />
         )}
 
         {/* TAB 3: AI DIAGNOSTICS, CRASHES & DEVELOPER LOGS */}

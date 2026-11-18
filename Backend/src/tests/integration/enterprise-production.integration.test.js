@@ -572,6 +572,7 @@ describe('GBS Enterprise Production Integration Suite (PostgreSQL Live)', () => 
         password: 'StaffPass@2026!',
         role: 'LOAN_OFFICER',
         gpsAddress: 'GA-777-2201',
+        livePhoto: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAA==',
         autoApprove: false,
       });
     expect(provRes.statusCode).toBe(201);
@@ -709,6 +710,7 @@ describe('GBS Enterprise Production Integration Suite (PostgreSQL Live)', () => 
         email: `hidden.cust.${suffix}@gbsloan.com`,
         phone: `+233508${suffix}`,
         gpsAddress: hiddenGps,
+        livePhoto: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAA==',
         isHidden: true,
       });
     expect(hiddenMemberRes.statusCode).toBe(201);
@@ -734,6 +736,26 @@ describe('GBS Enterprise Production Integration Suite (PostgreSQL Live)', () => 
     expect(hiddenEmergencyLocate.body.data.primaryMatch).toBeDefined();
     expect(hiddenEmergencyLocate.body.data.primaryMatch.gpsAddress).toBe(hiddenGps);
     expect(hiddenEmergencyLocate.body.data.primaryMatch.isHidden).toBe(true);
+    expect(hiddenEmergencyLocate.body.data.primaryMatch.googleMapsEmbedUrl).toContain('output=embed');
+
+    // Locate Guarantor by mobile number -> verifies carrier network service & Google Maps pin
+    const guarPhoneLocate = await request(app)
+      .get('/api/v1/gps/emergency-locate')
+      .query({ q: `+233509${suffix}`, includeHidden: 'true', type: 'GUARANTOR' })
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(guarPhoneLocate.statusCode).toBe(200);
+    expect(guarPhoneLocate.body.data.primaryMatch).toBeDefined();
+    expect(guarPhoneLocate.body.data.primaryMatch.entityType).toBe('GUARANTOR');
+    expect(guarPhoneLocate.body.data.primaryMatch.networkService.shortCode).toBe('TELECEL');
+    expect(guarPhoneLocate.body.data.primaryMatch.googleMapsUrl).toContain('google.com/maps');
+
+    // Developer GIS lookup also supports digital GPS address & network service detection
+    const devGpsLookup = await request(app)
+      .get('/api/v1/developer/locations/lookup')
+      .query({ q: 'AK-448-9012' })
+      .set('Authorization', `Bearer ${devToken}`);
+    expect(devGpsLookup.statusCode).toBe(200);
+    expect(devGpsLookup.body.data.queryGpsReference?.region).toBe('Ashanti');
 
     // Clean up adminToken-owned audit record created outside test tenant
     await prisma.accountingAuditRecord.deleteMany({ where: { id: createdAuditId } }).catch(() => null);

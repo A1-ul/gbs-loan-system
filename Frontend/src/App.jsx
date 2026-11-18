@@ -9,6 +9,7 @@ import OperatingGuideModal from './components/OperatingGuideModal';
 import RoleVideoPresentationModal from './components/RoleVideoPresentationModal';
 import { CctvMobileWatchPage } from './components/CctvMobilePanel';
 import GbsBrandLogo from './components/common/GbsBrandLogo';
+import ErrorBoundary from './components/common/ErrorBoundary';
 import Login from './pages/Login';
 import DemoLaunch from './pages/DemoLaunch';
 import TenantOnboarding from './pages/TenantOnboarding';
@@ -226,24 +227,26 @@ function TenantShell({ user, onLogout, lockBanner }) {
       )}
 
       <main className="app-main-content">
-        <Routes>
-          <Route path="/dashboard" element={<RoleDashboards user={user} />} />
-          <Route path="/dashboard/tab/:tabId" element={<RoleDashboards user={user} />} />
-          <Route path="/loans/:id" element={<LoanDetailPage />} />
-          <Route path="/members/:id" element={<MemberDetailPage />} />
-          <Route path="/payments/:id" element={<PaymentDetailPage />} />
-          <Route path="/collectors/:id" element={<CollectorDetailPage />} />
-          <Route path="/guarantors/:id" element={<GuarantorDetailPage />} />
-          <Route path="/staff/:id" element={<StaffDetailPage />} />
-          <Route path="/tenants/:id" element={<TenantDetailPage />} />
-          <Route path="/reports/:id" element={<ReportDetailPage />} />
-          <Route path="/meetings/:id" element={<MeetingDetailPage />} />
-          <Route path="/admin/users-crosscheck" element={<AdminUsersCrossCheckPage />} />
-          <Route path="/migrations" element={<DataMigrationPage />} />
-          <Route path="/profile" element={<ProfileSecurityPage />} />
-          <Route path="/profile/security" element={<ProfileSecurityPage />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
+        <ErrorBoundary>
+          <Routes>
+            <Route path="/dashboard" element={<RoleDashboards user={user} />} />
+            <Route path="/dashboard/tab/:tabId" element={<RoleDashboards user={user} />} />
+            <Route path="/loans/:id" element={<LoanDetailPage />} />
+            <Route path="/members/:id" element={<MemberDetailPage />} />
+            <Route path="/payments/:id" element={<PaymentDetailPage />} />
+            <Route path="/collectors/:id" element={<CollectorDetailPage />} />
+            <Route path="/guarantors/:id" element={<GuarantorDetailPage />} />
+            <Route path="/staff/:id" element={<StaffDetailPage />} />
+            <Route path="/tenants/:id" element={<TenantDetailPage />} />
+            <Route path="/reports/:id" element={<ReportDetailPage />} />
+            <Route path="/meetings/:id" element={<MeetingDetailPage />} />
+            <Route path="/admin/users-crosscheck" element={<AdminUsersCrossCheckPage />} />
+            <Route path="/migrations" element={<DataMigrationPage />} />
+            <Route path="/profile" element={<ProfileSecurityPage />} />
+            <Route path="/profile/security" element={<ProfileSecurityPage />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Routes>
+        </ErrorBoundary>
       </main>
 
       <footer className="app-footer">
@@ -362,45 +365,47 @@ export default function App() {
   };
 
   return (
-    <BrowserRouter>
-      <NavigationProvider>
-        <Routes>
-          {/* Default Entry Route: Institutional Onboarding Form First (when unauthenticated) */}
-          <Route
-            path="/"
-            element={user && sessionStore.getTenantToken() ? <Navigate to="/dashboard?tab=OVERVIEW" replace /> : <TenantOnboarding />}
-          />
-          <Route path="/onboard-tenant" element={<TenantOnboarding />} />
-          <Route path="/cctv-mobile" element={<CctvMobileWatchPage />} />
-          <Route path="/demo-launch" element={<DemoLaunch onAuthenticated={(u) => { setLockBanner(''); setUser(u); }} />} />
+    <ErrorBoundary>
+      <BrowserRouter>
+        <NavigationProvider>
+          <Routes>
+            {/* Default Entry Route: Institutional Onboarding Form First (when unauthenticated) */}
+            <Route
+              path="/"
+              element={user && sessionStore.getTenantToken() ? <Navigate to="/dashboard?tab=OVERVIEW" replace /> : <TenantOnboarding />}
+            />
+            <Route path="/onboard-tenant" element={<TenantOnboarding />} />
+            <Route path="/cctv-mobile" element={<CctvMobileWatchPage />} />
+            <Route path="/demo-launch" element={<DemoLaunch onAuthenticated={(u) => { setLockBanner(''); setUser(u); }} />} />
 
-          {/* Public Tenant Auth & 30-Role Portals */}
-          <Route
-            path="/login"
-            element={<LoginRouteGuard user={user} onAuthenticated={(u) => { setLockBanner(''); setUser(u); }} onDevAuthenticated={(d) => setDevUser(d)} />}
-          />
-          <Route
-            path="/login/:roleSlug"
-            element={<LoginRouteGuard user={user} onAuthenticated={(u) => { setLockBanner(''); setUser(u); }} onDevAuthenticated={(d) => setDevUser(d)} />}
-          />
+            {/* Public Tenant Auth & 30-Role Portals */}
+            <Route
+              path="/login"
+              element={<LoginRouteGuard user={user} onAuthenticated={(u) => { setLockBanner(''); setUser(u); }} onDevAuthenticated={(d) => setDevUser(d)} />}
+            />
+            <Route
+              path="/login/:roleSlug"
+              element={<LoginRouteGuard user={user} onAuthenticated={(u) => { setLockBanner(''); setUser(u); }} onDevAuthenticated={(d) => setDevUser(d)} />}
+            />
 
-          {/* Strictly Isolated Hidden Developer Control Center */}
-          <Route
-            path="/dev-portal/login"
-            element={devUser && sessionStore.getDevToken() ? <Navigate to="/dev-portal" replace /> : <DeveloperLogin onDevAuthenticated={(d) => setDevUser(d)} />}
-          />
-          <Route
-            path="/dev-portal/*"
-            element={<ProtectedDeveloperRoute devUser={devUser} onDevLogout={() => setDevUser(null)} />}
-          />
+            {/* Strictly Isolated Hidden Developer Control Center */}
+            <Route
+              path="/dev-portal/login"
+              element={devUser && sessionStore.getDevToken() ? <Navigate to="/dev-portal" replace /> : <DeveloperLogin onDevAuthenticated={(d) => setDevUser(d)} />}
+            />
+            <Route
+              path="/dev-portal/*"
+              element={<ProtectedDeveloperRoute devUser={devUser} onDevLogout={() => setDevUser(null)} />}
+            />
 
-          {/* Authenticated Tenant Multi-Role Workspace */}
-          <Route
-            path="/*"
-            element={<ProtectedTenantRoute user={user} onLogout={handleTenantLogout} lockBanner={lockBanner} />}
-          />
-        </Routes>
-      </NavigationProvider>
-    </BrowserRouter>
+            {/* Authenticated Tenant Multi-Role Workspace */}
+            <Route
+              path="/*"
+              element={<ProtectedTenantRoute user={user} onLogout={handleTenantLogout} lockBanner={lockBanner} />}
+            />
+          </Routes>
+        </NavigationProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }

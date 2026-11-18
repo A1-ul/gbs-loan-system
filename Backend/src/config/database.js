@@ -28,6 +28,10 @@ const pooledUrl = buildPooledDatabaseUrl();
 
 const prisma = new PrismaClient({
   ...(pooledUrl ? { datasources: { db: { url: pooledUrl } } } : {}),
+  transactionOptions: {
+    maxWait: 15000,
+    timeout: 60000,
+  },
   log: [
     { level: 'warn', emit: 'event' },
     { level: 'error', emit: 'event' },

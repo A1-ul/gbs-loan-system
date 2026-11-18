@@ -641,9 +641,10 @@ async function approveStaffAccount(approverUser, targetId, { approve = true, not
     throw new AuthorizationError('Cross-tenant staff approval forbidden.');
   }
 
-  if (role === 'COMPANY_OWNER' && approve) {
-    return ownerApproveStaff(approverUser, targetId, { notes });
-  } else if (role === 'BRANCH_MANAGER' && approve) {
+  // NOTE: Two-step approval UI calls POST /staff/:id/owner-approve and /branch-approve directly.
+  // Direct POST /staff/:id/approve by Company Owner/Executive immediately activates (or suspends) the account,
+  // while Branch Managers remain constrained by owner-first verification via branchApproveStaff.
+  if (role === 'BRANCH_MANAGER' && approve) {
     return branchApproveStaff(approverUser, targetId, { notes });
   }
 

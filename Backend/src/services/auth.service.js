@@ -30,6 +30,11 @@ async function register(data, reqMeta = {}) {
 
   const isDevRole = ['DEVELOPER', 'DEVELOPER_LANDLORD'].includes(normalizedRole) ||
     (data.email && String(data.email).trim().toLowerCase() === 'gabosei48@gmail.com');
+
+  if (String(data.tenantCode || '').trim().toUpperCase() === 'DEMO-SANDBOX') {
+    throw new AuthorizationError('DEMO-SANDBOX is reserved exclusively for Demo Learning & Observation. Register real staff and members under an approved production institution.');
+  }
+
   const livePhoto = data.livePhoto || data.profilePicture || data.cameraShot;
   if (!isDevRole && !livePhoto) {
     throw new ValidationError('A live camera capture shot is strictly required before completing registration.');

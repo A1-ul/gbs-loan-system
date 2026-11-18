@@ -140,7 +140,7 @@ async function apply(userId, data, tenantId = null) {
     }).catch(() => { });
 
     return created;
-  }, { maxWait: 10000, timeout: 25000 });
+  }, { maxWait: 15000, timeout: 60000 });
 
   logger.info(`Loan application submitted: ${loan.loanNumber}`);
   return loan;

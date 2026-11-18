@@ -15,6 +15,10 @@ const authSchemas = {
     gpsLongitude: Joi.number().min(-180).max(180).optional().allow(null),
     address: Joi.string().optional().allow('', null),
     deviceFingerprint: Joi.string().optional().allow('', null),
+    livePhoto: Joi.string().optional().allow('', null),
+    liveCameraShot: Joi.string().optional().allow('', null),
+    profilePicture: Joi.string().optional().allow('', null),
+    faceEmbedding: Joi.any().optional().allow(null),
   }),
   login: Joi.object({
     email: Joi.string().email().required(),
@@ -60,6 +64,10 @@ const memberSchemas = {
     isHidden: Joi.boolean().optional(),
     emergencyContact: Joi.string().optional().allow('', null),
     emergencyPhone: Joi.string().optional().allow('', null),
+    livePhoto: Joi.string().optional().allow('', null),
+    liveCameraShot: Joi.string().optional().allow('', null),
+    profilePicture: Joi.string().optional().allow('', null),
+    faceEmbedding: Joi.any().optional().allow(null),
   }),
   update: Joi.object({
     occupation: Joi.string().optional(),

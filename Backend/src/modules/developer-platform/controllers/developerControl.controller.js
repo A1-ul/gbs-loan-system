@@ -117,8 +117,12 @@ async function getLocations(req, res, next) {
 
 async function lookupLocationByPhone(req, res, next) {
   try {
-    const phone = req.query.phone || '';
-    const data = await gpsService.locateByPhone({ phone, allowCrossTenant: true });
+    const query = req.query.q || req.query.query || req.query.phone || req.query.gpsAddress || '';
+    const data = await gpsService.emergencyLocate({
+      query,
+      allowCrossTenant: true,
+      includeHidden: true,
+    });
     return res.status(200).json({ success: true, data });
   } catch (error) {
     next(error);

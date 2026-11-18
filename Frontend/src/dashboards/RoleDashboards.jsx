@@ -13,12 +13,13 @@ import {
 import api, { sessionStore } from '../services/api';
 import LiveCameraCapture from '../components/common/LiveCameraCapture';
 import FeedbackModal, { FeedbackFloatingTrigger } from '../components/common/FeedbackModal';
-import { ROLES_META, resolveRoleMeta, USER_COUNT_DROPDOWN_ROLES } from '../constants/rolesMeta';
+import { ROLES_META, resolveRoleMeta, resolveRoleCapabilities, USER_COUNT_DROPDOWN_ROLES } from '../constants/rolesMeta';
 import { BackButtonBar, useNavigationState } from '../context/NavigationContext';
 import LiveLocationTrackerMap from '../components/LiveLocationTrackerMap';
 import AccountingAuditPanel from '../components/AccountingAuditPanel';
 import { CctvMobilePanel } from '../components/CctvMobilePanel';
 import { RegistersCrossCheckPanel } from '../components/UserCountDropdownWidget';
+import RoleVideoPresentationModal from '../components/RoleVideoPresentationModal';
 
 const formatGHS = (n) =>
   `GHS ${Number(n || 0).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -106,6 +107,7 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
   const [respondingFeedbackId, setRespondingFeedbackId] = useState(null);
   const [selectedStaffDossier, setSelectedStaffDossier] = useState(null);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [roleVideoOpen, setRoleVideoOpen] = useState(false);
   const [newStaffForm, setNewStaffForm] = useState({
     firstName: '', lastName: '', email: '', phone: '', password: '',
     role: 'LOAN_OFFICER', department: 'CREDIT', position: 'Loan Officer', baseSalary: '2500', gpsAddress: '',
@@ -157,6 +159,10 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
     saveState({ activeTab, search, statusFilter });
   }, [activeTab, search, statusFilter]);
 
+  const roleCaps = resolveRoleCapabilities(roleKey);
+  const roleActions = roleCaps.actions || {};
+  const allowedTabSet = new Set(roleCaps.allowedTabs || ['OVERVIEW']);
+
   const isMemberOnly = ['MEMBER', 'MEMBER_PORTAL'].includes(roleKey);
   const isGuarantorOnly = ['GUARANTOR', 'GUARANTOR_PORTAL'].includes(roleKey);
   const isCompanyOwner = roleKey === 'COMPANY_OWNER';
@@ -164,8 +170,8 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
     'COMPANY_OWNER', 'BOARD_EXECUTIVE', 'EXECUTIVE_MANAGEMENT',
     'REGIONAL_MANAGER', 'BRANCH_MANAGER', 'OPERATIONS_MANAGER', 'MANAGER',
   ].includes(roleKey);
-  const canBrandCompany = ['COMPANY_OWNER', 'BRANCH_MANAGER', 'OPERATIONS_MANAGER', 'MANAGER', 'EXECUTIVE_MANAGEMENT'].includes(roleKey);
-  const canCreateStaff = ['COMPANY_OWNER', 'BRANCH_MANAGER', 'OPERATIONS_MANAGER', 'MANAGER', 'HUMAN_RESOURCE', 'EXECUTIVE_MANAGEMENT'].includes(roleKey);
+  const canBrandCompany = Boolean(roleActions.canManageBranding);
+  const canCreateStaff = Boolean(roleActions.canCreateStaff);
   const isFinance = ['COMPANY_OWNER', 'ACCOUNTANT', 'FINANCE_MANAGER', 'TREASURY', 'INTERNAL_AUDIT'].includes(roleKey);
   const isCredit = ['COMPANY_OWNER', 'OPERATIONS_MANAGER', 'BRANCH_MANAGER', 'MANAGER', 'LOAN_OFFICER', 'SENIOR_CREDIT_OFFICER', 'CREDIT_ANALYST', 'LOAN_UNDERWRITER'].includes(roleKey);
   const isField = ['COMPANY_OWNER', 'COLLECTIONS', 'FIELD_OFFICER', 'STAFF', 'MOBILE_STAFF', 'COLLECTOR', 'BRANCH_MANAGER'].includes(roleKey);
@@ -183,12 +189,13 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
         }
         return { data: { data: null } };
       });
-      // Wave 1: Core role & tenant state (small batch to avoid DB pool spikes)
+      const canFetchProducts = allowedTabSet.has('LOANS') && !isGuarantorOnly;
+      // Wave 1: Core role & tenant state (strictly scoped)
       const [roleRes, countdownRes, messagesRes, productsRes] = await Promise.all([
         safe(api.get('/dashboard/my-role'), true),
         safe(api.get('/tenants/my/countdown')),
         safe(api.get('/tenants/my/messages')),
-        safe(api.get('/enterprise/loan-products')),
+        canFetchProducts ? safe(api.get('/enterprise/loan-products')) : Promise.resolve({ data: { data: [] } }),
       ]);
 
       setRoleMetrics(roleRes.data?.data || null);
@@ -197,9 +204,10 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
       setLoanProducts(productsRes.data?.data || []);
 
       if (isMemberOnly || isGuarantorOnly) {
-        const [myLoansRes, myGuaranteesRes] = await Promise.all([
+        const [myLoansRes, myGuaranteesRes, myPaymentsRes] = await Promise.all([
           safe(api.get('/loans/my-loans')),
           isGuarantorOnly ? safe(api.get('/guarantors/my-guarantees')) : Promise.resolve({ data: { data: null } }),
+          isGuarantorOnly ? safe(api.get('/payments/my-payments')) : Promise.resolve({ data: { data: null } }),
         ]);
         const myLoansList = myLoansRes.data?.data || [];
         setLoans(myLoansList);
@@ -212,16 +220,25 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
             .sort((a, b) => new Date(b.paidAt || b.createdAt || 0) - new Date(a.paidAt || a.createdAt || 0));
           setPayments(derivedPayments);
         }
-        if (isGuarantorOnly && myGuaranteesRes) setGuarantors(myGuaranteesRes.data?.data || []);
+        if (isGuarantorOnly) {
+          setGuarantors(myGuaranteesRes?.data?.data || []);
+          setPayments(myPaymentsRes?.data?.data || []);
+        }
       } else {
-        // Wave 2: Primary overview, charts & core ledgers
+        const canFetchOverview = Boolean(roleActions.canViewOverviewMetrics);
+        const canFetchCharts = Boolean(roleActions.canViewCharts);
+        const canFetchLoans = allowedTabSet.has('LOANS');
+        const canFetchPayments = allowedTabSet.has('PAYMENTS');
+        const canFetchMembers = Boolean(roleActions.canViewCustomerDirectory);
+
+        // Wave 2: Primary overview, charts & core ledgers (scoped per role)
         const [overviewRes, loanChartRes, paymentChartRes, loansRes, membersRes, paymentsRes] = await Promise.all([
-          safe(api.get('/dashboard/overview'), true),
-          safe(api.get('/dashboard/loan-chart')),
-          safe(api.get('/dashboard/payment-chart')),
-          safe(api.get('/loans')),
-          safe(api.get('/members')),
-          safe(api.get('/payments')),
+          canFetchOverview ? safe(api.get('/dashboard/overview'), true) : Promise.resolve({ data: { data: null } }),
+          canFetchCharts ? safe(api.get('/dashboard/loan-chart')) : Promise.resolve({ data: { data: [] } }),
+          canFetchCharts ? safe(api.get('/dashboard/payment-chart')) : Promise.resolve({ data: { data: [] } }),
+          canFetchLoans ? safe(api.get('/loans')) : Promise.resolve({ data: { data: [] } }),
+          canFetchMembers ? safe(api.get('/members')) : Promise.resolve({ data: { data: [] } }),
+          canFetchPayments ? safe(api.get('/payments')) : Promise.resolve({ data: { data: [] } }),
         ]);
         setOverview(overviewRes.data?.data || null);
         setLoanChart(loanChartRes.data?.data || []);
@@ -230,23 +247,26 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
         setMembers(membersRes.data?.data || []);
         setPayments(paymentsRes.data?.data || []);
 
-        // Wave 3: Operations & enterprise modules
+        const canFetchCampaigns = Boolean(roleActions.canManageCampaigns || isCompanyOwner || roleKey === 'EXECUTIVE_MANAGEMENT');
+        const canFetchInvestors = Boolean(roleActions.canManageInvestors || isCompanyOwner || roleKey === 'EXECUTIVE_MANAGEMENT' || roleKey === 'BOARD_EXECUTIVE');
+
+        // Wave 3: Operations & enterprise modules (strictly gated)
         const [
           collectorsRes, staffRes, guarantorsRes, meetingsRes, salariesRes,
           casesRes, ticketsRes, investorsRes, campaignsRes,
           deletionRes, auditRes,
         ] = await Promise.all([
-          safe(api.get('/collectors')),
-          safe(api.get('/staff')),
-          safe(api.get('/guarantors')),
-          safe(api.get('/meetings')),
-          safe(api.get('/salaries')),
-          safe(api.get('/enterprise/compliance-cases')),
-          safe(api.get('/enterprise/support-tickets')),
-          safe(api.get('/enterprise/investors')),
-          safe(api.get('/enterprise/campaigns')),
-          isManagement ? safe(api.get('/enterprise/deletion-requests')) : Promise.resolve({ data: { data: [] } }),
-          (isRiskLegal || isManagement) ? safe(api.get('/audit-logs')) : Promise.resolve({ data: { data: [] } }),
+          allowedTabSet.has('FIELD_OPS') ? safe(api.get('/collectors')) : Promise.resolve({ data: { data: [] } }),
+          (allowedTabSet.has('HR_PAYROLL') || allowedTabSet.has('STAFF_COMMS') || allowedTabSet.has('MEETINGS_REPORTS')) ? safe(api.get('/staff')) : Promise.resolve({ data: { data: [] } }),
+          allowedTabSet.has('GUARANTORS') ? safe(api.get('/guarantors')) : Promise.resolve({ data: { data: [] } }),
+          allowedTabSet.has('MEETINGS_REPORTS') ? safe(api.get('/meetings')) : Promise.resolve({ data: { data: [] } }),
+          roleActions.canViewSalaries ? safe(api.get('/salaries')) : Promise.resolve({ data: { data: [] } }),
+          allowedTabSet.has('RISK_AUDIT') ? safe(api.get('/enterprise/compliance-cases')) : Promise.resolve({ data: { data: [] } }),
+          allowedTabSet.has('SUPPORT') ? safe(api.get('/enterprise/support-tickets')) : Promise.resolve({ data: { data: [] } }),
+          canFetchInvestors ? safe(api.get('/enterprise/investors')) : Promise.resolve({ data: { data: [] } }),
+          canFetchCampaigns ? safe(api.get('/enterprise/campaigns')) : Promise.resolve({ data: { data: [] } }),
+          (isManagement && allowedTabSet.has('RISK_AUDIT')) ? safe(api.get('/enterprise/deletion-requests')) : Promise.resolve({ data: { data: [] } }),
+          (isRiskLegal || isManagement) && allowedTabSet.has('RISK_AUDIT') ? safe(api.get('/audit-logs')) : Promise.resolve({ data: { data: [] } }),
         ]);
         setCollectors(collectorsRes.data?.data || []);
         setStaffList(staffRes.data?.data || []);
@@ -274,13 +294,13 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
         ] = await Promise.all([
           safe(api.get('/tenants/my/profile')),
           safe(api.get('/staff/attendance/my-status')),
-          safe(api.get('/notifications/broadcasts')),
-          safe(api.get('/notifications/repayment-alerts')),
-          safe(api.get('/reports/snapshots')),
-          (isManagement || roleActions.canApproveStaff || roleKey === 'BRANCH_MANAGER') ? safe(api.get('/staff/pending-approvals')) : Promise.resolve({ data: { data: [] } }),
-          isManagement || isHR ? safe(api.get('/staff/attendance')) : Promise.resolve({ data: { data: [] } }),
+          allowedTabSet.has('STAFF_COMMS') ? safe(api.get('/notifications/broadcasts')) : Promise.resolve({ data: { data: [] } }),
+          roleActions.canViewCollectionAlerts ? safe(api.get('/notifications/repayment-alerts')) : Promise.resolve({ data: { data: null } }),
+          allowedTabSet.has('MEETINGS_REPORTS') ? safe(api.get('/reports/snapshots')) : Promise.resolve({ data: { data: [] } }),
+          (isCompanyOwner || roleActions.canApproveStaff || roleKey === 'BRANCH_MANAGER') ? safe(api.get('/staff/pending-approvals')) : Promise.resolve({ data: { data: [] } }),
+          allowedTabSet.has('HR_PAYROLL') && (isManagement || isHR) ? safe(api.get('/staff/attendance')) : Promise.resolve({ data: { data: [] } }),
           isCompanyOwner ? safe(api.get('/staff/branch-approved')) : Promise.resolve({ data: { data: [] } }),
-          (isCompanyOwner || isManagement) ? safe(api.get('/feedback')) : Promise.resolve({ data: { data: [] } }),
+          (isCompanyOwner || isManagement || allowedTabSet.has('SUPPORT')) ? safe(api.get('/feedback')) : Promise.resolve({ data: { data: [] } }),
         ]);
 
         const prof = profileRes.data?.data || null;
@@ -939,20 +959,30 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
     return matchesSearch && matchesMethod;
   });
 
-  const canViewLoans = isMemberOnly || isManagement || isCredit || isField || isFinance || isRiskLegal;
-  const canViewPayments = isMemberOnly || isManagement || isCredit || isField || isFinance || isRiskLegal;
-  const canViewMembers = !isMemberOnly && !isGuarantorOnly && (isManagement || isCredit || isField || isRiskLegal || roleKey === 'CUSTOMER_SERVICE' || roleKey === 'RECEPTION');
-  const canViewGuarantors = isGuarantorOnly || isManagement || isCredit || isField || isRiskLegal;
+  const canViewLoans = allowedTabSet.has('LOANS');
+  const canViewPayments = allowedTabSet.has('PAYMENTS');
+  const canViewMembers = allowedTabSet.has('MEMBERS') && Boolean(roleActions.canViewCustomerDirectory);
+  const canViewGuarantors = allowedTabSet.has('GUARANTORS');
 
-  // Tab Navigation strictly scoped to each role's permitted domain
+  // Tab Navigation strictly scoped to each role's permitted domain (Role Capabilities Matrix)
   const tabs = [
     { id: 'OVERVIEW', label: 'Overview & Hub', icon: Landmark, badge: null },
   ];
   if (canViewLoans) {
-    tabs.push({ id: 'LOANS', label: isMemberOnly ? 'My Loans & Apply' : 'Loans & Approvals', icon: CreditCard, badge: loans.length });
+    tabs.push({
+      id: 'LOANS',
+      label: isMemberOnly ? 'My Loans & Apply' : isGuarantorOnly ? 'Guaranteed Loans' : 'Loans & Approvals',
+      icon: CreditCard,
+      badge: loans.length,
+    });
   }
   if (canViewPayments) {
-    tabs.push({ id: 'PAYMENTS', label: 'Repayments (MoMo/Bank/Cash)', icon: TrendingUp, badge: payments.length });
+    tabs.push({
+      id: 'PAYMENTS',
+      label: isGuarantorOnly ? 'Surety Repayments' : 'Repayments (MoMo/Bank/Cash)',
+      icon: TrendingUp,
+      badge: payments.length,
+    });
   }
   if (canViewMembers) {
     tabs.push({ id: 'MEMBERS', label: 'Borrowers & KYC', icon: Users, badge: members.length });
@@ -960,29 +990,36 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
   if (canViewGuarantors) {
     tabs.push({ id: 'GUARANTORS', label: isGuarantorOnly ? 'My Guarantees & Surety' : 'Guarantors', icon: ShieldCheck, badge: guarantors.length });
   }
-  if (isField || isCredit || isManagement || isRiskLegal) {
+  if (allowedTabSet.has('FIELD_OPS')) {
     tabs.push({ id: 'FIELD_OPS', label: 'Live GPS Map & Visits', icon: MapPin, badge: collectors.length });
   }
-  if (isHR || isFinance || isManagement) {
+  if (allowedTabSet.has('HR_PAYROLL')) {
     tabs.push({ id: 'HR_PAYROLL', label: 'Staff, Approvals & Attendance', icon: UserPlus, badge: pendingStaff.length > 0 ? `${staffList.length}+${pendingStaff.length}` : staffList.length });
   }
-  if (isFinance || isManagement || isRiskLegal) {
+  if (allowedTabSet.has('ACCOUNTING_AUDIT')) {
     tabs.push({ id: 'ACCOUNTING_AUDIT', label: 'Accountant Audit & Sign-Off', icon: Calculator, badge: null });
   }
-  if (canBrandCompany) {
+  if (allowedTabSet.has('BRANDING_CCTV') && canBrandCompany) {
     tabs.push({ id: 'BRANDING_CCTV', label: 'Branding, Plans & CCTV', icon: Building2, badge: null });
   }
-  if (isRiskLegal || isManagement) {
+  if (allowedTabSet.has('RISK_AUDIT')) {
     tabs.push({ id: 'RISK_AUDIT', label: 'Compliance, Audit & Deletions', icon: AlertTriangle, badge: cases.length + deletionQueue.length });
   }
-  if (roleKey === 'CUSTOMER_SERVICE' || roleKey === 'RECEPTION' || isManagement) {
+  if (allowedTabSet.has('SUPPORT')) {
     tabs.push({ id: 'SUPPORT', label: 'Support & Front Desk', icon: Bell, badge: tickets.length });
   }
-  if (roleKey === 'MARKETING' || roleKey === 'INVESTOR' || isManagement) {
-    tabs.push({ id: 'GROWTH_CAPITAL', label: 'Marketing & Investors', icon: Megaphone, badge: campaigns.length + investors.length });
+  if (allowedTabSet.has('GROWTH_CAPITAL')) {
+    tabs.push({
+      id: 'GROWTH_CAPITAL',
+      label: roleKey === 'MARKETING' ? 'Marketing Outreach' : roleKey === 'INVESTOR' ? 'Investor Capital & Yield' : 'Marketing & Investors',
+      icon: Megaphone,
+      badge: roleKey === 'MARKETING' ? campaigns.length : roleKey === 'INVESTOR' ? investors.length : campaigns.length + investors.length,
+    });
   }
-  if (!isMemberOnly && !isGuarantorOnly) {
+  if (allowedTabSet.has('STAFF_COMMS')) {
     tabs.push({ id: 'STAFF_COMMS', label: 'Staff Messaging', icon: Send, badge: broadcastInbox.length });
+  }
+  if (allowedTabSet.has('MEETINGS_REPORTS')) {
     tabs.push({ id: 'MEETINGS_REPORTS', label: 'Meetings & Reports', icon: Video, badge: meetings.length });
   }
 
@@ -1096,13 +1133,28 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
             fallbackPath="/dashboard"
             actions={
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {USER_COUNT_DROPDOWN_ROLES.has(roleKey) && (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{
+                    padding: '7px 12px',
+                    fontSize: '0.8rem',
+                    background: 'linear-gradient(135deg, #F4E07B 0%, #D4AF37 60%, #B45309 100%)',
+                    color: '#060C18',
+                    borderColor: '#FDE68A',
+                    fontWeight: 700,
+                  }}
+                  onClick={() => setRoleVideoOpen(true)}
+                >
+                  <Video size={14} /> Watch {roleMeta.title} Video
+                </button>
+                {USER_COUNT_DROPDOWN_ROLES.has(roleKey) && roleActions.canViewCountsDropdown && (
                   <Link to="/admin/users-crosscheck" className="btn btn-secondary" style={{ padding: '7px 12px', fontSize: '0.8rem', textDecoration: 'none' }}>
                     <ShieldCheck size={14} /> Cross-Check
                   </Link>
                 )}
                 <button type="button" className="btn btn-primary" style={{ padding: '7px 12px', fontSize: '0.8rem' }} onClick={loadDashboardData}>
-                  <RefreshCw size={14} /> Sync PostgreSQL
+                  <RefreshCw size={14} /> Refresh Data
                 </button>
               </div>
             }
@@ -1156,16 +1208,29 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
               </div>
 
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {USER_COUNT_DROPDOWN_ROLES.has(roleKey) && (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{
+                    background: 'linear-gradient(135deg, #F4E07B 0%, #D4AF37 60%, #B45309 100%)',
+                    color: '#060C18',
+                    borderColor: '#FDE68A',
+                    fontWeight: 700,
+                  }}
+                  onClick={() => setRoleVideoOpen(true)}
+                >
+                  <Video size={15} /> Watch {roleMeta.title} Video
+                </button>
+                {USER_COUNT_DROPDOWN_ROLES.has(roleKey) && roleActions.canViewCountsDropdown && (
                   <Link
                     to="/admin/users-crosscheck"
                     className="btn btn-secondary"
                     style={{ textDecoration: 'none' }}
                   >
-                    <ShieldCheck size={15} /> Qualification Cross-Check
+                    <ShieldCheck size={15} /> Verify Staff Accounts
                   </Link>
                 )}
-                {(isManagement || isFinance) && (
+                {roleActions.canUseDataMigration && (
                   <Link
                     to="/migrations"
                     className="btn btn-secondary"
@@ -1175,7 +1240,7 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                   </Link>
                 )}
                 <button type="button" className="btn btn-primary" onClick={loadDashboardData}>
-                  <RefreshCw size={15} /> Sync PostgreSQL
+                  <RefreshCw size={15} /> Refresh Data
                 </button>
               </div>
             </div>
@@ -1295,9 +1360,14 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
               flexWrap: 'wrap',
             }}
           >
-            <span><strong>Live Data Sync Notice:</strong> {loadError}</span>
+            <span>
+              <strong>Data Sync Notice:</strong>{' '}
+              {/prisma\.|invocation|\\\\|\/src\//i.test(String(loadError || ''))
+                ? 'Temporary connection delay while loading live numbers. Click Retry to refresh.'
+                : loadError}
+            </span>
             <button type="button" className="btn btn-primary" style={{ padding: '6px 14px' }} onClick={loadDashboardData}>
-              <RefreshCw size={14} /> Retry Sync
+              <RefreshCw size={14} /> Retry
             </button>
           </div>
         )}
@@ -1390,55 +1460,83 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
         {/* ===================================================================== */}
         {activeTab === 'OVERVIEW' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            <div className="dashboard-grid">
-              <div className="glass-panel metric-card">
-                <div>
-                  <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>
-                    {isMemberOnly ? 'MY ACTIVE LOANS' : 'ACTIVE / TOTAL LOANS'}
-                  </div>
-                  <div className="metric-value" style={{ color: '#D4AF37' }}>
-                    {overview?.activeLoans ?? loans.length}
-                  </div>
+            {(() => {
+              const summary = roleMetrics?.summary || {};
+              const cards = isGuarantorOnly ? [
+                { label: 'GUARANTEED LOANS', val: summary.guaranteedLoansCount ?? loans.length, color: '#D4AF37', Icon: Landmark },
+                { label: 'GUARANTEED PRINCIPAL', val: formatGHS(summary.totalGuaranteedPrincipalGhs ?? loans.reduce((s, l) => s + Number(l.principalAmount || 0), 0)), color: '#10B981', Icon: TrendingUp, small: true },
+                { label: 'SURETY OUTSTANDING', val: formatGHS(summary.totalGuaranteedOutstandingGhs ?? loans.reduce((s, l) => s + Number(l.outstandingAmount || 0), 0)), color: '#38BDF8', Icon: CreditCard, small: true },
+                { label: 'SURETY AGREEMENT STATUS', val: summary.agreementSigned ? 'SIGNED' : 'PENDING SIGNATURE', color: '#F4E07B', Icon: ShieldCheck },
+              ] : isMemberOnly ? [
+                { label: 'MY ACTIVE LOANS', val: summary.activeLoansCount ?? loans.length, color: '#D4AF37', Icon: Landmark },
+                { label: 'TOTAL BORROWED', val: formatGHS(summary.totalBorrowedGhs ?? loans.reduce((s, l) => s + Number(l.principalAmount || 0), 0)), color: '#10B981', Icon: TrendingUp, small: true },
+                { label: 'REPAID TO DATE', val: formatGHS(summary.totalRepaidGhs ?? payments.reduce((s, p) => s + Number(p.amount || 0), 0)), color: '#38BDF8', Icon: CreditCard, small: true },
+                { label: 'REMAINING BALANCE', val: formatGHS(summary.totalOutstandingGhs ?? loans.reduce((s, l) => s + Number(l.outstandingAmount || 0), 0)), color: '#F4E07B', Icon: Users, small: true },
+              ] : roleKey === 'HUMAN_RESOURCE' ? [
+                { label: 'ACTIVE INSTITUTION STAFF', val: summary.activeStaffCount ?? staffList.length, color: '#D4AF37', Icon: Users },
+                { label: 'PENDING OWNER APPROVALS', val: summary.pendingStaffApprovals ?? pendingStaff.length, color: '#FBBF24', Icon: UserPlus },
+                { label: 'ATTENDANCE SHIFTS LOGGED', val: summary.attendanceLogsCount ?? attendanceLogs.length, color: '#38BDF8', Icon: CalendarCheck },
+                { label: 'PAYROLL SCHEDULES', val: summary.salaryRunsCount ?? salaries.length, color: '#10B981', Icon: Briefcase },
+              ] : roleKey === 'MARKETING' ? [
+                { label: 'ACTIVE CAMPAIGNS', val: summary.activeCampaignsCount ?? campaigns.length, color: '#D4AF37', Icon: Megaphone },
+                { label: 'CAMPAIGN BUDGET', val: formatGHS(summary.totalCampaignBudgetGhs ?? campaigns.reduce((s, c) => s + Number(c.budget || 0), 0)), color: '#10B981', Icon: TrendingUp, small: true },
+                { label: 'TOTAL REACH / LEADS', val: summary.totalReachLeads ?? campaigns.reduce((s, c) => s + Number(c.leadsCount || c.reachCount || 0), 0), color: '#38BDF8', Icon: Users },
+                { label: 'CAMPAIGN CONVERSIONS', val: summary.totalConversions ?? campaigns.reduce((s, c) => s + Number(c.conversions || 0), 0), color: '#F4E07B', Icon: CheckCircle2 },
+              ] : roleKey === 'INVESTOR' ? [
+                { label: 'INVESTOR TRANCHES', val: summary.investorTranchesCount ?? investors.length, color: '#D4AF37', Icon: Briefcase },
+                { label: 'COMMITTED CAPITAL', val: formatGHS(summary.totalCommittedCapitalGhs ?? investors.reduce((s, i) => s + Number(i.committedCapital ?? i.investedAmount ?? 0), 0)), color: '#10B981', Icon: TrendingUp, small: true },
+                { label: 'DEPLOYED CAPITAL', val: formatGHS(summary.totalDeployedCapitalGhs ?? 0), color: '#38BDF8', Icon: Landmark, small: true },
+                { label: 'ACCRUED RETURNS', val: formatGHS(summary.totalReturnsAccruedGhs ?? 0), color: '#F4E07B', Icon: CreditCard, small: true },
+              ] : ['CUSTOMER_SERVICE', 'RECEPTION'].includes(roleKey) ? [
+                { label: 'OPEN SUPPORT TICKETS', val: summary.openSupportTickets ?? tickets.filter((t) => t.status !== 'RESOLVED').length, color: '#FBBF24', Icon: Bell },
+                { label: 'TOTAL SERVICE QUEUE', val: summary.totalSupportTickets ?? tickets.length, color: '#D4AF37', Icon: MessageSquare },
+                { label: 'REGISTERED BORROWERS', val: summary.recentBorrowersCount ?? members.length, color: '#38BDF8', Icon: Users },
+                { label: 'COLLECTION DUE ALERTS', val: repaymentAlerts.totalBorrowers || 0, color: '#10B981', Icon: AlertTriangle },
+              ] : [
+                { label: 'ACTIVE / TOTAL LOANS', val: overview?.activeLoans ?? overview?.totalLoans ?? loans.length, color: '#D4AF37', Icon: Landmark },
+                { label: 'DISBURSED PRINCIPAL', val: formatGHS(overview?.totalDisbursed ?? overview?.financials?.totalPrincipal ?? loans.reduce((s, l) => s + Number(l.principalAmount || 0), 0)), color: '#10B981', Icon: TrendingUp, small: true },
+                { label: 'TOTAL REPAID / COLLECTED', val: formatGHS(overview?.totalRepaid ?? overview?.financials?.totalCollected ?? payments.reduce((s, p) => s + Number(p.amount || 0), 0)), color: '#38BDF8', Icon: CreditCard, small: true },
+                {
+                  label: isRiskLegal ? 'CUSTOMERS / COMPLIANCE CASES' : 'TOTAL REGISTERED CUSTOMERS',
+                  val: isRiskLegal ? `${overview?.totalMembers ?? members.length} / ${cases.length}` : (overview?.totalMembers ?? members.length),
+                  color: '#F4E07B',
+                  Icon: Users,
+                },
+              ];
+              return (
+                <div className="dashboard-grid">
+                  {cards.map(({ label, val, color, Icon, small }) => (
+                    <div key={label} className="glass-panel metric-card">
+                      <div>
+                        <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>{label}</div>
+                        <div className="metric-value" style={{ fontSize: small ? '1.35rem' : undefined, color }}>{val}</div>
+                      </div>
+                      <Icon size={26} color={color} />
+                    </div>
+                  ))}
                 </div>
-                <Landmark size={26} color="#D4AF37" />
-              </div>
+              );
+            })()}
 
-              <div className="glass-panel metric-card">
+            {/* Exact Role Commands, Permitted Actions & Boundaries */}
+            <div className="glass-panel" style={{ padding: 18, borderColor: 'rgba(16, 185, 129, 0.35)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 10 }}>
                 <div>
-                  <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>DISBURSED PRINCIPAL</div>
-                  <div className="metric-value" style={{ fontSize: '1.35rem', color: '#10B981' }}>
-                    {formatGHS(overview?.totalDisbursed ?? loans.reduce((s, l) => s + Number(l.principalAmount || 0), 0))}
+                  <h3 style={{ margin: 0, color: '#34D399', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <CheckCircle2 size={17} /> {roleMeta.title} — What You Can Do
+                  </h3>
+                  <div style={{ fontSize: '0.78rem', color: '#CBD5E1', marginTop: 3 }}>
+                    {roleCaps.scopeSummary || roleMeta.subtitle}
                   </div>
                 </div>
-                <TrendingUp size={26} color="#10B981" />
+                <span className="badge badge-gold">{roleCaps.allowedTabs?.length || tabs.length} AUTHORIZED MODULES</span>
               </div>
-
-              <div className="glass-panel metric-card">
-                <div>
-                  <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>
-                    {isMemberOnly ? 'REMAINING BALANCE' : 'TOTAL REPAID / OUTSTANDING'}
-                  </div>
-                  <div className="metric-value" style={{ fontSize: '1.35rem', color: '#38BDF8' }}>
-                    {formatGHS(overview?.totalRepaid ?? payments.reduce((s, p) => s + Number(p.amount || 0), 0))}
-                  </div>
-                </div>
-                <CreditCard size={26} color="#38BDF8" />
-              </div>
-
-              <div className="glass-panel metric-card">
-                <div>
-                  <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>
-                    {isRiskLegal ? 'TOTAL REGISTERED CUSTOMERS / CASES' : isHR ? 'TOTAL CUSTOMERS / PAYROLL' : 'TOTAL REGISTERED CUSTOMERS'}
-                  </div>
-                  <div className="metric-value" style={{ color: '#F4E07B' }}>
-                    {isRiskLegal
-                      ? `${overview?.totalMembers ?? members.length} / ${cases.length}`
-                      : isHR
-                        ? `${overview?.totalMembers ?? members.length} / ${salaries.length}`
-                        : (overview?.totalMembers ?? members.length)}
-                  </div>
-                </div>
-                <Users size={26} color="#F4E07B" />
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {(roleCaps.allowedActionsList || []).map((act) => (
+                  <span key={act} className="badge badge-success" style={{ padding: '5px 10px', fontSize: '0.74rem' }}>
+                    {act}
+                  </span>
+                ))}
               </div>
             </div>
 
@@ -1447,7 +1545,7 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
                 <div>
                   <h3 style={{ margin: 0, color: '#D4AF37', fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <ShieldCheck size={18} /> {roleMeta.title} — Quick-Action Command Hub
+                    <ShieldCheck size={18} /> {roleMeta.title} — Quick Actions
                   </h3>
                   <div style={{ fontSize: '0.78rem', color: '#94A3B8', marginTop: 2 }}>
                     Tailored operational commands and direct workspace shortcuts for {roleMeta.category} ({roleMeta.focus?.join(' • ') || 'Live Operations'}).
@@ -1487,7 +1585,7 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
               </div>
             </div>
 
-            {USER_COUNT_DROPDOWN_ROLES.has(roleKey) && (
+            {USER_COUNT_DROPDOWN_ROLES.has(roleKey) && roleActions.canViewCountsDropdown && (
               <RegistersCrossCheckPanel
                 userRole={roleKey}
                 totalCustomers={overview?.totalMembers ?? members.length}
@@ -1517,7 +1615,7 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
               </div>
             )}
 
-            {!isMemberOnly && !isGuarantorOnly && (
+            {roleActions.canViewCustomerDirectory && (
               <div className="glass-panel" style={{ padding: 16 }}>
                 <form
                   onSubmit={(e) => handleSearchMembers(e)}
@@ -1572,7 +1670,7 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
               </div>
             )}
 
-            {!isMemberOnly && !isGuarantorOnly && (
+            {roleActions.canViewCollectionAlerts && (
               <div className="glass-panel" style={{ padding: 18, borderColor: 'rgba(245, 158, 11, 0.35)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 10 }}>
                   <div>
@@ -1618,11 +1716,11 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
               </div>
             )}
 
-            {!isMemberOnly && !isGuarantorOnly && (
+            {roleActions.canViewCharts && (
               <div className="gbs-grid-2">
                 <div className="glass-panel" style={{ padding: 20 }}>
                   <h3 style={{ margin: '0 0 12px', color: '#D4AF37', fontSize: '1rem' }}>
-                    Loan Portfolio Status Distribution (PostgreSQL)
+                    Loan Status Summary
                   </h3>
                   <div style={{ height: 240 }}>
                     <ResponsiveContainer width="100%" height="100%">
@@ -1767,25 +1865,35 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
               </div>
             )}
 
-            {/* Role-Specific Backend Telemetry Snapshot */}
-            {roleMetrics && (
-              <div className="glass-panel" style={{ padding: 20 }}>
-                <h3 style={{ margin: '0 0 10px', color: '#D4AF37', fontSize: '1rem' }}>
-                  {roleMeta.title} — Specialized Live Telemetry
-                </h3>
-                <div className="gbs-grid-3">
-                  {Object.entries(roleMetrics)
-                    .filter(([, v]) => typeof v !== 'object' || v === null)
-                    .slice(0, 9)
-                    .map(([k, v]) => (
-                      <div key={k} style={{ background: 'rgba(6,12,24,0.75)', padding: 12, borderRadius: 8, border: '1px solid rgba(212,175,55,0.18)' }}>
-                        <div style={{ fontSize: '0.7rem', color: '#94A3B8', textTransform: 'uppercase' }}>{k.replace(/([A-Z])/g, ' $1')}</div>
-                        <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#F1F5F9', marginTop: 4 }}>{String(v ?? '0')}</div>
+            {/* Role-Scoped Recent Activity Stream */}
+            <div className="glass-panel" style={{ padding: 20 }}>
+              <h3 style={{ margin: '0 0 12px', color: '#D4AF37', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Clock size={17} /> {roleMeta.title} — Recent Activity ({roleMetrics?.datasets?.recentActivities?.length || 0})
+              </h3>
+              {roleMetrics?.datasets?.recentActivities?.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {roleMetrics.datasets.recentActivities.slice(0, 8).map((act) => (
+                    <div key={act.id} style={{ padding: '10px 12px', borderRadius: 8, background: 'rgba(6,12,24,0.75)', borderLeft: '3px solid #D4AF37', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                      <div>
+                        <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#F1F5F9' }}>
+                          {act.action} — {act.entityType || 'Record'}
+                        </div>
+                        <div style={{ fontSize: '0.74rem', color: '#94A3B8' }}>
+                          Actor: {act.actorName || act.user?.firstName || 'System'} ({act.actorRole || act.user?.role || roleKey})
+                        </div>
                       </div>
-                    ))}
+                      <span style={{ fontSize: '0.74rem', color: '#38BDF8' }}>
+                        {act.createdAt ? new Date(act.createdAt).toLocaleString() : 'Recent'}
+                      </span>
+                    </div>
+                  ))}
                 </div>
-              </div>
-            )}
+              ) : (
+                <p style={{ margin: 0, color: '#94A3B8', fontSize: '0.84rem' }}>
+                  No recent activity entries recorded yet in your scoped view.
+                </p>
+              )}
+            </div>
           </div>
         )}
 
@@ -1793,74 +1901,78 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
         {/* TAB: LOANS & APPROVALS                                                */}
         {/* ===================================================================== */}
         {activeTab === 'LOANS' && (
-          <div className="gbs-grid-2">
-            <div className="glass-panel" style={{ padding: 20 }}>
-              <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>
-                <Plus size={16} style={{ verticalAlign: 'middle' }} /> New Loan Application
-              </h3>
-              <form onSubmit={handleApplyLoan} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {isMemberOnly ? (
-                  <div style={{ padding: '10px 12px', borderRadius: 8, background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', fontSize: '0.8rem', color: '#34D399' }}>
-                    <strong>Borrower Applicant:</strong> {user?.firstName} {user?.lastName} ({user?.phone || user?.email}) — Self-Service Facility Application
-                  </div>
-                ) : (
+          <div className={roleActions.canApplyLoan ? 'gbs-grid-2' : ''}>
+            {roleActions.canApplyLoan && (
+              <div className="glass-panel" style={{ padding: 20 }}>
+                <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>
+                  <Plus size={16} style={{ verticalAlign: 'middle' }} /> New Loan Application
+                </h3>
+                <form onSubmit={handleApplyLoan} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {isMemberOnly ? (
+                    <div style={{ padding: '10px 12px', borderRadius: 8, background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', fontSize: '0.8rem', color: '#34D399' }}>
+                      <strong>Borrower Applicant:</strong> {user?.firstName} {user?.lastName} ({user?.phone || user?.email}) — Self-Service Facility Application
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="gbs-label">Borrower / Member</label>
+                      <select required className="gbs-select" value={newLoan.memberId} onChange={(e) => setNewLoan({ ...newLoan, memberId: e.target.value })}>
+                        <option value="">Select Registered Member...</option>
+                        {members.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.memberNumber} — {m.user?.firstName} {m.user?.lastName}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   <div>
-                    <label className="gbs-label">Borrower / Member</label>
-                    <select required className="gbs-select" value={newLoan.memberId} onChange={(e) => setNewLoan({ ...newLoan, memberId: e.target.value })}>
-                      <option value="">Select Registered Member...</option>
-                      {members.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.memberNumber} — {m.user?.firstName} {m.user?.lastName}
-                        </option>
+                    <label className="gbs-label">Loan Product</label>
+                    <select className="gbs-select" required value={newLoan.loanProductId || loanProducts[0]?.id || ''} onChange={(e) => setNewLoan({ ...newLoan, loanProductId: e.target.value })}>
+                      {loanProducts.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name} ({p.interestRate}% • {p.minTermMonths}-{p.maxTermMonths} mo)</option>
                       ))}
                     </select>
                   </div>
-                )}
-                <div>
-                  <label className="gbs-label">Loan Product</label>
-                  <select className="gbs-select" required value={newLoan.loanProductId || loanProducts[0]?.id || ''} onChange={(e) => setNewLoan({ ...newLoan, loanProductId: e.target.value })}>
-                    {loanProducts.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name} ({p.interestRate}% • {p.minTermMonths}-{p.maxTermMonths} mo)</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="gbs-grid-2" style={{ gap: 10 }}>
-                  <div>
-                    <label className="gbs-label">Principal Amount (GHS)</label>
-                    <input type="number" required min="100" className="gbs-input" value={newLoan.principalAmount} onChange={(e) => setNewLoan({ ...newLoan, principalAmount: e.target.value })} placeholder="5000" />
-                  </div>
-                  <div>
-                    <label className="gbs-label">Term (Months)</label>
-                    <input type="number" required min="1" max="60" className="gbs-input" value={newLoan.termMonths} onChange={(e) => setNewLoan({ ...newLoan, termMonths: e.target.value })} />
-                  </div>
-                </div>
-                {Number(newLoan.principalAmount) > 0 && Number(newLoan.termMonths) > 0 && (() => {
-                  const selectedProd = loanProducts.find((p) => p.id === (newLoan.loanProductId || loanProducts[0]?.id)) || loanProducts[0];
-                  const ratePct = Number(selectedProd?.interestRate || 15);
-                  const principal = Number(newLoan.principalAmount);
-                  const term = Math.max(1, Number(newLoan.termMonths));
-                  const estTotal = principal + (principal * (ratePct / 100));
-                  const estMonthly = estTotal / term;
-                  return (
-                    <div style={{ padding: '10px 12px', borderRadius: 8, background: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.3)', fontSize: '0.78rem', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-                      <span>Est. Monthly Installment: <strong style={{ color: '#F4E07B' }}>{formatGHS(estMonthly)}/mo</strong></span>
-                      <span>Total Repayable ({ratePct}%): <strong style={{ color: '#00F2FE' }}>{formatGHS(estTotal)}</strong></span>
+                  <div className="gbs-grid-2" style={{ gap: 10 }}>
+                    <div>
+                      <label className="gbs-label">Principal Amount (GHS)</label>
+                      <input type="number" required min="100" className="gbs-input" value={newLoan.principalAmount} onChange={(e) => setNewLoan({ ...newLoan, principalAmount: e.target.value })} placeholder="5000" />
                     </div>
-                  );
-                })()}
-                <div>
-                  <label className="gbs-label">Loan Purpose</label>
-                  <input type="text" required className="gbs-input" value={newLoan.purpose} onChange={(e) => setNewLoan({ ...newLoan, purpose: e.target.value })} placeholder="Working Capital / Retail Expansion" />
-                </div>
-                <button type="submit" className="btn btn-primary" style={{ justifyContent: 'center' }}>
-                  Submit Application to Underwriting
-                </button>
-              </form>
-            </div>
+                    <div>
+                      <label className="gbs-label">Term (Months)</label>
+                      <input type="number" required min="1" max="60" className="gbs-input" value={newLoan.termMonths} onChange={(e) => setNewLoan({ ...newLoan, termMonths: e.target.value })} />
+                    </div>
+                  </div>
+                  {Number(newLoan.principalAmount) > 0 && Number(newLoan.termMonths) > 0 && (() => {
+                    const selectedProd = loanProducts.find((p) => p.id === (newLoan.loanProductId || loanProducts[0]?.id)) || loanProducts[0];
+                    const ratePct = Number(selectedProd?.interestRate || 15);
+                    const principal = Number(newLoan.principalAmount);
+                    const term = Math.max(1, Number(newLoan.termMonths));
+                    const estTotal = principal + (principal * (ratePct / 100));
+                    const estMonthly = estTotal / term;
+                    return (
+                      <div style={{ padding: '10px 12px', borderRadius: 8, background: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.3)', fontSize: '0.78rem', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                        <span>Est. Monthly Installment: <strong style={{ color: '#F4E07B' }}>{formatGHS(estMonthly)}/mo</strong></span>
+                        <span>Total Repayable ({ratePct}%): <strong style={{ color: '#00F2FE' }}>{formatGHS(estTotal)}</strong></span>
+                      </div>
+                    );
+                  })()}
+                  <div>
+                    <label className="gbs-label">Loan Purpose</label>
+                    <input type="text" required className="gbs-input" value={newLoan.purpose} onChange={(e) => setNewLoan({ ...newLoan, purpose: e.target.value })} placeholder="Working Capital / Retail Expansion" />
+                  </div>
+                  <button type="submit" className="btn btn-primary" style={{ justifyContent: 'center' }}>
+                    Submit Application to Underwriting
+                  </button>
+                </form>
+              </div>
+            )}
 
             <div className="glass-panel" style={{ padding: 20 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8, flexWrap: 'wrap' }}>
-                <h3 style={{ margin: 0, color: '#00F2FE' }}>Loan Portfolio ({filteredLoans.length})</h3>
+                <h3 style={{ margin: 0, color: '#00F2FE' }}>
+                  {isGuarantorOnly ? `Guaranteed Loans Portfolio (${filteredLoans.length})` : `Loan Portfolio (${filteredLoans.length})`}
+                </h3>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <input type="text" className="gbs-input" style={{ width: 170, padding: '6px 10px' }} placeholder="Search loan / member..." value={search} onChange={(e) => setSearch(e.target.value)} />
                   <select className="gbs-select" style={{ width: 130, padding: '6px 10px' }} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
@@ -1907,7 +2019,7 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                             <button type="button" className="btn btn-secondary" style={{ padding: '4px 9px', fontSize: '0.74rem' }}>
                               Open <ArrowUpRight size={12} />
                             </button>
-                            {['DISBURSED', 'ONGOING', 'OVERDUE', 'APPROVED'].includes(l.status) && (
+                            {roleActions.canRecordPayment && ['DISBURSED', 'ONGOING', 'OVERDUE', 'APPROVED'].includes(l.status) && (
                               <button
                                 type="button"
                                 className="btn btn-primary"
@@ -1940,78 +2052,82 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
         {/* TAB: PAYMENTS (MOMO / BANK / CASH)                                    */}
         {/* ===================================================================== */}
         {activeTab === 'PAYMENTS' && (
-          <div className="gbs-grid-2">
-            <div className="glass-panel" style={{ padding: 20 }}>
-              <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>Record Loan Repayment</h3>
-              <form onSubmit={handleRecordPayment} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div>
-                  <label className="gbs-label">Target Loan</label>
-                  <select className="gbs-select" required value={newPayment.loanId} onChange={(e) => setNewPayment({ ...newPayment, loanId: e.target.value })}>
-                    <option value="">Select Active Loan...</option>
-                    {loans.map((l) => (
-                      <option key={l.id} value={l.id}>{l.loanNumber} — {l.member?.user?.firstName || user?.firstName} ({formatGHS(l.outstandingAmount ?? l.totalOutstanding ?? l.principalAmount)})</option>
-                    ))}
-                  </select>
-                </div>
-                {newPayment.loanId && (() => {
-                  const selLoan = loans.find((x) => x.id === newPayment.loanId);
-                  if (!selLoan) return null;
-                  const fullOut = Number(selLoan.outstandingAmount ?? selLoan.totalOutstanding ?? selLoan.principalAmount ?? 0);
-                  const estInstallment = Math.max(1, Math.round((fullOut / Math.max(1, Number(selLoan.termMonths || 12))) * 100) / 100);
-                  return (
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        style={{ padding: '5px 10px', fontSize: '0.74rem' }}
-                        onClick={() => setNewPayment((prev) => ({ ...prev, amount: String(estInstallment) }))}
-                      >
-                        Fill Est. Installment ({formatGHS(estInstallment)})
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        style={{ padding: '5px 10px', fontSize: '0.74rem' }}
-                        onClick={() => setNewPayment((prev) => ({ ...prev, amount: String(fullOut) }))}
-                      >
-                        Fill Full Balance ({formatGHS(fullOut)})
-                      </button>
-                    </div>
-                  );
-                })()}
-                <div className="gbs-grid-2" style={{ gap: 10 }}>
+          <div className={roleActions.canRecordPayment ? 'gbs-grid-2' : ''}>
+            {roleActions.canRecordPayment && (
+              <div className="glass-panel" style={{ padding: 20 }}>
+                <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>
+                  {isGuarantorOnly ? 'Make Surety Repayment on Guaranteed Loan' : 'Record Loan Repayment'}
+                </h3>
+                <form onSubmit={handleRecordPayment} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   <div>
-                    <label className="gbs-label">Amount (GHS)</label>
-                    <input type="number" required min="1" step="0.01" className="gbs-input" value={newPayment.amount} onChange={(e) => setNewPayment({ ...newPayment, amount: e.target.value })} placeholder="350" />
-                  </div>
-                  <div>
-                    <label className="gbs-label">Method</label>
-                    <select className="gbs-select" value={newPayment.method} onChange={(e) => setNewPayment({ ...newPayment, method: e.target.value })}>
-                      <option value="MOMO">Mobile Money (MTN/Telecel)</option>
-                      <option value="BANK_TRANSFER">Direct Bank Transfer</option>
-                      <option value="CASH">Cash Payment (Needs Accounting Approval)</option>
+                    <label className="gbs-label">Target Loan</label>
+                    <select className="gbs-select" required value={newPayment.loanId} onChange={(e) => setNewPayment({ ...newPayment, loanId: e.target.value })}>
+                      <option value="">Select Active Loan...</option>
+                      {loans.map((l) => (
+                        <option key={l.id} value={l.id}>{l.loanNumber} — {l.member?.user?.firstName || user?.firstName} ({formatGHS(l.outstandingAmount ?? l.totalOutstanding ?? l.principalAmount)})</option>
+                      ))}
                     </select>
                   </div>
-                </div>
-                {newPayment.method === 'MOMO' && (
+                  {newPayment.loanId && (() => {
+                    const selLoan = loans.find((x) => x.id === newPayment.loanId);
+                    if (!selLoan) return null;
+                    const fullOut = Number(selLoan.outstandingAmount ?? selLoan.totalOutstanding ?? selLoan.principalAmount ?? 0);
+                    const estInstallment = Math.max(1, Math.round((fullOut / Math.max(1, Number(selLoan.termMonths || 12))) * 100) / 100);
+                    return (
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          style={{ padding: '5px 10px', fontSize: '0.74rem' }}
+                          onClick={() => setNewPayment((prev) => ({ ...prev, amount: String(estInstallment) }))}
+                        >
+                          Fill Est. Installment ({formatGHS(estInstallment)})
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          style={{ padding: '5px 10px', fontSize: '0.74rem' }}
+                          onClick={() => setNewPayment((prev) => ({ ...prev, amount: String(fullOut) }))}
+                        >
+                          Fill Full Balance ({formatGHS(fullOut)})
+                        </button>
+                      </div>
+                    );
+                  })()}
                   <div className="gbs-grid-2" style={{ gap: 10 }}>
                     <div>
-                      <label className="gbs-label">MoMo Phone</label>
-                      <input type="tel" required className="gbs-input" value={newPayment.momoPhone} onChange={(e) => setNewPayment({ ...newPayment, momoPhone: e.target.value })} placeholder="+233240000000" />
+                      <label className="gbs-label">Amount (GHS)</label>
+                      <input type="number" required min="1" step="0.01" className="gbs-input" value={newPayment.amount} onChange={(e) => setNewPayment({ ...newPayment, amount: e.target.value })} placeholder="350" />
                     </div>
                     <div>
-                      <label className="gbs-label">Network</label>
-                      <select className="gbs-select" value={newPayment.momoNetwork} onChange={(e) => setNewPayment({ ...newPayment, momoNetwork: e.target.value })}>
-                        <option value="MTN">MTN MoMo</option>
-                        <option value="TELECEL">Telecel Cash</option>
-                        <option value="AT">AT Money</option>
+                      <label className="gbs-label">Method</label>
+                      <select className="gbs-select" value={newPayment.method} onChange={(e) => setNewPayment({ ...newPayment, method: e.target.value })}>
+                        <option value="MOMO">Mobile Money (MTN/Telecel)</option>
+                        <option value="BANK_TRANSFER">Direct Bank Transfer</option>
+                        <option value="CASH">Cash Payment (Needs Accounting Approval)</option>
                       </select>
                     </div>
                   </div>
-                )}
-                <button type="submit" className="btn btn-primary" style={{ justifyContent: 'center' }}>Process Payment</button>
-              </form>
-            </div>
+                  {newPayment.method === 'MOMO' && (
+                    <div className="gbs-grid-2" style={{ gap: 10 }}>
+                      <div>
+                        <label className="gbs-label">MoMo Phone</label>
+                        <input type="tel" required className="gbs-input" value={newPayment.momoPhone} onChange={(e) => setNewPayment({ ...newPayment, momoPhone: e.target.value })} placeholder="+233240000000" />
+                      </div>
+                      <div>
+                        <label className="gbs-label">Network</label>
+                        <select className="gbs-select" value={newPayment.momoNetwork} onChange={(e) => setNewPayment({ ...newPayment, momoNetwork: e.target.value })}>
+                          <option value="MTN">MTN MoMo</option>
+                          <option value="TELECEL">Telecel Cash</option>
+                          <option value="AT">AT Money</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+                  <button type="submit" className="btn btn-primary" style={{ justifyContent: 'center' }}>Process Payment</button>
+                </form>
+              </div>
+            )}
 
             <div className="glass-panel" style={{ padding: 20 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8, flexWrap: 'wrap' }}>
@@ -2069,7 +2185,7 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                           <td><span className={`badge ${p.status === 'COMPLETED' ? 'badge-success' : 'badge-warning'}`}>{p.status}</span></td>
                           <td style={{ display: 'flex', gap: 6 }}>
                             <button type="button" className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.78rem' }}>Inspect</button>
-                            {p.method === 'CASH' && p.status !== 'COMPLETED' && (isFinance || isManagement) && (
+                            {p.method === 'CASH' && p.status !== 'COMPLETED' && roleActions.canApproveCash && (
                               <button
                                 type="button"
                                 className="btn btn-primary"
@@ -2104,58 +2220,60 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
         {/* TAB: MEMBERS & KYC                                                    */}
         {/* ===================================================================== */}
         {activeTab === 'MEMBERS' && !isMemberOnly && !isGuarantorOnly && (
-          <div className="gbs-grid-2">
-            <div className="glass-panel" style={{ padding: 20 }}>
-              <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>Register Borrower &amp; Mandatory GPS Digital Address</h3>
-              <form onSubmit={handleCreateMember} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <LiveCameraCapture
-                  label="Mandatory Borrower Live Camera Shot (Face ID)"
-                  onCapture={(shot) => setNewMember((prev) => ({ ...prev, livePhoto: shot }))}
-                  capturedImage={newMember.livePhoto}
-                  required={true}
-                />
-                <div className="gbs-grid-2" style={{ gap: 10 }}>
-                  <input type="text" required className="gbs-input" placeholder="First Name" value={newMember.firstName} onChange={(e) => setNewMember({ ...newMember, firstName: e.target.value })} />
-                  <input type="text" required className="gbs-input" placeholder="Last Name" value={newMember.lastName} onChange={(e) => setNewMember({ ...newMember, lastName: e.target.value })} />
-                </div>
-                <input type="tel" required className="gbs-input" placeholder="Phone (+233...)" value={newMember.phone} onChange={(e) => setNewMember({ ...newMember, phone: e.target.value })} />
-                <input type="email" className="gbs-input" placeholder="Email (optional)" value={newMember.email} onChange={(e) => setNewMember({ ...newMember, email: e.target.value })} />
-                <input type="text" className="gbs-input" placeholder="Ghana Card No. (GHA-...)" value={newMember.ghanaCardNumber} onChange={(e) => setNewMember({ ...newMember, ghanaCardNumber: e.target.value })} />
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <input type="text" required className="gbs-input" style={{ flex: 1 }} placeholder="GPS Digital Address (e.g. GA-183-8164)" value={newMember.gpsAddress} onChange={(e) => setNewMember({ ...newMember, gpsAddress: e.target.value })} />
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    style={{ padding: '8px 10px', fontSize: '0.74rem', whiteSpace: 'nowrap' }}
-                    onClick={() => {
-                      if (!navigator.geolocation) return showToast('Browser geolocation is unavailable.', true);
-                      navigator.geolocation.getCurrentPosition(
-                        (pos) => {
-                          const lat = Number(pos.coords.latitude).toFixed(5);
-                          const lng = Number(pos.coords.longitude).toFixed(5);
-                          setNewMember((prev) => ({
-                            ...prev,
-                            gpsAddress: prev.gpsAddress || `GPS-${lat},${lng}`,
-                            gpsLatitude: Number(lat),
-                            gpsLongitude: Number(lng),
-                          }));
-                          showToast(`GPS coordinates captured (${lat}, ${lng})`);
-                        },
-                        () => showToast('Unable to read device GPS. Please enter GhanaPost GPS address manually.', true)
-                      );
-                    }}
-                  >
-                    <MapPin size={13} /> Detect GPS
-                  </button>
-                </div>
-                <input type="text" className="gbs-input" placeholder="Physical Street / Business Location" value={newMember.address} onChange={(e) => setNewMember({ ...newMember, address: e.target.value })} />
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.8rem', color: '#CBD5E1', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={newMember.isHidden} onChange={(e) => setNewMember({ ...newMember, isHidden: e.target.checked })} />
-                  Mark customer confidential/hidden (locatable when searching phone or GPS address)
-                </label>
-                <button type="submit" className="btn btn-primary" style={{ justifyContent: 'center' }}>Register Borrower Profile</button>
-              </form>
-            </div>
+          <div className={roleActions.canRegisterMember ? 'gbs-grid-2' : ''}>
+            {roleActions.canRegisterMember && (
+              <div className="glass-panel" style={{ padding: 20 }}>
+                <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>Register Borrower &amp; Mandatory GPS Digital Address</h3>
+                <form onSubmit={handleCreateMember} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <LiveCameraCapture
+                    label="Mandatory Borrower Live Camera Shot (Face ID)"
+                    onCapture={(shot) => setNewMember((prev) => ({ ...prev, livePhoto: shot }))}
+                    capturedImage={newMember.livePhoto}
+                    required={true}
+                  />
+                  <div className="gbs-grid-2" style={{ gap: 10 }}>
+                    <input type="text" required className="gbs-input" placeholder="First Name" value={newMember.firstName} onChange={(e) => setNewMember({ ...newMember, firstName: e.target.value })} />
+                    <input type="text" required className="gbs-input" placeholder="Last Name" value={newMember.lastName} onChange={(e) => setNewMember({ ...newMember, lastName: e.target.value })} />
+                  </div>
+                  <input type="tel" required className="gbs-input" placeholder="Phone (+233...)" value={newMember.phone} onChange={(e) => setNewMember({ ...newMember, phone: e.target.value })} />
+                  <input type="email" className="gbs-input" placeholder="Email (optional)" value={newMember.email} onChange={(e) => setNewMember({ ...newMember, email: e.target.value })} />
+                  <input type="text" className="gbs-input" placeholder="Ghana Card No. (GHA-...)" value={newMember.ghanaCardNumber} onChange={(e) => setNewMember({ ...newMember, ghanaCardNumber: e.target.value })} />
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input type="text" required className="gbs-input" style={{ flex: 1 }} placeholder="GPS Digital Address (e.g. GA-183-8164)" value={newMember.gpsAddress} onChange={(e) => setNewMember({ ...newMember, gpsAddress: e.target.value })} />
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ padding: '8px 10px', fontSize: '0.74rem', whiteSpace: 'nowrap' }}
+                      onClick={() => {
+                        if (!navigator.geolocation) return showToast('Browser geolocation is unavailable.', true);
+                        navigator.geolocation.getCurrentPosition(
+                          (pos) => {
+                            const lat = Number(pos.coords.latitude).toFixed(5);
+                            const lng = Number(pos.coords.longitude).toFixed(5);
+                            setNewMember((prev) => ({
+                              ...prev,
+                              gpsAddress: prev.gpsAddress || `GPS-${lat},${lng}`,
+                              gpsLatitude: Number(lat),
+                              gpsLongitude: Number(lng),
+                            }));
+                            showToast(`GPS coordinates captured (${lat}, ${lng})`);
+                          },
+                          () => showToast('Unable to read device GPS. Please enter GhanaPost GPS address manually.', true)
+                        );
+                      }}
+                    >
+                      <MapPin size={13} /> Detect GPS
+                    </button>
+                  </div>
+                  <input type="text" className="gbs-input" placeholder="Physical Street / Business Location" value={newMember.address} onChange={(e) => setNewMember({ ...newMember, address: e.target.value })} />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.8rem', color: '#CBD5E1', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={newMember.isHidden} onChange={(e) => setNewMember({ ...newMember, isHidden: e.target.checked })} />
+                    Mark customer confidential/hidden (locatable when searching phone or GPS address)
+                  </label>
+                  <button type="submit" className="btn btn-primary" style={{ justifyContent: 'center' }}>Register Borrower Profile</button>
+                </form>
+              </div>
+            )}
 
             <div className="glass-panel" style={{ padding: 20 }}>
               <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}>Borrowers Directory ({members.length})</h3>
@@ -2354,29 +2472,31 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
               </div>
             </div>
           ) : (
-            <div className="gbs-grid-2">
-              <div className="glass-panel" style={{ padding: 20 }}>
-                <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>Register Loan Guarantor (with GPS Address)</h3>
-                <form onSubmit={handleCreateGuarantor} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <div className="gbs-grid-2" style={{ gap: 10 }}>
-                    <input type="text" required className="gbs-input" placeholder="First Name" value={newGuarantor.firstName} onChange={(e) => setNewGuarantor({ ...newGuarantor, firstName: e.target.value })} />
-                    <input type="text" required className="gbs-input" placeholder="Last Name" value={newGuarantor.lastName} onChange={(e) => setNewGuarantor({ ...newGuarantor, lastName: e.target.value })} />
-                  </div>
-                  <input type="tel" required className="gbs-input" placeholder="Mobile Phone (+233...)" value={newGuarantor.phone} onChange={(e) => setNewGuarantor({ ...newGuarantor, phone: e.target.value })} />
-                  <input type="email" className="gbs-input" placeholder="Email (optional)" value={newGuarantor.email} onChange={(e) => setNewGuarantor({ ...newGuarantor, email: e.target.value })} />
-                  <input type="text" required className="gbs-input" placeholder="GPS Digital Address (e.g. GA-492-1180)" value={newGuarantor.gpsAddress} onChange={(e) => setNewGuarantor({ ...newGuarantor, gpsAddress: e.target.value })} />
-                  <div className="gbs-grid-2" style={{ gap: 10 }}>
-                    <input type="text" className="gbs-input" placeholder="Ghana Card No." value={newGuarantor.ghanaCardNumber} onChange={(e) => setNewGuarantor({ ...newGuarantor, ghanaCardNumber: e.target.value })} />
-                    <input type="text" className="gbs-input" placeholder="Relationship" value={newGuarantor.relationship} onChange={(e) => setNewGuarantor({ ...newGuarantor, relationship: e.target.value })} />
-                  </div>
-                  <input type="text" className="gbs-input" placeholder="Residential / Work Physical Address" value={newGuarantor.address} onChange={(e) => setNewGuarantor({ ...newGuarantor, address: e.target.value })} />
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.8rem', color: '#CBD5E1', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={newGuarantor.isHidden} onChange={(e) => setNewGuarantor({ ...newGuarantor, isHidden: e.target.checked })} />
-                    Mark guarantor hidden (findable by Mobile Contact or GPS Digital Address)
-                  </label>
-                  <button type="submit" className="btn btn-primary" style={{ justifyContent: 'center' }}>Save Guarantor Profile</button>
-                </form>
-              </div>
+            <div className={roleActions.canManageGuarantors ? 'gbs-grid-2' : ''}>
+              {roleActions.canManageGuarantors && (
+                <div className="glass-panel" style={{ padding: 20 }}>
+                  <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>Register Loan Guarantor (with GPS Address)</h3>
+                  <form onSubmit={handleCreateGuarantor} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div className="gbs-grid-2" style={{ gap: 10 }}>
+                      <input type="text" required className="gbs-input" placeholder="First Name" value={newGuarantor.firstName} onChange={(e) => setNewGuarantor({ ...newGuarantor, firstName: e.target.value })} />
+                      <input type="text" required className="gbs-input" placeholder="Last Name" value={newGuarantor.lastName} onChange={(e) => setNewGuarantor({ ...newGuarantor, lastName: e.target.value })} />
+                    </div>
+                    <input type="tel" required className="gbs-input" placeholder="Mobile Phone (+233...)" value={newGuarantor.phone} onChange={(e) => setNewGuarantor({ ...newGuarantor, phone: e.target.value })} />
+                    <input type="email" className="gbs-input" placeholder="Email (optional)" value={newGuarantor.email} onChange={(e) => setNewGuarantor({ ...newGuarantor, email: e.target.value })} />
+                    <input type="text" required className="gbs-input" placeholder="GPS Digital Address (e.g. GA-492-1180)" value={newGuarantor.gpsAddress} onChange={(e) => setNewGuarantor({ ...newGuarantor, gpsAddress: e.target.value })} />
+                    <div className="gbs-grid-2" style={{ gap: 10 }}>
+                      <input type="text" className="gbs-input" placeholder="Ghana Card No." value={newGuarantor.ghanaCardNumber} onChange={(e) => setNewGuarantor({ ...newGuarantor, ghanaCardNumber: e.target.value })} />
+                      <input type="text" className="gbs-input" placeholder="Relationship" value={newGuarantor.relationship} onChange={(e) => setNewGuarantor({ ...newGuarantor, relationship: e.target.value })} />
+                    </div>
+                    <input type="text" className="gbs-input" placeholder="Residential / Work Physical Address" value={newGuarantor.address} onChange={(e) => setNewGuarantor({ ...newGuarantor, address: e.target.value })} />
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.8rem', color: '#CBD5E1', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={newGuarantor.isHidden} onChange={(e) => setNewGuarantor({ ...newGuarantor, isHidden: e.target.checked })} />
+                      Mark guarantor hidden (findable by Mobile Contact or GPS Digital Address)
+                    </label>
+                    <button type="submit" className="btn btn-primary" style={{ justifyContent: 'center' }}>Save Guarantor Profile</button>
+                  </form>
+                </div>
+              )}
 
               <div className="glass-panel" style={{ padding: 20 }}>
                 <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}>Registered Loan Guarantors ({guarantors.length})</h3>
@@ -2445,9 +2565,9 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                           </td>
                         </tr>
                       ))}
-                      {salaries.length === 0 && (
+                      {guarantors.length === 0 && (
                         <tr>
-                          <td colSpan={5} style={{ textAlign: 'center', color: '#94A3B8', padding: 24 }}>
+                          <td colSpan={4} style={{ textAlign: 'center', color: '#94A3B8', padding: 24 }}>
                             No records available.
                           </td>
                         </tr>
@@ -2481,25 +2601,27 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                   coordinates: { latitude: Number(c.lastLatitude), longitude: Number(c.lastLongitude) },
                 }))}
             />
-            <div className="gbs-grid-2">
-              <div className="glass-panel" style={{ padding: 20 }}>
-                <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>Log Customer Visit &amp; GPS Telemetry</h3>
-                <form onSubmit={handleRecordVisit} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <input type="text" required className="gbs-input" placeholder="Customer Name" value={visitForm.customerName} onChange={(e) => setVisitForm({ ...visitForm, customerName: e.target.value })} />
-                  <select className="gbs-select" value={visitForm.visitOutcome} onChange={(e) => setVisitForm({ ...visitForm, visitOutcome: e.target.value })}>
-                    <option value="PAYMENT_COLLECTED">Payment Collected</option>
-                    <option value="PROMISE_TO_PAY">Promise to Pay</option>
-                    <option value="KYC_RESIDENCE_VERIFIED">KYC Residence Verified</option>
-                    <option value="CUSTOMER_UNAVAILABLE">Customer Unavailable</option>
-                  </select>
-                  <textarea rows={2} className="gbs-textarea" placeholder="Field inspection notes..." value={visitForm.notes} onChange={(e) => setVisitForm({ ...visitForm, notes: e.target.value })} />
-                  <div className="gbs-grid-2" style={{ gap: 10 }}>
-                    <input type="text" className="gbs-input" value={visitForm.latitude} onChange={(e) => setVisitForm({ ...visitForm, latitude: e.target.value })} placeholder="Lat" />
-                    <input type="text" className="gbs-input" value={visitForm.longitude} onChange={(e) => setVisitForm({ ...visitForm, longitude: e.target.value })} placeholder="Lng" />
-                  </div>
-                  <button type="submit" className="btn btn-primary">Record Field Visit</button>
-                </form>
-              </div>
+            <div className={roleActions.canLogFieldVisit ? 'gbs-grid-2' : ''}>
+              {roleActions.canLogFieldVisit && (
+                <div className="glass-panel" style={{ padding: 20 }}>
+                  <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}>Log Customer Visit &amp; GPS Telemetry</h3>
+                  <form onSubmit={handleRecordVisit} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <input type="text" required className="gbs-input" placeholder="Customer Name" value={visitForm.customerName} onChange={(e) => setVisitForm({ ...visitForm, customerName: e.target.value })} />
+                    <select className="gbs-select" value={visitForm.visitOutcome} onChange={(e) => setVisitForm({ ...visitForm, visitOutcome: e.target.value })}>
+                      <option value="PAYMENT_COLLECTED">Payment Collected</option>
+                      <option value="PROMISE_TO_PAY">Promise to Pay</option>
+                      <option value="KYC_RESIDENCE_VERIFIED">KYC Residence Verified</option>
+                      <option value="CUSTOMER_UNAVAILABLE">Customer Unavailable</option>
+                    </select>
+                    <textarea rows={2} className="gbs-textarea" placeholder="Field inspection notes..." value={visitForm.notes} onChange={(e) => setVisitForm({ ...visitForm, notes: e.target.value })} />
+                    <div className="gbs-grid-2" style={{ gap: 10 }}>
+                      <input type="text" className="gbs-input" value={visitForm.latitude} onChange={(e) => setVisitForm({ ...visitForm, latitude: e.target.value })} placeholder="Lat" />
+                      <input type="text" className="gbs-input" value={visitForm.longitude} onChange={(e) => setVisitForm({ ...visitForm, longitude: e.target.value })} placeholder="Lng" />
+                    </div>
+                    <button type="submit" className="btn btn-primary">Record Field Visit</button>
+                  </form>
+                </div>
+              )}
 
               <div className="glass-panel" style={{ padding: 20 }}>
                 <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}>Active Field Collectors ({collectors.length})</h3>
@@ -2539,7 +2661,7 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                           </td>
                         </tr>
                       ))}
-                      {salaries.length === 0 && (
+                      {collectors.length === 0 && (
                         <tr>
                           <td colSpan={5} style={{ textAlign: 'center', color: '#94A3B8', padding: 24 }}>
                             No records available.
@@ -2893,9 +3015,11 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
               <div className="glass-panel" style={{ padding: 20 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
                   <h3 style={{ margin: 0, color: '#D4AF37' }}>Staff Roster ({staffList.length})</h3>
-                  <button type="button" className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.78rem' }} onClick={handleGeneratePayroll}>
-                    Generate Monthly Payroll
-                  </button>
+                  {roleActions.canManagePayroll && (
+                    <button type="button" className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.78rem' }} onClick={handleGeneratePayroll}>
+                      Generate Monthly Payroll
+                    </button>
+                  )}
                 </div>
                 <form onSubmit={(e) => handleSearchStaff(e)} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
                   <input
@@ -3010,46 +3134,48 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                 </div>
               </div>
 
-              <div className="glass-panel" style={{ padding: 20 }}>
-                <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}>Monthly Salary Ledger ({salaries.length})</h3>
-                <div className="data-table-container" style={{ maxHeight: 320 }}>
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Month</th>
-                        <th>Staff</th>
-                        <th>Net Salary</th>
-                        <th>Status</th>
-                        <th>Pay</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {salaries.map((sal) => (
-                        <tr key={sal.id}>
-                          <td>{sal.month}/{sal.year}</td>
-                          <td>{sal.staff?.user?.firstName} {sal.staff?.user?.lastName}</td>
-                          <td>{formatGHS(sal.netAmount ?? sal.netSalary)}</td>
-                          <td><span className={`badge ${sal.status === 'PAID' ? 'badge-success' : 'badge-warning'}`}>{sal.status}</span></td>
-                          <td>
-                            {sal.status !== 'PAID' && (
-                              <button type="button" className="btn btn-primary" style={{ padding: '4px 8px', fontSize: '0.72rem' }} onClick={() => handlePaySalary(sal.id)}>
-                                Disburse
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                      {salaries.length === 0 && (
+              {roleActions.canViewSalaries && (
+                <div className="glass-panel" style={{ padding: 20 }}>
+                  <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}>Monthly Salary Ledger ({salaries.length})</h3>
+                  <div className="data-table-container" style={{ maxHeight: 320 }}>
+                    <table className="data-table">
+                      <thead>
                         <tr>
-                          <td colSpan={5} style={{ textAlign: 'center', color: '#94A3B8', padding: 24 }}>
-                            No records available.
-                          </td>
+                          <th>Month</th>
+                          <th>Staff</th>
+                          <th>Net Salary</th>
+                          <th>Status</th>
+                          <th>Pay</th>
                         </tr>
-                      )}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {salaries.map((sal) => (
+                          <tr key={sal.id}>
+                            <td>{sal.month}/{sal.year}</td>
+                            <td>{sal.staff?.user?.firstName} {sal.staff?.user?.lastName}</td>
+                            <td>{formatGHS(sal.netAmount ?? sal.netSalary)}</td>
+                            <td><span className={`badge ${sal.status === 'PAID' ? 'badge-success' : 'badge-warning'}`}>{sal.status}</span></td>
+                            <td>
+                              {roleActions.canManagePayroll && sal.status !== 'PAID' && (
+                                <button type="button" className="btn btn-primary" style={{ padding: '4px 8px', fontSize: '0.72rem' }} onClick={() => handlePaySalary(sal.id)}>
+                                  Disburse
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                        {salaries.length === 0 && (
+                          <tr>
+                            <td colSpan={5} style={{ textAlign: 'center', color: '#94A3B8', padding: 24 }}>
+                              No records available.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         )}
@@ -3112,38 +3238,40 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
                 </form>
               </div>
 
-              <div className="glass-panel" style={{ padding: 20 }}>
-                <h3 style={{ margin: '0 0 10px', color: '#00F2FE' }}><Clock size={16} /> Subscription Plan &amp; Trial Renewal</h3>
-                <p style={{ fontSize: '0.8rem', color: '#CBD5E1', marginBottom: 12 }}>
-                  Active Plan: <strong>{tenantProfile?.subscriptionPlan || countdown?.subscriptionPlan || 'TRIAL_1M'}</strong>{' '}
-                  ({tenantProfile?.isLifetime ? 'LIFETIME' : `${tenantProfile?.daysLeft ?? countdown?.daysLeft ?? 30} days remaining`}).
-                  Choose a subscription duration after or during your 1-month free trial:
-                </p>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: 10 }}>
-                  {[
-                    { code: 'PLAN_3M', label: '3 Months', sub: '90 Days Access' },
-                    { code: 'PLAN_6M', label: '6 Months', sub: '180 Days Access' },
-                    { code: 'PLAN_9M', label: '9 Months', sub: '270 Days Access' },
-                    { code: 'PLAN_12M', label: '12 Months', sub: '365 Days Access' },
-                    { code: 'LIFETIME', label: 'Lifetime License', sub: 'Permanent Unlock' },
-                  ].map((plan) => (
-                    <button
-                      key={plan.code}
-                      type="button"
-                      disabled={upgradingPlan === plan.code}
-                      onClick={() => handleSelectSubscription(plan.code)}
-                      className={(tenantProfile?.subscriptionPlan || countdown?.subscriptionPlan) === plan.code ? 'btn btn-primary' : 'btn btn-secondary'}
-                      style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '12px' }}
-                    >
-                      <strong style={{ fontSize: '0.88rem' }}>{plan.label}</strong>
-                      <span style={{ fontSize: '0.72rem', opacity: 0.85 }}>{upgradingPlan === plan.code ? 'Applying...' : plan.sub}</span>
-                    </button>
-                  ))}
+              {(roleActions.canManageSubscriptions || isCompanyOwner) && (
+                <div className="glass-panel" style={{ padding: 20 }}>
+                  <h3 style={{ margin: '0 0 10px', color: '#00F2FE' }}><Clock size={16} /> Subscription Plan &amp; Trial Renewal</h3>
+                  <p style={{ fontSize: '0.8rem', color: '#CBD5E1', marginBottom: 12 }}>
+                    Active Plan: <strong>{tenantProfile?.subscriptionPlan || countdown?.subscriptionPlan || 'TRIAL_1M'}</strong>{' '}
+                    ({tenantProfile?.isLifetime ? 'LIFETIME' : `${tenantProfile?.daysLeft ?? countdown?.daysLeft ?? 30} days remaining`}).
+                    Choose a subscription duration after or during your 1-month free trial:
+                  </p>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: 10 }}>
+                    {[
+                      { code: 'PLAN_3M', label: '3 Months', sub: '90 Days Access' },
+                      { code: 'PLAN_6M', label: '6 Months', sub: '180 Days Access' },
+                      { code: 'PLAN_9M', label: '9 Months', sub: '270 Days Access' },
+                      { code: 'PLAN_12M', label: '12 Months', sub: '365 Days Access' },
+                      { code: 'LIFETIME', label: 'Lifetime License', sub: 'Permanent Unlock' },
+                    ].map((plan) => (
+                      <button
+                        key={plan.code}
+                        type="button"
+                        disabled={upgradingPlan === plan.code}
+                        onClick={() => handleSelectSubscription(plan.code)}
+                        className={(tenantProfile?.subscriptionPlan || countdown?.subscriptionPlan) === plan.code ? 'btn btn-primary' : 'btn btn-secondary'}
+                        style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '12px' }}
+                      >
+                        <strong style={{ fontSize: '0.88rem' }}>{plan.label}</strong>
+                        <span style={{ fontSize: '0.72rem', opacity: 0.85 }}>{upgradingPlan === plan.code ? 'Applying...' : plan.sub}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
-            <CctvMobilePanel />
+            {roleActions.canManageCctv && <CctvMobilePanel />}
           </div>
         )}
 
@@ -3414,77 +3542,85 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
         {/* ===================================================================== */}
         {/* TAB: MARKETING & INVESTORS                                            */}
         {/* ===================================================================== */}
-        {activeTab === 'GROWTH_CAPITAL' && (
-          <div className="gbs-grid-2">
-            <div className="glass-panel" style={{ padding: 20 }}>
-              <h3 style={{ margin: '0 0 12px', color: '#A78BFA' }}><Megaphone size={16} /> Marketing Outreach Campaigns ({campaigns.length})</h3>
-              <form onSubmit={handleCreateCampaign} style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
-                <input type="text" required className="gbs-input" placeholder="Campaign Name" value={newCampaign.name} onChange={(e) => setNewCampaign({ ...newCampaign, name: e.target.value })} />
-                <div className="gbs-grid-3" style={{ gap: 8 }}>
-                  <select className="gbs-select" value={newCampaign.channel} onChange={(e) => setNewCampaign({ ...newCampaign, channel: e.target.value })}>
-                    <option value="SMS">SMS</option>
-                    <option value="WHATSAPP">WhatsApp</option>
-                    <option value="FIELD_DRIVE">Field Drive</option>
-                  </select>
-                  <input type="number" className="gbs-input" placeholder="Budget GHS" value={newCampaign.budget} onChange={(e) => setNewCampaign({ ...newCampaign, budget: e.target.value })} />
-                  <input type="number" className="gbs-input" placeholder="Est. Reach" value={newCampaign.reachCount} onChange={(e) => setNewCampaign({ ...newCampaign, reachCount: e.target.value })} />
+        {activeTab === 'GROWTH_CAPITAL' && (() => {
+          const canSeeMarketing = Boolean(roleActions.canManageCampaigns || isCompanyOwner || roleKey === 'EXECUTIVE_MANAGEMENT');
+          const canSeeInvestors = Boolean(roleActions.canManageInvestors || isCompanyOwner || roleKey === 'EXECUTIVE_MANAGEMENT' || roleKey === 'BOARD_EXECUTIVE');
+          return (
+            <div className={canSeeMarketing && canSeeInvestors ? 'gbs-grid-2' : ''}>
+              {canSeeMarketing && (
+                <div className="glass-panel" style={{ padding: 20 }}>
+                  <h3 style={{ margin: '0 0 12px', color: '#A78BFA' }}><Megaphone size={16} /> Marketing Outreach Campaigns ({campaigns.length})</h3>
+                  <form onSubmit={handleCreateCampaign} style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+                    <input type="text" required className="gbs-input" placeholder="Campaign Name" value={newCampaign.name} onChange={(e) => setNewCampaign({ ...newCampaign, name: e.target.value })} />
+                    <div className="gbs-grid-3" style={{ gap: 8 }}>
+                      <select className="gbs-select" value={newCampaign.channel} onChange={(e) => setNewCampaign({ ...newCampaign, channel: e.target.value })}>
+                        <option value="SMS">SMS</option>
+                        <option value="WHATSAPP">WhatsApp</option>
+                        <option value="FIELD_DRIVE">Field Drive</option>
+                      </select>
+                      <input type="number" className="gbs-input" placeholder="Budget GHS" value={newCampaign.budget} onChange={(e) => setNewCampaign({ ...newCampaign, budget: e.target.value })} />
+                      <input type="number" className="gbs-input" placeholder="Est. Reach" value={newCampaign.reachCount} onChange={(e) => setNewCampaign({ ...newCampaign, reachCount: e.target.value })} />
+                    </div>
+                    <button type="submit" className="btn btn-primary">Launch Campaign</button>
+                  </form>
+                  {campaigns.length === 0 && (
+                    <p style={{ color: '#94A3B8', fontSize: '0.84rem' }}>No records available.</p>
+                  )}
+                  {campaigns.map((c) => (
+                    <div key={c.id} style={{ padding: 10, borderRadius: 8, background: 'rgba(6,12,24,0.8)', marginBottom: 6, fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                      <div>
+                        <strong>{c.name}</strong> <span className="badge badge-cyan" style={{ fontSize: '0.64rem', marginLeft: 4 }}>{c.channel}</span>
+                      </div>
+                      <div style={{ color: '#CBD5E1' }}>
+                        Budget: <strong>{formatGHS(c.budget)}</strong> • Leads/Reach: <strong>{c.leadsCount ?? c.reachCount ?? 0}</strong>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <button type="submit" className="btn btn-primary">Launch Campaign</button>
-              </form>
-              {campaigns.length === 0 && (
-                <p style={{ color: '#94A3B8', fontSize: '0.84rem' }}>No records available.</p>
               )}
-              {campaigns.map((c) => (
-                <div key={c.id} style={{ padding: 10, borderRadius: 8, background: 'rgba(6,12,24,0.8)', marginBottom: 6, fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                  <div>
-                    <strong>{c.name}</strong> <span className="badge badge-cyan" style={{ fontSize: '0.64rem', marginLeft: 4 }}>{c.channel}</span>
-                  </div>
-                  <div style={{ color: '#CBD5E1' }}>
-                    Budget: <strong>{formatGHS(c.budget)}</strong> • Leads/Reach: <strong>{c.leadsCount ?? c.reachCount ?? 0}</strong>
-                  </div>
-                </div>
-              ))}
-            </div>
 
-            <div className="glass-panel" style={{ padding: 20 }}>
-              <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}><Briefcase size={16} /> Institutional Investors &amp; Yield ({investors.length})</h3>
-              {(isFinance || isManagement || roleKey === 'INVESTOR') && (
-                <form onSubmit={handleCreateInvestor} style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
-                  <div className="gbs-grid-2" style={{ gap: 8 }}>
-                    <input type="text" required className="gbs-input" placeholder="Investor Name" value={newInvestor.investorName} onChange={(e) => setNewInvestor({ ...newInvestor, investorName: e.target.value })} />
-                    <input type="email" className="gbs-input" placeholder="Email" value={newInvestor.email} onChange={(e) => setNewInvestor({ ...newInvestor, email: e.target.value })} />
-                  </div>
-                  <div className="gbs-grid-2" style={{ gap: 8 }}>
-                    <input type="number" required className="gbs-input" placeholder="Invested GHS" value={newInvestor.investedAmount} onChange={(e) => setNewInvestor({ ...newInvestor, investedAmount: e.target.value })} />
-                    <input type="number" step="0.1" className="gbs-input" placeholder="Yield %" value={newInvestor.interestRate} onChange={(e) => setNewInvestor({ ...newInvestor, interestRate: e.target.value })} />
-                  </div>
-                  <button type="submit" className="btn btn-primary">Add Capital Tranche</button>
-                </form>
-              )}
-              {investors.length === 0 && (
-                <p style={{ color: '#94A3B8', fontSize: '0.84rem' }}>No records available.</p>
-              )}
-              {investors.map((inv) => (
-                <div key={inv.id} style={{ padding: 10, borderRadius: 8, background: 'rgba(6,12,24,0.8)', marginBottom: 6, fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                  <div>
-                    <strong>{inv.investorName}</strong>
-                    {inv.investorCode && <span style={{ fontSize: '0.72rem', color: '#94A3B8', marginLeft: 6 }}>({inv.investorCode})</span>}
-                  </div>
-                  <div>
-                    <strong style={{ color: '#34D399' }}>{formatGHS(inv.committedCapital ?? inv.investedAmount)}</strong> @ <span className="badge badge-gold">{inv.annualYieldRate ?? inv.interestRate ?? 18.5}% APR</span>
-                  </div>
+              {canSeeInvestors && (
+                <div className="glass-panel" style={{ padding: 20 }}>
+                  <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}><Briefcase size={16} /> Institutional Investors &amp; Yield ({investors.length})</h3>
+                  {(isFinance || isManagement || roleActions.canManageInvestors) && (
+                    <form onSubmit={handleCreateInvestor} style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+                      <div className="gbs-grid-2" style={{ gap: 8 }}>
+                        <input type="text" required className="gbs-input" placeholder="Investor Name" value={newInvestor.investorName} onChange={(e) => setNewInvestor({ ...newInvestor, investorName: e.target.value })} />
+                        <input type="email" className="gbs-input" placeholder="Email" value={newInvestor.email} onChange={(e) => setNewInvestor({ ...newInvestor, email: e.target.value })} />
+                      </div>
+                      <div className="gbs-grid-2" style={{ gap: 8 }}>
+                        <input type="number" required className="gbs-input" placeholder="Invested GHS" value={newInvestor.investedAmount} onChange={(e) => setNewInvestor({ ...newInvestor, investedAmount: e.target.value })} />
+                        <input type="number" step="0.1" className="gbs-input" placeholder="Yield %" value={newInvestor.interestRate} onChange={(e) => setNewInvestor({ ...newInvestor, interestRate: e.target.value })} />
+                      </div>
+                      <button type="submit" className="btn btn-primary">Add Capital Tranche</button>
+                    </form>
+                  )}
+                  {investors.length === 0 && (
+                    <p style={{ color: '#94A3B8', fontSize: '0.84rem' }}>No records available.</p>
+                  )}
+                  {investors.map((inv) => (
+                    <div key={inv.id} style={{ padding: 10, borderRadius: 8, background: 'rgba(6,12,24,0.8)', marginBottom: 6, fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                      <div>
+                        <strong>{inv.investorName}</strong>
+                        {inv.investorCode && <span style={{ fontSize: '0.72rem', color: '#94A3B8', marginLeft: 6 }}>({inv.investorCode})</span>}
+                      </div>
+                      <div>
+                        <strong style={{ color: '#34D399' }}>{formatGHS(inv.committedCapital ?? inv.investedAmount)}</strong> @ <span className="badge badge-gold">{inv.annualYieldRate ?? inv.interestRate ?? 18.5}% APR</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* ===================================================================== */}
         {/* TAB: COMPANY OWNER / MANAGEMENT STAFF BROADCAST & SELECTIVE MESSAGING */}
         {/* ===================================================================== */}
         {activeTab === 'STAFF_COMMS' && !isMemberOnly && !isGuarantorOnly && (
-          <div className="gbs-grid-2">
-            {isManagement && (
+          <div className={roleActions.canBroadcastStaff ? 'gbs-grid-2' : ''}>
+            {roleActions.canBroadcastStaff && (
               <div className="glass-panel" style={{ padding: 20 }}>
                 <h3 style={{ margin: '0 0 12px', color: '#D4AF37' }}><Send size={16} /> Send General or Selected Staff Message</h3>
                 <form onSubmit={handleSendBroadcast} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -3577,10 +3713,10 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
         {/* TAB: VIDEO MEETINGS & WRAPPED WEEKLY/MONTHLY/YEARLY REPORTS           */}
         {/* ===================================================================== */}
         {activeTab === 'MEETINGS_REPORTS' && !isMemberOnly && !isGuarantorOnly && (
-          <div className="gbs-grid-2">
+          <div className={roleActions.canExportReports ? 'gbs-grid-2' : ''}>
             <div className="glass-panel" style={{ padding: 20 }}>
               <h3 style={{ margin: '0 0 12px', color: '#00F2FE' }}><Video size={16} /> Executive &amp; Staff Online Meetings ({meetings.length})</h3>
-              {isManagement && (
+              {roleActions.canScheduleMeetings && (
                 <form onSubmit={handleScheduleMeeting} style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
                   <input type="text" required className="gbs-input" placeholder="Credit Committee / Executive Briefing / Daily Standup" value={newMeeting.title} onChange={(e) => setNewMeeting({ ...newMeeting, title: e.target.value })} />
                   <div className="gbs-grid-2" style={{ gap: 10 }}>
@@ -3654,66 +3790,68 @@ export default function RoleDashboards({ user: propUser, countdown: propCountdow
               ))}
             </div>
 
-            <div className="glass-panel" style={{ padding: 20 }}>
-              <h3 style={{ margin: '0 0 10px', color: '#D4AF37' }}><Download size={16} /> Wrap &amp; Save Weekly / Monthly / Yearly Reports</h3>
-              <p style={{ fontSize: '0.8rem', color: '#CBD5E1', marginBottom: 12 }}>
-                Roll up all staff-collected loans, repayments, customer registrations, field visits &amp; attendance shifts into saved snapshots in PostgreSQL.
-              </p>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-                {['WEEKLY', 'MONTHLY', 'YEARLY'].map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    disabled={wrappingPeriod === p}
-                    onClick={() => handleWrapReportPeriod(p)}
-                    className="btn btn-primary"
-                    style={{ padding: '7px 13px', fontSize: '0.78rem' }}
-                  >
-                    {wrappingPeriod === p ? `Wrapping ${p}...` : `Wrap & Save ${p} Report`}
-                  </button>
-                ))}
-              </div>
+            {roleActions.canExportReports && (
+              <div className="glass-panel" style={{ padding: 20 }}>
+                <h3 style={{ margin: '0 0 10px', color: '#D4AF37' }}><Download size={16} /> Wrap &amp; Save Weekly / Monthly / Yearly Reports</h3>
+                <p style={{ fontSize: '0.8rem', color: '#CBD5E1', marginBottom: 12 }}>
+                  Roll up all staff-collected loans, repayments, customer registrations, field visits &amp; attendance shifts into saved snapshots in PostgreSQL.
+                </p>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+                  {['WEEKLY', 'MONTHLY', 'YEARLY'].map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      disabled={wrappingPeriod === p}
+                      onClick={() => handleWrapReportPeriod(p)}
+                      className="btn btn-primary"
+                      style={{ padding: '7px 13px', fontSize: '0.78rem' }}
+                    >
+                      {wrappingPeriod === p ? `Wrapping ${p}...` : `Wrap & Save ${p} Report`}
+                    </button>
+                  ))}
+                </div>
 
-              {reportSnapshots.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 200, overflowY: 'auto', marginBottom: 16 }}>
-                  {reportSnapshots.slice(0, 8).map((snap) => (
-                    <div key={snap.id} style={{ padding: 10, borderRadius: 8, background: 'rgba(6,12,24,0.85)', border: '1px solid rgba(16,185,129,0.25)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <div>
-                        <strong style={{ fontSize: '0.8rem', color: '#34D399' }}>[{snap.periodType || snap.reportType}] {snap.periodLabel || snap.reportType}</strong>
-                        <div style={{ fontSize: '0.72rem', color: '#94A3B8' }}>Saved {new Date(snap.createdAt).toLocaleString()}</div>
+                {reportSnapshots.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 200, overflowY: 'auto', marginBottom: 16 }}>
+                    {reportSnapshots.slice(0, 8).map((snap) => (
+                      <div key={snap.id} style={{ padding: 10, borderRadius: 8, background: 'rgba(6,12,24,0.85)', border: '1px solid rgba(16,185,129,0.25)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <div>
+                          <strong style={{ fontSize: '0.8rem', color: '#34D399' }}>[{snap.periodType || snap.reportType}] {snap.periodLabel || snap.reportType}</strong>
+                          <div style={{ fontSize: '0.72rem', color: '#94A3B8' }}>Saved {new Date(snap.createdAt).toLocaleString()}</div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button type="button" className="btn btn-secondary" style={{ padding: '4px 9px', fontSize: '0.74rem' }} onClick={() => navigate(`/reports/${snap.id}`)}>
+                            Details <ArrowUpRight size={12} />
+                          </button>
+                          <button type="button" className="btn btn-secondary" style={{ padding: '4px 9px', fontSize: '0.74rem' }} onClick={() => handleDownloadWrappedCsv(snap.id, snap.periodLabel)}>
+                            <Download size={12} /> CSV
+                          </button>
+                        </div>
                       </div>
+                    ))}
+                  </div>
+                )}
+
+                <h4 style={{ margin: '0 0 10px', color: '#00F2FE', fontSize: '0.9rem' }}>Live Ledger Exports (CSV, XLSX, PDF)</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {[
+                    ...(canViewLoans ? [{ type: 'loans', label: 'Loan Portfolio & Disbursement Ledger' }] : []),
+                    ...(canViewPayments ? [{ type: 'payments', label: 'MoMo, Bank & Cash Repayments Statement' }] : []),
+                    ...(roleActions.canViewCustomerDirectory ? [{ type: 'members', label: 'Borrower KYC & Registration Directory' }] : []),
+                    ...((isRiskLegal || isManagement) ? [{ type: 'audit', label: 'Immutable Governance & Security Audit Trail' }] : []),
+                  ].map((rep) => (
+                    <div key={rep.type} style={{ padding: 10, borderRadius: 10, background: 'rgba(6,12,24,0.8)', border: '1px solid rgba(212,175,55,0.2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                      <span style={{ fontSize: '0.82rem', fontWeight: 600 }}>{rep.label}</span>
                       <div style={{ display: 'flex', gap: 6 }}>
-                        <button type="button" className="btn btn-secondary" style={{ padding: '4px 9px', fontSize: '0.74rem' }} onClick={() => navigate(`/reports/${snap.id}`)}>
-                          Details <ArrowUpRight size={12} />
-                        </button>
-                        <button type="button" className="btn btn-secondary" style={{ padding: '4px 9px', fontSize: '0.74rem' }} onClick={() => handleDownloadWrappedCsv(snap.id, snap.periodLabel)}>
-                          <Download size={12} /> CSV
-                        </button>
+                        <button type="button" className="btn btn-secondary" style={{ padding: '5px 10px', fontSize: '0.74rem' }} onClick={() => handleDownloadReport(rep.type, 'csv')}>CSV</button>
+                        <button type="button" className="btn btn-secondary" style={{ padding: '5px 10px', fontSize: '0.74rem' }} onClick={() => handleDownloadReport(rep.type, 'xlsx')}>XLSX</button>
+                        <button type="button" className="btn btn-primary" style={{ padding: '5px 10px', fontSize: '0.74rem' }} onClick={() => handleDownloadReport(rep.type, 'pdf')}>PDF</button>
                       </div>
                     </div>
                   ))}
                 </div>
-              )}
-
-              <h4 style={{ margin: '0 0 10px', color: '#00F2FE', fontSize: '0.9rem' }}>Live Ledger Exports (CSV, XLSX, PDF)</h4>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {[
-                  { type: 'loans', label: 'Loan Portfolio & Disbursement Ledger' },
-                  { type: 'payments', label: 'MoMo, Bank & Cash Repayments Statement' },
-                  { type: 'members', label: 'Borrower KYC & Registration Directory' },
-                  { type: 'audit', label: 'Immutable Governance & Security Audit Trail' },
-                ].map((rep) => (
-                  <div key={rep.type} style={{ padding: 10, borderRadius: 10, background: 'rgba(6,12,24,0.8)', border: '1px solid rgba(212,175,55,0.2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                    <span style={{ fontSize: '0.82rem', fontWeight: 600 }}>{rep.label}</span>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button type="button" className="btn btn-secondary" style={{ padding: '5px 10px', fontSize: '0.74rem' }} onClick={() => handleDownloadReport(rep.type, 'csv')}>CSV</button>
-                      <button type="button" className="btn btn-secondary" style={{ padding: '5px 10px', fontSize: '0.74rem' }} onClick={() => handleDownloadReport(rep.type, 'xlsx')}>XLSX</button>
-                      <button type="button" className="btn btn-primary" style={{ padding: '5px 10px', fontSize: '0.74rem' }} onClick={() => handleDownloadReport(rep.type, 'pdf')}>PDF</button>
-                    </div>
-                  </div>
-                ))}
               </div>
-            </div>
+            )}
           </div>
         )}
       </div>

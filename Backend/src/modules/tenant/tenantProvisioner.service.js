@@ -214,7 +214,7 @@ class TenantProvisionerService {
         branch,
         adminUser: adminUser ? { id: adminUser.id, email: adminUser.email, role: adminUser.role } : null,
       };
-    });
+    }, { maxWait: 10000, timeout: 30000 });
 
     logger.info(`[TenantProvisioner] Successfully provisioned tenant ${organizationName} (ID: ${result.tenant.id})`);
     return result;
@@ -328,7 +328,7 @@ class TenantProvisionerService {
       });
 
       return t;
-    });
+    }, { maxWait: 10000, timeout: 30000 });
 
     return updated;
   }
@@ -368,7 +368,7 @@ class TenantProvisionerService {
       });
 
       return t;
-    });
+    }, { maxWait: 10000, timeout: 30000 });
 
     return updated;
   }

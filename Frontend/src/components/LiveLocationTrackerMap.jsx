@@ -1,11 +1,25 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import {
   MapPin, Building2, Navigation, UserCheck, ShieldAlert, Search,
-  ExternalLink, Crosshair, Phone, Layers, RefreshCw
+  ExternalLink, Crosshair, Phone, Layers, Radio, Columns, Clock
 } from 'lucide-react';
 import api, { devApi } from '../services/api';
+
+function MapAutoFocus({ center, zoom }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!map || !Array.isArray(center) || !Number.isFinite(center[0]) || !Number.isFinite(center[1])) return undefined;
+    map.setView(center, zoom, { animate: true });
+    map.invalidateSize();
+    const timer = setTimeout(() => {
+      try { map.invalidateSize(); } catch { }
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [map, center[0], center[1], zoom]);
+  return null;
+}
 
 function buildPinIcon(color, label) {
   return L.divIcon({
@@ -23,12 +37,18 @@ const PIN_STYLES = {
   COLLECTOR: { color: '#10B981', code: 'FC', label: 'Field Collector' },
   USER_DEVICE: { color: '#10B981', code: 'GPS', label: 'Live Mobile Device' },
   MEMBER: { color: '#A855F7', code: 'MB', label: 'Borrower Phone' },
+  CUSTOMER: { color: '#A855F7', code: 'CU', label: 'Customer Target' },
+  GUARANTOR: { color: '#F59E0B', code: 'GU', label: 'Guarantor Surety' },
+  STAFF: { color: '#38BDF8', code: 'ST', label: 'Staff Member' },
   CUSTOMER_VISIT: { color: '#F97316', code: 'CV', label: 'Customer Visit' },
+  GHANAPOST_AREA: { color: '#00F2FE', code: 'GP', label: 'GhanaPost GPS Area' },
+  NETWORK_SERVICE: { color: '#EC4899', code: 'TEL', label: 'Mobile Network Hub' },
 };
 
 /**
- * Interactive Google Maps + Leaflet Real-Time GIS & Mobile-Number Locator
- * Supports live device GPS publishing (navigator.geolocation) and exact phone-number coordinate lookup.
+ * Interactive Google Maps + Leaflet Real-Time GIS & Mobile-Number / GPS-Address Locator
+ * Supports live device GPS publishing, digital GPS address resolution (e.g. GA-183-8164),
+ * and mobile phone coordinate + mobile network carrier service resolution.
  */
 export default function LiveLocationTrackerMap({
   markers = [],
@@ -41,7 +61,8 @@ export default function LiveLocationTrackerMap({
   const [filterType, setFilterType] = useState('ALL');
   const [entityFilter, setEntityFilter] = useState('ALL');
   const [showGeofences, setShowGeofences] = useState(true);
-  const [mapEngine, setMapEngine] = useState('GOOGLE_MAP'); // GOOGLE_MAP | LEAFLET
+  const [mapEngine, setMapEngine] = useState('DUAL'); // DUAL | GOOGLE_MAP | LEAFLET
+  const [mapType, setMapType] = useState('m'); // m = roadmap, k = satellite
   const [phoneQuery, setPhoneQuery] = useState(initialPhone || '');
   const [lookupLoading, setLookupLoading] = useState(false);
   const [lookupError, setLookupError] = useState('');
@@ -53,7 +74,7 @@ export default function LiveLocationTrackerMap({
   const runPhoneLookup = async (rawQuery, overrideEntity = entityFilter) => {
     const clean = String(rawQuery || '').trim();
     if (clean.length < 2) {
-      setLookupError('Enter at least 2 characters of a mobile phone number, GPS address, or name.');
+      setLookupError('Enter at least 2 characters of a mobile phone number, digital GPS address, or name.');
       return;
     }
     setLookupLoading(true);
@@ -62,7 +83,7 @@ export default function LiveLocationTrackerMap({
       const client = mode === 'developer' ? devApi : api;
       const endpoint = mode === 'developer' ? '/developer/locations/lookup' : '/gps/emergency-locate';
       const params = mode === 'developer'
-        ? { phone: clean }
+        ? { q: clean, phone: clean }
         : {
           q: clean,
           includeHidden: 'true',
@@ -71,17 +92,23 @@ export default function LiveLocationTrackerMap({
       const res = await client.get(endpoint, { params });
       const data = res.data?.data || { matches: [], primaryMatch: null };
       setLookupResult(data);
-      const pm = data.primaryMatch;
+      const pm = data.primaryMatch || data.standaloneReference;
       if (pm && (pm.coordinates || pm.googleMapsEmbedUrl)) {
         setFocusedPin({
           ...pm,
           lat: pm.coordinates?.latitude ?? 5.6037,
           lng: pm.coordinates?.longitude ?? -0.187,
-          label: `${pm.name} (${pm.phone || pm.gpsAddress || 'Matched'})`,
+          label: `${pm.name}${pm.phone ? ` (${pm.phone})` : pm.gpsAddress ? ` (${pm.gpsAddress})` : ''}`,
         });
-        setMapEngine('GOOGLE_MAP');
+        if (!data.primaryMatch && data.standaloneReference) {
+          setLookupError(
+            data.queryNetworkService
+              ? `No registered account yet for "${clean}" — pinned ${data.queryNetworkService.operator} service hub & network profile.`
+              : `No registered account yet for "${clean}" — pinned GhanaPost district reference area (${data.standaloneReference.city}).`
+          );
+        }
       } else if (data.totalMatches === 0) {
-        setLookupError(`No Customer, Guarantor, or Staff record (including hidden profiles) matches "${clean}".`);
+        setLookupError(`No Customer, Guarantor, Staff record, GhanaPost prefix, or carrier profile matched "${clean}".`);
       } else {
         setLookupError(`Matched ${pm?.name || clean}, but no live GPS, GPS address, or branch coordinates have been recorded yet.`);
       }
@@ -150,13 +177,16 @@ export default function LiveLocationTrackerMap({
       lng: Number(m.coordinates?.longitude ?? m.lng),
       label: m.name || m.label || m.tenantName || 'Location Pin',
     }));
-    const lookupPins = (lookupResult?.matches || [])
+    const lookupPins = [
+      ...(lookupResult?.matches || []),
+      ...(lookupResult?.standaloneReference ? [lookupResult.standaloneReference] : []),
+    ]
       .filter((m) => m.coordinates)
       .map((m) => ({
         ...m,
         lat: Number(m.coordinates.latitude),
         lng: Number(m.coordinates.longitude),
-        label: `${m.name} (${m.phone})`,
+        label: `${m.name}${m.phone ? ` (${m.phone})` : m.gpsAddress ? ` (${m.gpsAddress})` : ''}`,
       }));
     const combined = [...lookupPins, ...base].filter((m) => Number.isFinite(m.lat) && Number.isFinite(m.lng));
     const deduped = [];
@@ -186,8 +216,11 @@ export default function LiveLocationTrackerMap({
     };
   }, [focusedPin, visibleMarkers]);
 
+  const activeNetworkService = activePin.networkService || lookupResult?.queryNetworkService || null;
   const googleMapsUrl = activePin.googleMapsUrl || `https://www.google.com/maps/search/?api=1&query=${activePin.lat},${activePin.lng}`;
-  const googleMapsEmbedUrl = activePin.googleMapsEmbedUrl || `https://maps.google.com/maps?q=${activePin.lat},${activePin.lng}&z=16&output=embed`;
+  const googleDirectionsUrl = activePin.googleDirectionsUrl || `https://www.google.com/maps/dir/?api=1&destination=${activePin.lat},${activePin.lng}`;
+  const baseEmbed = activePin.googleMapsEmbedUrl || `https://maps.google.com/maps?q=${activePin.lat},${activePin.lng}&z=16&output=embed`;
+  const googleMapsEmbedUrl = baseEmbed.includes('&t=') ? baseEmbed : `${baseEmbed}&t=${mapType}`;
 
   const effectiveGeofences = useMemo(() => {
     if (geofences && geofences.length > 0) return geofences;
@@ -203,17 +236,95 @@ export default function LiveLocationTrackerMap({
     if (onSelectMarker) onSelectMarker(pin);
   };
 
+  const renderLeafletViewport = (heightPx = 420) => (
+    <div style={{ height: heightPx, width: '100%', borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(212,175,55,0.35)' }}>
+      <MapContainer center={mapCenter} zoom={focusedPin ? 15 : 8} style={{ height: '100%', width: '100%' }}>
+        <MapAutoFocus center={mapCenter} zoom={focusedPin ? 15 : 8} />
+        <TileLayer
+          attribution="&copy; OpenStreetMap contributors"
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+
+        {showGeofences &&
+          effectiveGeofences.map((g, idx) => (
+            <Circle
+              key={g.id || idx}
+              center={[Number(g.lat), Number(g.lng)]}
+              radius={Number(g.radiusMeters || 500)}
+              pathOptions={{ color: '#D4AF37', fillColor: '#D4AF37', fillOpacity: 0.12, weight: 1.5 }}
+            />
+          ))}
+
+        {focusedPin && Number.isFinite(Number(focusedPin.lat)) && Number.isFinite(Number(focusedPin.lng)) && (
+          <Circle
+            center={[Number(focusedPin.lat), Number(focusedPin.lng)]}
+            radius={focusedPin.isLiveGps ? 120 : 650}
+            pathOptions={{ color: '#00F2FE', fillColor: '#00F2FE', fillOpacity: 0.14, weight: 2 }}
+          />
+        )}
+
+        {visibleMarkers.map((m, idx) => {
+          const style = PIN_STYLES[m.type] || PIN_STYLES.BRANCH;
+          const icon = buildPinIcon(m.isActive === false ? '#EF4444' : style.color, style.code);
+          return (
+            <Marker
+              key={m.id || idx}
+              position={[Number(m.lat), Number(m.lng)]}
+              icon={icon}
+              eventHandlers={{
+                click: () => handleSelectPin(m),
+              }}
+            >
+              <Popup>
+                <div style={{ color: '#0F172A', minWidth: 205 }}>
+                  <div style={{ fontWeight: 800, fontSize: 13 }}>{m.label}</div>
+                  <div style={{ fontSize: 11, color: '#475569', marginBottom: 4 }}>{style.label}</div>
+                  {m.phone && <div style={{ fontSize: 11 }}><strong>Phone:</strong> {m.phone}</div>}
+                  {m.networkService?.operator && <div style={{ fontSize: 11 }}><strong>Network Service:</strong> {m.networkService.operator}</div>}
+                  {m.gpsAddress && <div style={{ fontSize: 11 }}><strong>GPS Addr:</strong> {m.gpsAddress}</div>}
+                  {m.tenantName && <div style={{ fontSize: 11 }}><strong>Institution:</strong> {m.tenantName}</div>}
+                  {m.city && <div style={{ fontSize: 11 }}><strong>Area:</strong> {m.city}{m.region ? `, ${m.region}` : ''}</div>}
+                  {m.status && <div style={{ fontSize: 11 }}><strong>Status:</strong> {m.status}</div>}
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${m.lat},${m.lng}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ display: 'inline-block', marginTop: 6, fontSize: 11, fontWeight: 700, color: '#2563EB' }}
+                  >
+                    Open Pin in Google Maps &rarr;
+                  </a>
+                </div>
+              </Popup>
+            </Marker>
+          );
+        })}
+      </MapContainer>
+    </div>
+  );
+
+  const renderGoogleMapIframe = (heightPx = 420) => (
+    <div style={{ height: heightPx, width: '100%', borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(212,175,55,0.45)', background: '#0B1120', position: 'relative' }}>
+      <iframe
+        key={googleMapsEmbedUrl}
+        title={`Google Map Pin - ${activePin.label}`}
+        src={googleMapsEmbedUrl}
+        style={{ width: '100%', height: '100%', border: 0 }}
+        loading="lazy"
+        referrerPolicy="no-referrer-when-downgrade"
+        allowFullScreen
+      />
+    </div>
+  );
+
   return (
     <div className="glass-panel" style={{ padding: 20 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
         <div>
           <h3 style={{ margin: 0, fontSize: '1.05rem', color: '#D4AF37', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <MapPin size={18} /> {mode === 'developer' ? 'Real-Time Google Maps & Mobile Number GPS Locator' : 'Emergency Google Live Map & GPS Address Locator'}
+            <MapPin size={18} /> {mode === 'developer' ? 'Google Live Map — Find Any User by Phone or GPS Address' : 'Google Live Map — Find Customers or Staff by Phone or GPS Address'}
           </h3>
           <p style={{ margin: '4px 0 0', fontSize: '0.78rem', color: '#94A3B8' }}>
-            {mode === 'developer'
-              ? `Pinpoint exact live device GPS or institution coordinates by mobile phone number (${visibleMarkers.length} pinned)`
-              : `Find Customers, Guarantors & Staff (including hidden profiles) on Google Live Map by mobile number or digital GPS address (${visibleMarkers.length} pinned)`}
+            Search by <strong>Mobile Number</strong> (resolves live coordinates + Telecom Network Service) or <strong>Digital GPS Address</strong> (e.g. GA-183-8164) to protect institutional credit &amp; recovery ({visibleMarkers.length} pinned).
           </p>
         </div>
 
@@ -231,11 +342,19 @@ export default function LiveLocationTrackerMap({
           )}
           <button
             type="button"
+            onClick={() => setMapEngine('DUAL')}
+            className={mapEngine === 'DUAL' ? 'btn btn-primary' : 'btn btn-secondary'}
+            style={{ padding: '7px 12px', fontSize: '0.78rem' }}
+          >
+            <Columns size={14} /> Dual Map (Google + GIS)
+          </button>
+          <button
+            type="button"
             onClick={() => setMapEngine('GOOGLE_MAP')}
             className={mapEngine === 'GOOGLE_MAP' ? 'btn btn-primary' : 'btn btn-secondary'}
             style={{ padding: '7px 12px', fontSize: '0.78rem' }}
           >
-            <MapPin size={14} /> Google Maps Pin
+            <MapPin size={14} /> Google Maps
           </button>
           <button
             type="button"
@@ -245,6 +364,16 @@ export default function LiveLocationTrackerMap({
           >
             <Layers size={14} /> GIS Cluster View
           </button>
+          {mapEngine !== 'LEAFLET' && (
+            <button
+              type="button"
+              onClick={() => setMapType((t) => (t === 'm' ? 'k' : 'm'))}
+              className="btn btn-secondary"
+              style={{ padding: '7px 11px', fontSize: '0.76rem' }}
+            >
+              {mapType === 'k' ? 'Road View' : 'Satellite View'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -271,9 +400,7 @@ export default function LiveLocationTrackerMap({
           type="text"
           className="gbs-input"
           style={{ flex: 1, minWidth: 220 }}
-          placeholder={mode === 'developer'
-            ? 'Enter user mobile number (e.g. +233240000001)'
-            : 'Mobile number, GPS digital address (e.g. GA-183-8164), or hidden name...'}
+          placeholder="Enter mobile number (024... / +233...), digital GPS address (GA-183-8164), or name..."
           value={phoneQuery}
           onChange={(e) => setPhoneQuery(e.target.value)}
         />
@@ -324,6 +451,41 @@ export default function LiveLocationTrackerMap({
         </div>
       )}
 
+      {/* Mobile Network Service & Coordinate Telemetry Card */}
+      {activeNetworkService && (
+        <div
+          style={{
+            padding: '12px 14px',
+            borderRadius: 10,
+            background: 'linear-gradient(135deg, rgba(16,29,56,0.9) 0%, rgba(12,18,34,0.92) 100%)',
+            border: '1px solid rgba(0, 242, 254, 0.38)',
+            marginBottom: 12,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 12,
+          }}
+        >
+          <div>
+            <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#00F2FE', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Radio size={15} /> Mobile Network Service Identification: {activeNetworkService.operator}
+            </div>
+            <div style={{ fontSize: '0.76rem', color: '#E2E8F0', marginTop: 3 }}>
+              MSISDN: <strong>{activeNetworkService.normalizedPhone}</strong> ({activeNetworkService.localFormat}) • Prefix: <strong>{activeNetworkService.prefix}</strong> • MoMo Rail: <strong>{activeNetworkService.momoRail}</strong> • Core Hub: <strong>{activeNetworkService.networkHubName}</strong>
+            </div>
+            <div style={{ fontSize: '0.71rem', color: '#94A3B8', marginTop: 3 }}>
+              {activeNetworkService.mnpNote}
+            </div>
+          </div>
+          {activePin.lastClockInAt && (
+            <div style={{ fontSize: '0.74rem', color: '#34D399', display: 'flex', alignItems: 'center', gap: 5 }}>
+              <Clock size={13} /> Last Clock-In GPS: {new Date(activePin.lastClockInAt).toLocaleString()}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Selected Pin Summary Banner + Google Maps Direct Launch */}
       <div
         style={{
@@ -348,6 +510,7 @@ export default function LiveLocationTrackerMap({
           <div style={{ fontSize: '0.76rem', color: '#94A3B8', marginTop: 2 }}>
             Coordinates: <strong>{Number(activePin.lat).toFixed(6)}, {Number(activePin.lng).toFixed(6)}</strong>
             {activePin.gpsAddress ? ` • GPS Address: ${activePin.gpsAddress}` : ''}
+            {activePin.districtCity ? ` (${activePin.districtCity})` : ''}
             {activePin.phone ? ` • Phone: ${activePin.phone}` : ''}
             {activePin.tenantName ? ` • Institution: ${activePin.tenantName}` : ''}
             {activePin.lastUpdatedAt ? ` • Updated: ${new Date(activePin.lastUpdatedAt).toLocaleString()}` : ''}
@@ -363,10 +526,19 @@ export default function LiveLocationTrackerMap({
             href={googleMapsUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="btn btn-secondary"
+            className="btn btn-primary"
             style={{ padding: '6px 12px', fontSize: '0.78rem', textDecoration: 'none' }}
           >
             <ExternalLink size={14} /> Open in Google Maps
+          </a>
+          <a
+            href={googleDirectionsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-secondary"
+            style={{ padding: '6px 12px', fontSize: '0.78rem', textDecoration: 'none' }}
+          >
+            <Navigation size={14} /> Directions
           </a>
         </div>
       </div>
@@ -393,18 +565,25 @@ export default function LiveLocationTrackerMap({
         </div>
       )}
 
-      {/* Active Map Viewport */}
-      {mapEngine === 'GOOGLE_MAP' ? (
-        <div style={{ height: 450, width: '100%', borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(212,175,55,0.45)', marginBottom: 16, background: '#0B1120' }}>
-          <iframe
-            key={googleMapsEmbedUrl}
-            title={`Google Map Pin - ${activePin.label}`}
-            src={googleMapsEmbedUrl}
-            style={{ width: '100%', height: '100%', border: 0 }}
-            loading="lazy"
-            referrerPolicy="no-referrer-when-downgrade"
-            allowFullScreen
-          />
+      {/* Active Map Viewport: Dual Split / Google Map / GIS Leaflet Cluster */}
+      {mapEngine === 'DUAL' ? (
+        <div className="gbs-grid-2" style={{ gap: 14, marginBottom: 16 }}>
+          <div>
+            <div style={{ fontSize: '0.74rem', color: '#F4E07B', fontWeight: 700, marginBottom: 6 }}>
+              GOOGLE MAPS LIVE PIN VIEWPORT
+            </div>
+            {renderGoogleMapIframe(410)}
+          </div>
+          <div>
+            <div style={{ fontSize: '0.74rem', color: '#00F2FE', fontWeight: 700, marginBottom: 6 }}>
+              INTERACTIVE GIS CLUSTER &amp; GEOFENCE MAP
+            </div>
+            {renderLeafletViewport(410)}
+          </div>
+        </div>
+      ) : mapEngine === 'GOOGLE_MAP' ? (
+        <div style={{ marginBottom: 16 }}>
+          {renderGoogleMapIframe(450)}
         </div>
       ) : (
         <>
@@ -414,6 +593,8 @@ export default function LiveLocationTrackerMap({
               { id: 'TENANT_HQ', label: 'Tenant HQs' },
               { id: 'BRANCH', label: 'Branches' },
               { id: 'COLLECTOR', label: 'Collectors' },
+              { id: 'CUSTOMER', label: 'Customers' },
+              { id: 'GUARANTOR', label: 'Guarantors' },
               { id: 'CUSTOMER_VISIT', label: 'Visits' },
             ].map((btn) => (
               <button
@@ -436,57 +617,8 @@ export default function LiveLocationTrackerMap({
             </button>
           </div>
 
-          <div style={{ height: 420, width: '100%', borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(212,175,55,0.3)', marginBottom: 16 }}>
-            <MapContainer key={`${mapCenter[0]}-${mapCenter[1]}`} center={mapCenter} zoom={focusedPin ? 14 : 7} style={{ height: '100%', width: '100%' }}>
-              <TileLayer
-                attribution="&copy; OpenStreetMap contributors"
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
-
-              {showGeofences &&
-                effectiveGeofences.map((g, idx) => (
-                  <Circle
-                    key={g.id || idx}
-                    center={[Number(g.lat), Number(g.lng)]}
-                    radius={Number(g.radiusMeters || 500)}
-                    pathOptions={{ color: '#D4AF37', fillColor: '#D4AF37', fillOpacity: 0.12, weight: 1.5 }}
-                  />
-                ))}
-
-              {visibleMarkers.map((m, idx) => {
-                const style = PIN_STYLES[m.type] || PIN_STYLES.BRANCH;
-                const icon = buildPinIcon(m.isActive === false ? '#EF4444' : style.color, style.code);
-                return (
-                  <Marker
-                    key={m.id || idx}
-                    position={[Number(m.lat), Number(m.lng)]}
-                    icon={icon}
-                    eventHandlers={{
-                      click: () => handleSelectPin(m),
-                    }}
-                  >
-                    <Popup>
-                      <div style={{ color: '#0F172A', minWidth: 190 }}>
-                        <div style={{ fontWeight: 800, fontSize: 13 }}>{m.label}</div>
-                        <div style={{ fontSize: 11, color: '#475569', marginBottom: 4 }}>{style.label}</div>
-                        {m.phone && <div style={{ fontSize: 11 }}><strong>Phone:</strong> {m.phone}</div>}
-                        {m.tenantName && <div style={{ fontSize: 11 }}><strong>Institution:</strong> {m.tenantName}</div>}
-                        {m.city && <div style={{ fontSize: 11 }}><strong>Location:</strong> {m.city}{m.country ? `, ${m.country}` : ''}</div>}
-                        {m.status && <div style={{ fontSize: 11 }}><strong>Status:</strong> {m.status}</div>}
-                        <a
-                          href={`https://www.google.com/maps/search/?api=1&query=${m.lat},${m.lng}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{ display: 'inline-block', marginTop: 6, fontSize: 11, fontWeight: 700, color: '#2563EB' }}
-                        >
-                          Open Pin in Google Maps &rarr;
-                        </a>
-                      </div>
-                    </Popup>
-                  </Marker>
-                );
-              })}
-            </MapContainer>
+          <div style={{ marginBottom: 16 }}>
+            {renderLeafletViewport(430)}
           </div>
         </>
       )}

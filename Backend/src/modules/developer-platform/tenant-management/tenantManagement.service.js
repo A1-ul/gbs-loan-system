@@ -277,7 +277,7 @@ class TenantManagementService {
       await tx.tenantSubscription.deleteMany({ where: { tenantId: tenant.id } });
 
       await tx.tenant.delete({ where: { id: tenant.id } });
-    });
+    }, { maxWait: 10000, timeout: 30000 });
 
     await recordDeveloperTenantAudit(developerId, 'TENANT_DELETED', {
       deletedTenantId: tenant.id,
